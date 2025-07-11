@@ -714,7 +714,16 @@ def import_atlas_applications(request):
 
                 from crm_connector.utils import determine_stage_for_statuses
                 stage_id = determine_stage_for_statuses(pipeline, atlas_status, rr_status, mapping_conf)
-                stage_result = stage_id if stage_id else 'Не удалось определить стадию'
+                
+                if stage_id:
+                    # Ищем стадию по ID чтобы получить её название
+                    try:
+                        stage = Stage.objects.get(bitrix_id=stage_id)
+                        stage_result = f'{stage.name} (ID: {stage_id})'
+                    except Stage.DoesNotExist:
+                        stage_result = f'Стадия с ID {stage_id} не найдена в базе данных'
+                else:
+                    stage_result = 'Не удалось определить стадию'
 
         else:
             # Форма импорта Excel

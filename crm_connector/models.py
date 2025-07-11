@@ -362,11 +362,11 @@ class StageRule(models.Model):
     @classmethod
     def determine_stage_for_deal(cls, pipeline, atlas_status_name=None, rr_status_name=None):
         """Определяет стадию для сделки на основе статусов"""
-        # Получаем активные правила для воронки, отсортированные по приоритету
+        # Получаем активные правила для воронки, отсортированные по приоритету (от большего к меньшему)
         rules = cls.objects.filter(
             pipeline=pipeline,
             is_active=True
-        ).select_related('target_stage', 'atlas_status', 'rr_status').order_by('priority', 'id')
+        ).select_related('target_stage', 'atlas_status', 'rr_status').order_by('-priority', 'id')
         
         # Проверяем правила по порядку
         for rule in rules:
