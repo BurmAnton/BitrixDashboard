@@ -1,0 +1,140 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Импорт сделок из Excel{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="row">
+        <div class="col-md-8 offset-md-2">
+            <div class="card">
+                <div class="card-header bg-primary text-white">
+                    <h4 class="mb-0">Импорт сделок из Excel</h4>
+                </div>
+                <div class="card-body">
+                    <form method="post" enctype="multipart/form-data">
+                        {% csrf_token %}
+                        
+                        <div class="alert alert-info">
+                            <h5>Инструкция по импорту:</h5>
+                            <ol>
+                                <li>Подготовьте файл Excel со следующими колонками:</li>
+                                <ul>
+                                    <li>Название организации</li>
+                                    <li>Вид организации</li>
+                                    <li>Стадия сделки</li>
+                                    <li>Регион</li>
+                                    <li>ФИО руководителя организации</li>
+                                    <li>Должность руководителя</li>
+                                    <li>Входной номер</li>
+                                    <li>Тип входного номера</li>
+                                    <li>Направление обучения</li>
+                                    <li>Программа обучения</li>
+                                    <li>ФИО Контактного лица</li>
+                                    <li>Телефон Контактного лица</li>
+                                    <li>Почта Контактного лица</li>
+                                    <li>Фактическо получено списков</li>
+                                </ul>
+                                <li>Выберите сферу деятельности и тип организации</li>
+                                <li>Загрузите файл и нажмите "Импортировать"</li>
+                            </ol>
+                            <p class="mb-0"><strong>Примечание:</strong> Заголовки колонок должны точно соответствовать указанным выше.</p>
+                        </div>
+                        
+                        <div class="mb-3">
+                            {{ form.excel_file.label_tag }}
+                            {{ form.excel_file }}
+                            {% if form.excel_file.errors %}
+                                <div class="invalid-feedback d-block">
+                                    {% for error in form.excel_file.errors %}
+                                        {{ error }}
+                                    {% endfor %}
+                                </div>
+                            {% endif %}
+                            <div class="form-text">{{ form.excel_file.help_text }}</div>
+                        </div>
+                        
+                        <div class="row mb-3">
+                            <div class="col-md-6">
+                                {{ form.business_sphere.label_tag }}
+                                <select name="{{ form.business_sphere.name }}" id="{{ form.business_sphere.auto_id }}" class="form-select">
+                                    {% for value, text in form.business_sphere.field.choices %}
+                                        <option value="{{ value }}" {% if form.business_sphere.value == value %}selected{% endif %}>{{ text }}</option>
+                                    {% endfor %}
+                                </select>
+                                {% if form.business_sphere.errors %}
+                                    <div class="invalid-feedback d-block">
+                                        {% for error in form.business_sphere.errors %}
+                                            {{ error }}
+                                        {% endfor %}
+                                    </div>
+                                {% endif %}
+                            </div>
+                            <div class="col-md-6">
+                                {{ form.organization_type.label_tag }}
+                                <select name="{{ form.organization_type.name }}" id="{{ form.organization_type.auto_id }}" class="form-select">
+                                    {% for value, text in form.organization_type.field.choices %}
+                                        <option value="{{ value }}" {% if form.organization_type.value == value %}selected{% endif %}>{{ text }}</option>
+                                    {% endfor %}
+                                </select>
+                                {% if form.organization_type.errors %}
+                                    <div class="invalid-feedback d-block">
+                                        {% for error in form.organization_type.errors %}
+                                            {{ error }}
+                                        {% endfor %}
+                                    </div>
+                                {% endif %}
+                            </div>
+                        </div>
+                        
+                        <div class="mt-4">
+                            <button type="submit" class="btn btn-primary">
+                                <i class="fas fa-file-import me-2"></i> Импортировать
+                            </button>
+                            <a href="{% url 'crm_connector:pipelines_dashboard' %}" class="btn btn-secondary ms-2">
+                                <i class="fas fa-arrow-left me-2"></i> Назад
+                            </a>
+                        </div>
+                    </form>
+                </div>
+            </div>
+            
+            <div class="mt-4">
+                <div class="card">
+                    <div class="card-header bg-info text-white">
+                        <h5 class="mb-0">Допустимые значения стадий сделок</h5>
+                    </div>
+                    <div class="card-body">
+                        <table class="table table-bordered table-sm">
+                            <thead>
+                                <tr>
+                                    <th>Название в Excel</th>
+                                    <th>ID стадии в Битрикс24</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% if pipeline_stages %}
+                                    {% for stage_id, stage_name in pipeline_stages %}
+                                        <tr>
+                                            <td>{{ stage_name }}</td>
+                                            <td><code>{{ stage_id }}</code></td>
+                                        </tr>
+                                    {% endfor %}
+                                {% else %}
+                                    <tr><td>Первичный контакт</td><td><code>C11:NEW</code></td></tr>
+                                    <tr><td>Переговоры</td><td><code>C11:PREPARATION</code></td></tr>
+                                    <tr><td>Составление списков</td><td><code>C11:EXECUTING</code></td></tr>
+                                    <tr><td>Согласование списков</td><td><code>C11:FINAL_INVOICE</code></td></tr>
+                                    <tr><td>Списки согласованы</td><td><code>C11:WON</code></td></tr>
+                                    <tr><td>Сделка отменена</td><td><code>C11:LOSE</code></td></tr>
+                                {% endif %}
+                            </tbody>
+                        </table>
+                        <p class="small text-muted mt-2">Указывайте точное название стадии как в таблице выше. Если стадия в файле не соответствует ни одному из указанных значений, будет использована стадия "Первичный контакт".</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %} 

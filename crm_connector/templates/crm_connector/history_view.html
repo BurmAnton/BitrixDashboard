@@ -1,0 +1,122 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}История изменений - {{ object }}{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <h2>История изменений: {{ object }}</h2>
+    
+    <nav aria-label="breadcrumb">
+        <ol class="breadcrumb">
+            <li class="breadcrumb-item"><a href="{% url 'crm_connector:pipelines_dashboard' %}">Дашборд</a></li>
+            <li class="breadcrumb-item"><a href="{% url 'admin:crm_connector_{{ model_name }}_changelist' %}">{{ model_verbose_name }}</a></li>
+            <li class="breadcrumb-item active">История изменений</li>
+        </ol>
+    </nav>
+
+    <div class="table-responsive mt-4">
+        <table class="table table-striped table-hover">
+            <thead>
+                <tr>
+                    <th>Дата изменения</th>
+                    <th>Пользователь</th>
+                    <th>Тип операции</th>
+                    <th>Изменения</th>
+                    <th>Действия</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for record in history %}
+                <tr>
+                    <td>{{ record.history_date|date:"d.m.Y H:i:s" }}</td>
+                    <td>
+                        {% if record.history_user %}
+                            {{ record.history_user.get_full_name|default:record.history_user.username }}
+                        {% else %}
+                            <span class="text-muted">Система</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if record.history_type == '+' %}
+                            <span class="badge bg-success">Создано</span>
+                        {% elif record.history_type == '~' %}
+                            <span class="badge bg-warning">Изменено</span>
+                        {% elif record.history_type == '-' %}
+                            <span class="badge bg-danger">Удалено</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if record.prev_record %}
+                            {% for change in record.diff_against(record.prev_record).changes %}
+                                <div class="mb-1">
+                                    <strong>{{ change.field }}:</strong>
+                                    <span class="text-danger">{{ change.old|default:"(пусто)" }}</span>
+                                    →
+                                    <span class="text-success">{{ change.new|default:"(пусто)" }}</span>
+                                </div>
+                            {% endfor %}
+                        {% else %}
+                            <span class="text-muted">Первая запись</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <button type="button" class="btn btn-sm btn-info" data-bs-toggle="modal" data-bs-target="#detail-{{ record.history_id }}">
+                            Подробнее
+                        </button>
+                    </td>
+                </tr>
+                
+                <!-- Модальное окно с деталями -->
+                <div class="modal fade" id="detail-{{ record.history_id }}" tabindex="-1">
+                    <div class="modal-dialog modal-lg">
+                        <div class="modal-content">
+                            <div class="modal-header">
+                                <h5 class="modal-title">Состояние записи на {{ record.history_date|date:"d.m.Y H:i:s" }}</h5>
+                                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                            </div>
+                            <div class="modal-body">
+                                <table class="table table-sm">
+                                    {% for field in fields %}
+                                        <tr>
+                                            <th width="30%">{{ field.verbose_name }}</th>
+                                            <td>{{ record|getattr:field.name|default:"—" }}</td>
+                                        </tr>
+                                    {% endfor %}
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    
+    {% if is_paginated %}
+    <nav aria-label="Пагинация">
+        <ul class="pagination justify-content-center">
+            {% if page_obj.has_previous %}
+                <li class="page-item">
+                    <a class="page-link" href="?page={{ page_obj.previous_page_number }}">Предыдущая</a>
+                </li>
+            {% endif %}
+            
+            {% for num in page_obj.paginator.page_range %}
+                {% if page_obj.number == num %}
+                    <li class="page-item active"><span class="page-link">{{ num }}</span></li>
+                {% else %}
+                    <li class="page-item"><a class="page-link" href="?page={{ num }}">{{ num }}</a></li>
+                {% endif %}
+            {% endfor %}
+            
+            {% if page_obj.has_next %}
+                <li class="page-item">
+                    <a class="page-link" href="?page={{ page_obj.next_page_number }}">Следующая</a>
+                </li>
+            {% endif %}
+        </ul>
+    </nav>
+    {% endif %}
+</div>
+{% endblock %} 

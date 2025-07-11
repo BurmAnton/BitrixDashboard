@@ -1,0 +1,60 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Образовательные программы{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2>Образовательные программы</h2>
+        <a href="{% url 'education_planner:create_program' %}" class="btn btn-primary">
+            Создать новую программу
+        </a>
+    </div>
+
+    <div class="row">
+        {% for program in programs %}
+        <div class="col-md-6 mb-4">
+            <div class="card h-100">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">{{ program.name }}</h5>
+                </div>
+                <div class="card-body">
+                    <p class="card-text">
+                        <strong>Вид программы:</strong> {{ program.get_program_type_display }}<br>
+                        <strong>Форма обучения:</strong> {{ program.get_study_form_display }}<br>
+                        <strong>Длительность:</strong> {{ program.academic_hours }} ак. часов
+                    </p>
+                    <p class="card-text">{{ program.description|truncatewords:30 }}</p>
+                    
+                    {% if program.sections.all %}
+                    <h6 class="mt-3">Разделы программы:</h6>
+                    <ul class="list-group list-group-flush">
+                        {% for section in program.sections.all %}
+                        <li class="list-group-item">
+                            {{ section.order }}. {{ section.name }}
+                        </li>
+                        {% endfor %}
+                    </ul>
+                    {% endif %}
+                </div>
+                <div class="card-footer">
+                    <small class="text-muted">
+                        Создано: {{ program.created_at|date:"d.m.Y" }}
+                    </small>
+                </div>
+            </div>
+        </div>
+        {% empty %}
+        <div class="col-12">
+            <div class="alert alert-info">
+                Пока нет созданных программ. 
+                <a href="{% url 'education_planner:create_program' %}" class="alert-link">
+                    Создайте первую программу
+                </a>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% endblock %} 

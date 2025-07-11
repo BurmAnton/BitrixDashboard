@@ -1,0 +1,357 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Аналитика по воронкам продаж</title>
+    
+    <!-- Bootstrap CSS -->
+    {% load static %}
+    {% load crm_tags %}
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.2.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="{% static 'css/custom.css' %}" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body class="light-theme">
+    <!-- Переключатель темы -->
+    <div class="theme-toggle" id="themeToggle">
+        <i class="fas fa-moon"></i>
+        <span>Темная тема</span>
+    </div>
+
+    <div class="container-fluid dashboard-container">
+        <h1 class="my-4">Аналитика по воронкам продаж</h1>
+        
+        {% if last_sync %}
+        <div class="alert alert-info">
+            Последняя синхронизация: {{ last_sync|date:"d.m.Y H:i" }}
+        </div>
+        {% endif %}
+        
+        <div class="row mb-4">
+            <div class="col-md-6">
+                <div class="btn-group">
+                    {% if user.is_authenticated %}
+                        <a href="/crm/sync-pipelines/?year={{ selected_year }}" class="btn btn-primary sync-button">
+                            <i class="fas fa-sync-alt me-1"></i> Синхронизировать данные
+                        </a>
+                        <a href="{% url 'admin:crm_connector_deal_changelist' %}" class="btn btn-secondary">
+                            <i class="fas fa-cog me-1"></i> Управление сделками
+                        </a>
+                        <a href="{% url 'crm_connector:import_deals' %}" class="btn btn-success">
+                            <i class="fas fa-file-import me-1"></i> Импорт из Excel
+                        </a>
+                        <a href="{% url 'crm_connector:import_atlas_applications' %}" class="btn btn-info">
+                            <i class="fas fa-file-upload me-1"></i> Импорт из Атласа
+                        </a>
+                    {% else %}
+                        <button type="button" class="btn btn-primary" disabled title="Требуется авторизация">
+                            <i class="fas fa-sync-alt me-1"></i> Синхронизировать данные
+                        </button>
+                        <button type="button" class="btn btn-secondary" onclick="window.location.href='{{ settings.LOGIN_URL }}?next={{ request.path }}'">
+                            <i class="fas fa-sign-in-alt me-1"></i> Войти в систему
+                        </button>
+                    {% endif %}
+                </div>
+            </div>
+            <div class="col-md-6">
+                <form id="year-filter-form" method="get" class="d-flex justify-content-end">
+                    <div class="input-group" style="max-width: 300px;">
+                        <label class="input-group-text" for="year-filter">Год:</label>
+                        <select class="form-select" id="year-filter" name="year" onchange="this.form.submit()">
+                            <option value="all" {% if selected_year == 'all' %}selected{% endif %}>Все года</option>
+                            {% for year in available_years %}
+                                <option value="{{ year }}" {% if selected_year == year|stringformat:"i" %}selected{% endif %}>{{ year }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                </form>
+            </div>
+        </div>
+        
+        <div class="alert alert-info mb-3">
+            <strong>Типы этапов:</strong> Для настройки цветовой индикации этапов воронки задайте тип каждого этапа через <a href="{% url 'admin:crm_connector_stage_changelist' %}">Административную панель</a>.
+            <div class="mt-2">
+                <span class="badge rounded-pill" style="background-color: #5bc0de; width: 15px; height: 15px; display: inline-block; margin-right: 5px;"></span> В процессе
+                <span class="badge rounded-pill" style="background-color: #5cb85c; width: 15px; height: 15px; display: inline-block; margin-left: 15px; margin-right: 5px;"></span> Успешное завершение
+                <span class="badge rounded-pill" style="background-color: #d9534f; width: 15px; height: 15px; display: inline-block; margin-left: 15px; margin-right: 5px;"></span> Неуспешное завершение
+            </div>
+        </div>
+        
+        <!-- Навигация по вкладкам -->
+        <ul class="nav nav-tabs mb-4" id="pipelineTabs" role="tablist">
+            {% for pipeline in dashboard_data %}
+            <li class="nav-item" role="presentation">
+                <button class="nav-link {% if forloop.first %}active{% endif %}" 
+                        id="pipeline-{{ pipeline.id }}-tab" 
+                        data-bs-toggle="tab" 
+                        data-bs-target="#pipeline-{{ pipeline.id }}" 
+                        type="button" 
+                        role="tab" 
+                        aria-controls="pipeline-{{ pipeline.id }}" 
+                        aria-selected="{% if forloop.first %}true{% else %}false{% endif %}">
+                    {{ pipeline.name }}
+                    {% if pipeline.is_main %}<span class="badge bg-success ms-1">Основная</span>{% endif %}
+                </button>
+            </li>
+            {% endfor %}
+        </ul>
+        
+        <!-- Содержимое вкладок -->
+        <div class="tab-content" id="pipelineTabsContent">
+            {% for pipeline in dashboard_data %}
+            <div class="tab-pane fade {% if forloop.first %}show active{% endif %}" 
+                 id="pipeline-{{ pipeline.id }}" 
+                 role="tabpanel" 
+                 aria-labelledby="pipeline-{{ pipeline.id }}-tab">
+                
+                <div class="row mb-4">
+                    <div class="col-md-3">
+                        <div class="card bg-light">
+                            <div class="card-body text-center">
+                                <h4>{{ pipeline.total_deals }}</h4>
+                                <p class="mb-0">Активных сделок</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="card bg-light">
+                            <div class="card-body text-center">
+                                <h4>{{ pipeline.total_success_amount|currency }} ₽</h4>
+                                <p class="mb-0">Сумма успешных сделок</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="card bg-light">
+                            <div class="card-body text-center">
+                                <h4>{{ pipeline.conversion_rate|floatformat:1 }}%</h4>
+                                <p class="mb-0" data-bs-toggle="tooltip" data-bs-placement="bottom" 
+                                   title="Отношение успешных сделок к общему количеству завершенных сделок">Конверсия</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="card bg-light">
+                            <div class="card-body text-center">
+                                <h4>{{ pipeline.avg_deal_lifetime }} дн.</h4>
+                                <p class="mb-0">Среднее время сделки</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <h4>Распределение сделок по типам этапов</h4>
+                <div class="pipeline-progress">
+                    <div class="progress-wrapper">
+                        {% for stage_type in pipeline.stage_types %}
+                            {% if stage_type.count > 0 %}
+                            <div class="progress-item" style="width: {{ stage_type.percent_css }}%; background-color: {{ stage_type.color }};">
+                                {% if stage_type.percent > 5 %}{{ stage_type.count }}{% endif %}
+                            </div>
+                            {% endif %}
+                        {% endfor %}
+                    </div>
+                    <div class="progress-labels">
+                        <div class="label-process"><span class="color-dot" style="background-color: #5bc0de;"></span> В процессе</div>
+                        <div class="label-success"><span class="color-dot" style="background-color: #5cb85c;"></span> Успешные</div>
+                        <div class="label-failure"><span class="color-dot" style="background-color: #d9534f;"></span> Неуспешные</div>
+                    </div>
+                </div>
+                
+                <div class="table-responsive mt-4">
+                    <table class="table table-striped">
+                        <thead>
+                            <tr>
+                                <th>Этап</th>
+                                <th>Всего сделок</th>
+                                <th>Активных</th>
+                                <th>Закрытых</th>
+                                <th>Сумма</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for stage in pipeline.stages %}
+                            <tr {% if stage.is_success_stage %}class="table-success"{% endif %}>
+                                <td>
+                                    <span class="badge rounded-pill" style="background-color: {{ stage.color|default:'#aaaaaa' }}; width: 15px; height: 15px; display: inline-block; margin-right: 5px;"></span>
+                                    {{ stage.name }}
+                                </td>
+                                <td>{{ stage.deals_count }}</td>
+                                <td>{{ stage.open_deals }}</td>
+                                <td>{{ stage.closed_deals }}</td>
+                                <td>{{ stage.deals_amount|currency }} ₽</td>
+                            </tr>
+                            {% endfor %}
+                            <tr class="table-success">
+                                <td><strong>Итого:</strong></td>
+                                <td><strong>{{ pipeline.total_deals }}</strong></td>
+                                <td><strong>{{ pipeline.open_deals }}</strong></td>
+                                <td><strong>{{ pipeline.closed_deals }}</strong></td>
+                                <td><strong>{{ pipeline.total_success_amount|currency }} ₽</strong></td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- Заменяем раздел со статистикой успешных сделок на сводку по всем типам стадий -->
+                <div class="card mb-3">
+                    <div class="card-header bg-primary text-white">
+                        <h5 class="mb-0">Сводка по типам стадий</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="table-responsive">
+                            <table class="table table-striped">
+                                <thead>
+                                    <tr>
+                                        <th>Тип стадии</th>
+                                        <th>Количество сделок</th>
+                                        <th>Сумма</th>
+                                        <th>% от общего количества</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for stage_type in pipeline.stage_types %}
+                                    <tr>
+                                        <td>
+                                            <span class="color-dot" style="background-color: {{ stage_type.color }};"></span>
+                                            {{ stage_type.name }}
+                                        </td>
+                                        <td>{{ stage_type.count }}</td>
+                                        <td>
+                                            {% if stage_type.type == 'success' %}
+                                                {{ pipeline.total_success_amount|currency }} ₽
+                                            {% elif stage_type.amount %}
+                                                {{ stage_type.amount|currency }} ₽
+                                            {% else %}
+                                                —
+                                            {% endif %}
+                                        </td>
+                                        <td>{{ stage_type.percent|floatformat:1 }}%</td>
+                                    </tr>
+                                    {% endfor %}
+                                    <tr class="table-active">
+                                        <td><strong>Всего:</strong></td>
+                                        <td><strong>{{ pipeline.total_deals }}</strong></td>
+                                        <td><strong>{{ pipeline.total_amount|currency }} ₽</strong></td>
+                                        <td><strong>100%</strong></td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+
+    <!-- Bootstrap JS и jQuery -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.2.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    
+    <script>
+    $(document).ready(function() {
+        // Функционал переключения темы
+        const themeToggle = document.getElementById('themeToggle');
+        const body = document.body;
+        const icon = themeToggle.querySelector('i');
+        const text = themeToggle.querySelector('span');
+
+        // Проверяем сохраненную тему
+        const savedTheme = localStorage.getItem('theme');
+        if (savedTheme) {
+            body.className = savedTheme;
+            updateToggleUI();
+        }
+
+        themeToggle.addEventListener('click', function() {
+            if (body.classList.contains('light-theme')) {
+                body.classList.remove('light-theme');
+                body.classList.add('dark-theme');
+                localStorage.setItem('theme', 'dark-theme');
+            } else {
+                body.classList.remove('dark-theme');
+                body.classList.add('light-theme');
+                localStorage.setItem('theme', 'light-theme');
+            }
+            updateToggleUI();
+        });
+
+        function updateToggleUI() {
+            if (body.classList.contains('dark-theme')) {
+                icon.classList.remove('fa-moon');
+                icon.classList.add('fa-sun');
+                text.textContent = 'Светлая тема';
+            } else {
+                icon.classList.remove('fa-sun');
+                icon.classList.add('fa-moon');
+                text.textContent = 'Темная тема';
+            }
+        }
+        
+        // Активируем всплывающие подсказки Bootstrap
+        var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+        var tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
+            return new bootstrap.Tooltip(tooltipTriggerEl);
+        });
+        
+        // Сохранение выбранной вкладки при обновлении страницы
+        $('button[data-bs-toggle="tab"]').on('shown.bs.tab', function (e) {
+            localStorage.setItem('activeTab', $(e.target).attr('id'));
+        });
+        
+        // Восстановление активной вкладки при загрузке страницы
+        var activeTab = localStorage.getItem('activeTab');
+        if (activeTab) {
+            $('#' + activeTab).tab('show');
+        }
+        
+        // Обработчик для кнопки синхронизации
+        $('.sync-button').on('click', function(e) {
+            e.preventDefault();
+            var $button = $(this);
+            $button.prop('disabled', true).html('<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Синхронизация...');
+            
+            // Получаем выбранный год
+            var currentYear = $('#year-filter').val();
+            
+            // Используем относительный URL для избежания проблем с префиксами
+            window.location.href = "/crm/sync-pipelines/?year=" + currentYear;
+        });
+        
+        // Автоматическое обновление данных каждые 5 минут
+        setInterval(function() {
+            $.ajax({
+                url: "{% url 'crm_connector:check_pipelines' %}",
+                success: function(data) {
+                    console.log("Результат проверки синхронизации:", data);
+                    if (data.sync_triggered) {
+                        // Показываем уведомление о начале синхронизации
+                        $('<div class="alert alert-info alert-dismissible fade show" role="alert">')
+                            .html('Запущена автоматическая синхронизация данных. Страница будет обновлена через 30 секунд.<button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>')
+                            .prependTo('.container-fluid');
+                        
+                        // Обновляем страницу через 30 секунд, чтобы дать время для синхронизации
+                        setTimeout(function() {
+                            // Сохраняем выбранный год перед обновлением
+                            var currentYear = $('#year-filter').val();
+                            location.href = '?year=' + currentYear;
+                        }, 30000);
+                    }
+                }
+            });
+        }, 300000); // Проверяем каждые 5 минут
+
+        // В разделе JavaScript добавляем:
+        {% if not user.is_authenticated %}
+        $(document).on('click', '.needs-auth', function(e) {
+            e.preventDefault();
+            let currentUrl = encodeURIComponent(window.location.pathname + window.location.search);
+            window.location.href = '{{ settings.LOGIN_URL }}?next=' + currentUrl;
+        });
+        {% endif %}
+    });
+    </script>
+</body>
+</html> 

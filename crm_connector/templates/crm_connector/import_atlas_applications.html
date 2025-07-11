@@ -1,0 +1,184 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Импорт заявок из Атласа{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <h1>Импорт заявок из платформы Атлас</h1>
+    {% if import_summary %}
+    <div id="importSummary" class="alert alert-info alert-dismissible fade show" role="alert">
+        <h5 class="alert-heading mb-2">Результаты импорта</h5>
+        <pre class="small mb-2" style="white-space: pre-wrap;">{{ import_summary }}</pre>
+        <div class="d-flex justify-content-end">
+            <button type="button" class="btn btn-sm btn-primary" data-bs-dismiss="alert">OK</button>
+        </div>
+    </div>
+    {% endif %}
+    
+    <div class="row mt-4">
+        <div class="col-md-8">
+            <div class="card">
+                <div class="card-header">
+                    <h4>Загрузка файла выгрузки</h4>
+                </div>
+                <div class="card-body">
+                    <form method="post" enctype="multipart/form-data">
+                        {% csrf_token %}
+                        
+                        <div class="mb-3">
+                            {{ form.excel_file.label_tag }}
+                            {{ form.excel_file }}
+                            {% if form.excel_file.help_text %}
+                                <small class="form-text text-muted">{{ form.excel_file.help_text }}</small>
+                            {% endif %}
+                            {% if form.excel_file.errors %}
+                                <div class="text-danger">{{ form.excel_file.errors }}</div>
+                            {% endif %}
+                        </div>
+                        
+                        <div class="mb-3">
+                            {{ form.pipeline_name.label_tag }}
+                            {{ form.pipeline_name }}
+                            {% if form.pipeline_name.help_text %}
+                                <small class="form-text text-muted">{{ form.pipeline_name.help_text }}</small>
+                            {% endif %}
+                            {% if form.pipeline_name.errors %}
+                                <div class="text-danger">{{ form.pipeline_name.errors }}</div>
+                            {% endif %}
+                        </div>
+                        
+                        <button type="submit" class="btn btn-primary">
+                            <i class="fas fa-upload"></i> Импортировать
+                        </button>
+                        <a href="{% url 'crm_connector:pipelines_dashboard' %}" class="btn btn-secondary">
+                            <i class="fas fa-times"></i> Отмена
+                        </a>
+                    </form>
+                </div>
+            </div>
+            
+            <!-- Форма проверки стадии по статусам -->
+            <div class="card mt-4">
+                <div class="card-header">
+                    <h4>Проверка стадии по статусам</h4>
+                </div>
+                <div class="card-body">
+                    <form method="post">
+                        {% csrf_token %}
+                        <input type="hidden" name="check_stage" value="1">
+                        <div class="mb-3">
+                            {{ stage_form.atlas_status.label_tag }}
+                            {{ stage_form.atlas_status }}
+                        </div>
+                        <div class="mb-3">
+                            {{ stage_form.rr_status.label_tag }}
+                            {{ stage_form.rr_status }}
+                        </div>
+                        <button type="submit" class="btn btn-success">Определить стадию</button>
+                        {% if stage_result %}
+                            <div class="alert alert-info mt-3" role="alert">
+                                <strong>Результат:</strong> {{ stage_result }}
+                            </div>
+                        {% endif %}
+                    </form>
+                </div>
+            </div>
+            
+            <div class="card mt-4">
+                <div class="card-header">
+                    <h5>Инструкция по импорту</h5>
+                </div>
+                <div class="card-body">
+                    <ol>
+                        <li>Подготовьте Excel файл с выгрузкой из платформы Атлас</li>
+                        <li>Убедитесь, что файл содержит следующие колонки:
+                            <ul>
+                                <li>ФИО</li>
+                                <li>Телефон</li>
+                                <li>Email</li>
+                                <li>Регион</li>
+                                <li>Направление обучения</li>
+                                <li>Программа обучения</li>
+                                <li>Статус заявки</li>
+                                <li>Дата подачи заявки</li>
+                            </ul>
+                        </li>
+                        <li>Выберите файл и нажмите "Импортировать"</li>
+                        <li>Система автоматически:
+                            <ul>
+                                <li>Обновит данные по существующим сделкам</li>
+                                <li>Найдет совпадения по ФИО, телефону, email и региону</li>
+                                <li>Создаст новые сделки для заявок без совпадений</li>
+                                <li>Пометит все новые сделки источником "Атлас"</li>
+                            </ul>
+                        </li>
+                    </ol>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-md-4">
+            <div class="card">
+                <div class="card-header">
+                    <h5>Статистика импорта</h5>
+                </div>
+                <div class="card-body">
+                    <p><strong>Всего заявок в базе:</strong> {{ total_applications }}</p>
+                    <p><strong>Синхронизировано:</strong> {{ synced_applications }}</p>
+                    <p><strong>Ожидает синхронизации:</strong> {{ pending_applications }}</p>
+                    
+                    {% if last_import %}
+                        <hr>
+                        <h6>Последний импорт:</h6>
+                        <p><small>{{ last_import.created_at|date:"d.m.Y H:i" }}</small></p>
+                        <p><small>Заявка: {{ last_import.full_name }}</small></p>
+                    {% endif %}
+                </div>
+            </div>
+            
+            <div class="card mt-3">
+                <div class="card-header">
+                    <h5>Правила сопоставления</h5>
+                </div>
+                <div class="card-body">
+                    <p>Заявки сопоставляются со сделками по следующим правилам:</p>
+                    <ol>
+                        <li>Если совпадает ФИО и любое другое поле</li>
+                        <li>Если совпадает номер телефона или email</li>
+                        <li>При нескольких совпадениях выбирается сделка с максимальным количеством совпадающих полей</li>
+                    </ol>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+    form input[type="file"] {
+        display: block;
+        width: 100%;
+        padding: .375rem .75rem;
+        font-size: 1rem;
+        line-height: 1.5;
+        color: var(--text-color);
+        background-color: var(--input-bg);
+        background-clip: padding-box;
+        border: 1px solid var(--border-color);
+        border-radius: .25rem;
+    }
+    
+    form input[type="text"] {
+        display: block;
+        width: 100%;
+        padding: .375rem .75rem;
+        font-size: 1rem;
+        line-height: 1.5;
+        color: var(--text-color);
+        background-color: var(--input-bg);
+        background-clip: padding-box;
+        border: 1px solid var(--border-color);
+        border-radius: .25rem;
+    }
+</style>
+{% endblock %} 
