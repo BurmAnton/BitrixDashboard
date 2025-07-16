@@ -30,7 +30,7 @@ SECRET_KEY = os.getenv('SECRET_KEY', 'django-insecure-your-secret-key-here')
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.getenv('DEBUG', 'True') == 'True'
 DJANGO_LOG_LEVEL=DEBUG
-ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS', 'localhost,127.0.0.1,192.168.1.48').split(',')
+ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS', 'localhost,127.0.0.1,192.168.1.48,90.156.254.122,90.156.254.122').split(',')
 
 # Application definition
 
@@ -158,3 +158,5 @@ CELERY_BEAT_SCHEDULE = {
 # Добавить настройки для правильного перенаправления на страницу входа
 LOGIN_URL = '/admin/login/'  # Перенаправляем на стандартную страницу входа Django admin
 LOGIN_REDIRECT_URL = '/crm/pipelines/'  # После входа перенаправляем обратно на страницу с воронками 
+
+DATA_UPLOAD_MAX_NUMBER_FIELDS = 100000

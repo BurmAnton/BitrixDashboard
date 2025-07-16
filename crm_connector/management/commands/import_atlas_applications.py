@@ -3,7 +3,7 @@ import json
 import pandas as pd
 from datetime import datetime
 from django.core.management.base import BaseCommand
-from django.db import transaction
+from django.db import transaction, models
 from django.utils import timezone
 from crm_connector.models import Deal, Pipeline, Stage, AtlasApplication, StageRule
 from crm_connector.bitrix24_api import Bitrix24API
@@ -220,14 +220,41 @@ class Command(BaseCommand):
                 if not full_name:
                     continue
                 
-                # Если по UID ничего не нашли, ищем совпадение по правилам
+                # Если по UID ничего не нашли, дополнительно проверяем существующие записи AtlasApplication
+                if not matched_deal and (full_name or phone or email):
+                    existing_atlas_apps = AtlasApplication.objects.filter(
+                        models.Q(full_name=full_name) |
+                        models.Q(phone=phone) if phone else models.Q() |
+                        models.Q(email=email) if email else models.Q()
+                    ).select_related('deal')
+                    
+                    if existing_atlas_apps.exists():
+                        # Находим наиболее подходящую из существующих записей
+                        for atlas_app in existing_atlas_apps:
+                            if atlas_app.deal:  # Если есть связанная сделка
+                                matched_deal = atlas_app.deal
+                                self.stdout.write(f"Найдена существующая запись AtlasApplication для {full_name}: сделка {atlas_app.deal.bitrix_id}")
+                                break
+                
+                # Если по UID и по AtlasApplication ничего не нашли, ищем совпадение по правилам
                 if not matched_deal:
                     matched_deal = self.find_matching_deal(full_name, phone, email, region)
                 
                 if matched_deal:
                     self.stats['matched_applications'] += 1
                     if not dry_run:
-                        self.update_existing_deal(matched_deal, app_data)
+                        # Проверяем, является ли это обновлением существующей заявки или новой заявкой
+                        should_update = self.should_update_deal(matched_deal, app_data)
+                        if should_update:
+                            self.update_existing_deal(matched_deal, app_data)
+                        else:
+                            self.stdout.write(f"⚠️  Найдена новая заявка для {full_name}, но сделка {matched_deal.bitrix_id} уже существует. "
+                                            f"Программа: {app_data.get('Направление обучения', 'Не указано')}. "
+                                            f"Рассмотрите создание отдельной сделки.")
+                            # Можно добавить логику создания новой сделки для другой программы
+                            # или записи в лог для ручной обработки
+                            self.stats['new_applications'] += 1
+                            self.create_new_deal(app_data)
                 else:
                     self.stats['new_applications'] += 1
                     if not dry_run:
@@ -313,14 +340,35 @@ class Command(BaseCommand):
             )
             return best_match[0]
 
-        # Фолбэк: ищем сделку с полностью совпавшим ФИО, если она единственная
+        # Фолбэк: ищем сделки с полностью совпавшим ФИО
         name_matches = [
             d for d in deals
             if self.normalize_name((d.details or {}).get('NAME', '') or (d.details or {}).get('TITLE', '')) == full_name
         ]
+        
         if len(name_matches) == 1:
             self.stdout.write(f"Фолбэк-совпадение по ФИО для {full_name}: сделка {name_matches[0].bitrix_id}")
             return name_matches[0]
+        elif len(name_matches) > 1:
+            # Если найдено несколько дублей, выбираем наиболее подходящую
+            self.stdout.write(f"Найдено {len(name_matches)} дублей для {full_name}, выбираем наилучший")
+            
+            # Сортируем по приоритету: сначала с телефоном/email, затем по дате создания
+            def sort_key(deal):
+                details = deal.details or {}
+                has_phone = bool(self.extract_phone_from_deal(details))
+                has_email = bool(self.extract_email_from_deal(details))
+                # Чем больше данных, тем выше приоритет
+                data_score = (2 if has_phone else 0) + (2 if has_email else 0)
+                # Также учитываем дату последней синхронизации (более свежие сделки предпочтительнее)
+                sync_time = deal.last_sync or deal.created_at or timezone.now()
+                return (-data_score, -sync_time.timestamp())  # Сортировка по убыванию
+            
+            name_matches.sort(key=sort_key)
+            selected_deal = name_matches[0]
+            
+            self.stdout.write(f"Выбрана сделка {selected_deal.bitrix_id} как наиболее подходящая")
+            return selected_deal
 
         return None
     
@@ -625,11 +673,42 @@ class Command(BaseCommand):
         return self.normalize_name(full_name)
     
     def normalize_name(self, name):
-        """Нормализует ФИО"""
+        """Нормализует ФИО для более точного сопоставления"""
         if not name:
             return ''
+        
         # Убираем лишние пробелы и приводим к единому регистру
-        return ' '.join(name.strip().split()).title()
+        name = ' '.join(name.strip().split()).title()
+        
+        # Исправляем распространенные ошибки в русских именах
+        corrections = {
+            # Варианты написания букв Ё/Е
+            'Ё': 'Е', 'ё': 'е',
+            
+            # Варианты окончаний отчеств
+            'Ичь': 'Ич', 'ичь': 'ич',
+            'Ьевич': 'Евич', 'ьевич': 'евич',
+            'Ьевна': 'Евна', 'ьевна': 'евна',
+            
+            # Исправление удвоенных букв
+            'Лл': 'Л', 'лл': 'л',
+            'Нн': 'Н', 'нн': 'н',
+            'Мм': 'М', 'мм': 'м',
+        }
+        
+        for old, new in corrections.items():
+            name = name.replace(old, new)
+        
+        # Убираем точки в сокращениях (И. -> И)
+        name = re.sub(r'\b([А-ЯЁ])\.', r'\1', name)
+        
+        # Стандартизируем дефисы в двойных фамилиях и именах
+        name = re.sub(r'\s*[-–—]\s*', '-', name)
+        
+        # Убираем лишние пробелы после замен
+        name = re.sub(r'\s+', ' ', name).strip()
+        
+        return name
     
     def normalize_phone(self, phone):
         """Нормализует телефон"""
