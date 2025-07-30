@@ -30,7 +30,8 @@
     .data-table {
         margin-top: 20px;
         font-size: 0.9rem;
-        width: 95%;
+        width: 95vw;
+        max-width: 95vw;
         margin-left: auto;
         margin-right: auto;
     }
@@ -61,7 +62,8 @@
         max-height: 80vh;
         overflow-x: auto;
         overflow-y: auto;
-        width: 95%;
+        width: 95vw;
+        max-width: 95vw;
         margin-left: auto;
         margin-right: auto;
     }
@@ -276,7 +278,7 @@
                     <table class="table table-bordered data-table">
                         <thead class="table-primary" style="background-color: #0d6efd !important; opacity: 1 !important;">
                             <tr>
-                                <th class="fw-bold program-region-cell text-white">Программа обучения / Регион / Период</th>
+                                <th class="fw-bold program-region-cell">Программа обучения / Регион / Период</th>
                                 {% for stage_name in ordered_stages %}
                                     {% with stage_info=stages_info|dict_get:stage_name %}
                                     <th class="text-center stage-header text-white" 
@@ -286,7 +288,7 @@
                                     </th>
                                     {% endwith %}
                                 {% endfor %}
-                                <th class="text-center fw-bold text-white">Всего</th>
+                                <th class="text-center fw-bold">Всего</th>
                             </tr>
                         </thead>
                         <tbody>
