@@ -843,4 +843,189 @@ class ObjectHistoryView(LoginRequiredMixin, ListView):
         context['fields'] = fields
         
         return context
+
+
+def atlas_dashboard(request):
+    """Дашборд для заявок из Атласа с визуализацией по этапам, программам и регионам"""
+    from django.db.models import Q
+    from datetime import datetime
+    
+    # Получаем параметры фильтрации из запроса
+    selected_program = request.GET.get('program', '')
+    selected_region = request.GET.get('region', '')
+    start_date = request.GET.get('start_date', '')
+    end_date = request.GET.get('end_date', '')
+    
+    # Получаем все заявки с связанными сделками
+    applications = AtlasApplication.objects.select_related('deal__stage', 'deal__pipeline').filter(deal__isnull=False)
+    
+    # Применяем фильтры
+    if selected_program:
+        applications = applications.filter(
+            Q(raw_data__icontains=f'"Программа обучения": "{selected_program}"') |
+            Q(raw_data__icontains=f'"Направление обучения": "{selected_program}"')
+        )
+    
+    if selected_region:
+        applications = applications.filter(region=selected_region)
+    
+    if start_date and end_date:
+        try:
+            start = datetime.strptime(start_date, '%Y-%m-%d')
+            end = datetime.strptime(end_date, '%Y-%m-%d')
+            # Фильтрация по периоду обучения в raw_data
+            applications = applications.filter(
+                Q(raw_data__icontains=f'"Начало периода обучения"') &
+                Q(created_at__gte=start) &
+                Q(created_at__lte=end)
+            )
+        except ValueError:
+            pass
+    
+    # Агрегация данных по этапам сделок
+    stage_stats = {}
+    for app in applications:
+        if app.deal and app.deal.stage:
+            stage_name = app.deal.stage.name
+            if stage_name not in stage_stats:
+                stage_stats[stage_name] = {
+                    'total': 0,
+                    'by_program': {},
+                    'by_region': {},
+                    'by_period': {}
+                }
+            
+            stage_stats[stage_name]['total'] += 1
+            
+            # Извлекаем данные из raw_data
+            raw_data = app.raw_data or {}
+            program = raw_data.get('Программа обучения', 'Не указана')
+            region = app.region or 'Не указан'
+            period_start = raw_data.get('Начало периода обучения', '')
+            period_end = raw_data.get('Окончание периода обучения', '')
+            
+            # Группировка по программе
+            if program not in stage_stats[stage_name]['by_program']:
+                stage_stats[stage_name]['by_program'][program] = 0
+            stage_stats[stage_name]['by_program'][program] += 1
+            
+            # Группировка по региону
+            if region not in stage_stats[stage_name]['by_region']:
+                stage_stats[stage_name]['by_region'][region] = 0
+            stage_stats[stage_name]['by_region'][region] += 1
+            
+            # Группировка по периоду
+            if period_start and period_end:
+                period = f"{period_start} - {period_end}"
+            else:
+                period = "Период не указан"
+            
+            if period not in stage_stats[stage_name]['by_period']:
+                stage_stats[stage_name]['by_period'][period] = 0
+            stage_stats[stage_name]['by_period'][period] += 1
+    
+    # Получаем уникальные программы, регионы и периоды для фильтров
+    all_programs = set()
+    all_regions = set()
+    all_periods = set()
+    
+    for app in AtlasApplication.objects.all():
+        raw_data = app.raw_data or {}
+        program = raw_data.get('Программа обучения')
+        if program:
+            all_programs.add(program)
+        if app.region:
+            all_regions.add(app.region)
+        
+        period_start = raw_data.get('Начало периода обучения', '')
+        period_end = raw_data.get('Окончание периода обучения', '')
+        if period_start and period_end:
+            all_periods.add(f"{period_start} - {period_end}")
+    
+    # Сортируем списки для удобства
+    all_programs = sorted(list(all_programs))
+    all_regions = sorted(list(all_regions))
+    all_periods = sorted(list(all_periods))
+    
+    # Общая статистика
+    total_applications = applications.count()
+    
+    # Подготовка данных для графиков (JSON)
+    import json
+    
+    # Данные для круговой диаграммы по этапам
+    stages_chart_data = {
+        'labels': list(stage_stats.keys()),
+        'data': [stage_stats[stage]['total'] for stage in stage_stats.keys()]
+    }
+    
+    # Данные для столбчатой диаграммы по программам
+    programs_data = {}
+    program_totals = {}
+    for stage_name, stage_data in stage_stats.items():
+        for program, count in stage_data['by_program'].items():
+            if program not in programs_data:
+                programs_data[program] = {}
+                program_totals[program] = 0
+            programs_data[program][stage_name] = count
+            program_totals[program] += count
+    
+    # Данные для таблицы по регионам
+    regions_data = {}
+    region_totals = {}
+    for stage_name, stage_data in stage_stats.items():
+        for region, count in stage_data['by_region'].items():
+            if region not in regions_data:
+                regions_data[region] = {}
+                region_totals[region] = 0
+            regions_data[region][stage_name] = count
+            region_totals[region] += count
+    
+    # Создаем иерархическую структуру: программа -> регионы
+    hierarchical_data = {}
+    for app in applications:
+        if app.deal and app.deal.stage:
+            stage_name = app.deal.stage.name
+            raw_data = app.raw_data or {}
+            program = raw_data.get('Программа обучения', 'Не указана')
+            region = app.region or 'Не указан'
+            
+            if program not in hierarchical_data:
+                hierarchical_data[program] = {
+                    'total': {},
+                    'regions': {}
+                }
+            
+            if region not in hierarchical_data[program]['regions']:
+                hierarchical_data[program]['regions'][region] = {}
+            
+            # Инициализируем счетчики если их нет
+            if stage_name not in hierarchical_data[program]['total']:
+                hierarchical_data[program]['total'][stage_name] = 0
+            if stage_name not in hierarchical_data[program]['regions'][region]:
+                hierarchical_data[program]['regions'][region][stage_name] = 0
+            
+            # Увеличиваем счетчики
+            hierarchical_data[program]['total'][stage_name] += 1
+            hierarchical_data[program]['regions'][region][stage_name] += 1
+    
+    context = {
+        'total_applications': total_applications,
+        'stage_stats': stage_stats,
+        'stages_chart_data': json.dumps(stages_chart_data, ensure_ascii=False),
+        'programs_data': programs_data,
+        'program_totals': program_totals,
+        'regions_data': regions_data,
+        'region_totals': region_totals,
+        'hierarchical_data': hierarchical_data,
+        'all_programs': all_programs,
+        'all_regions': all_regions,
+        'all_periods': all_periods,
+        'selected_program': selected_program,
+        'selected_region': selected_region,
+        'start_date': start_date,
+        'end_date': end_date,
+    }
+    
+    return render(request, 'crm_connector/atlas_dashboard.html', context)
  

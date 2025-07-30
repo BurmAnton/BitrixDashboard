@@ -1,0 +1,376 @@
+{% extends 'base.html' %}
+{% load static %}
+{% load dict_filters %}
+
+{% block title %}Дашборд заявок Атлас{% endblock %}
+
+{% block extra_css %}
+<style>
+    .filter-section {
+        background: #f8f9fa;
+        padding: 20px;
+        border-radius: 8px;
+        margin-bottom: 30px;
+    }
+    
+    .stats-card {
+        background: white;
+        border-radius: 8px;
+        padding: 20px;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        margin-bottom: 20px;
+    }
+    
+    .chart-container {
+        position: relative;
+        height: 400px;
+        margin: 20px 0;
+    }
+    
+    .data-table {
+        margin-top: 20px;
+    }
+    
+    .data-table th {
+        background-color: #f8f9fa;
+        position: sticky;
+        top: 0;
+        z-index: 10;
+    }
+    
+    .region-table {
+        max-height: 600px;
+        overflow-y: auto;
+    }
+    
+    .stage-header {
+        background-color: #e9ecef;
+        font-weight: bold;
+        padding: 10px;
+        margin: 10px 0;
+    }
+    
+    .program-card {
+        border-left: 4px solid #007bff;
+        padding-left: 15px;
+        margin-bottom: 15px;
+    }
+    
+    .btn-group .btn.active {
+        background-color: #0d6efd;
+        border-color: #0d6efd;
+        color: white;
+    }
+    
+    .table-transition {
+        transition: all 0.3s ease-in-out;
+    }
+    
+    .badge {
+        font-size: 0.75em;
+    }
+    
+    .table thead th {
+        vertical-align: middle;
+        text-align: center;
+    }
+    
+    .fw-medium {
+        font-weight: 500;
+    }
+    
+    /* Стили для иерархической таблицы */
+    .table-warning td {
+        background-color: #fff3cd !important;
+    }
+    
+    .ps-4 {
+        padding-left: 1.5rem !important;
+    }
+    
+    .table tbody tr:hover {
+        background-color: #f8f9fa;
+    }
+    
+    .table-warning:hover td {
+        background-color: #ffeaa7 !important;
+    }
+    
+    .bi {
+        font-size: 1rem;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <h1 class="mb-4">Дашборд заявок Атлас</h1>
+    
+    <!-- Секция фильтров -->
+    <div class="filter-section">
+        <h4>Фильтры</h4>
+        <form method="get" id="filterForm" class="row g-3">
+            <div class="col-md-3">
+                <label for="program" class="form-label">Программа обучения</label>
+                <select class="form-select" id="program" name="program">
+                    <option value="">Все программы</option>
+                    {% for program in all_programs %}
+                        <option value="{{ program }}" {% if program == selected_program %}selected{% endif %}>
+                            {{ program }}
+                        </option>
+                    {% endfor %}
+                </select>
+            </div>
+            
+            <div class="col-md-3">
+                <label for="region" class="form-label">Регион</label>
+                <select class="form-select" id="region" name="region">
+                    <option value="">Все регионы</option>
+                    {% for region in all_regions %}
+                        <option value="{{ region }}" {% if region == selected_region %}selected{% endif %}>
+                            {{ region }}
+                        </option>
+                    {% endfor %}
+                </select>
+            </div>
+            
+            <div class="col-md-2">
+                <label for="start_date" class="form-label">Начало периода</label>
+                <input type="date" class="form-control" id="start_date" name="start_date" value="{{ start_date }}">
+            </div>
+            
+            <div class="col-md-2">
+                <label for="end_date" class="form-label">Конец периода</label>
+                <input type="date" class="form-control" id="end_date" name="end_date" value="{{ end_date }}">
+            </div>
+            
+            <div class="col-md-2 d-flex align-items-end">
+                <button type="submit" class="btn btn-primary me-2">Применить</button>
+                <a href="{% url 'crm_connector:atlas_dashboard' %}" class="btn btn-secondary">Сбросить</a>
+            </div>
+        </form>
+    </div>
+    
+    <!-- Общая статистика -->
+    <div class="row">
+        <div class="col-md-12">
+            <div class="stats-card">
+                <h4>Общее количество заявок: {{ total_applications }}</h4>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Графики и таблицы -->
+    <div class="row">
+        <!-- Круговая диаграмма по этапам -->
+        <div class="col-md-6">
+            <div class="stats-card">
+                <h5>Распределение заявок по этапам</h5>
+                <div class="chart-container">
+                    <canvas id="stagesChart"></canvas>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Статистика по этапам с декомпозицией -->
+        <div class="col-md-6">
+            <div class="stats-card">
+                <h5>Детализация по этапам</h5>
+                <div class="accordion" id="stagesAccordion">
+                    {% for stage_name, stage_data in stage_stats.items %}
+                    <div class="accordion-item">
+                        <h2 class="accordion-header" id="heading{{ forloop.counter }}">
+                            <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" 
+                                    data-bs-target="#collapse{{ forloop.counter }}" aria-expanded="false">
+                                <span class="me-auto">{{ stage_name }}</span>
+                                <span class="badge bg-primary">{{ stage_data.total }}</span>
+                            </button>
+                        </h2>
+                        <div id="collapse{{ forloop.counter }}" class="accordion-collapse collapse" 
+                             data-bs-parent="#stagesAccordion">
+                            <div class="accordion-body">
+                                <h6>По программам:</h6>
+                                <ul class="list-unstyled">
+                                    {% for program, count in stage_data.by_program.items %}
+                                    <li class="d-flex justify-content-between">
+                                        <span>{{ program }}</span>
+                                        <span class="badge bg-secondary">{{ count }}</span>
+                                    </li>
+                                    {% endfor %}
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Единая иерархическая таблица -->
+    <div class="row mt-4">
+        <div class="col-md-12">
+            <div class="stats-card">
+                <h5>Распределение заявок по программам и регионам</h5>
+                <div class="table-responsive">
+                    <table class="table table-bordered data-table">
+                        <thead class="table-primary">
+                            <tr>
+                                <th class="fw-bold">Программа обучения / Регион</th>
+                                {% for stage_name in stage_stats.keys %}
+                                <th class="text-center">{{ stage_name }}</th>
+                                {% endfor %}
+                                <th class="text-center fw-bold">Всего</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for program, program_data in hierarchical_data.items %}
+                                <!-- Строка программы (суммарная) -->
+                                <tr class="table-warning fw-bold">
+                                    <td>
+                                        <i class="bi bi-mortarboard me-2"></i>
+                                        {{ program }}
+                                    </td>
+                                    {% for stage_name in stage_stats.keys %}
+                                    <td class="text-center">
+                                        {% with count=program_data.total|dict_get:stage_name|default:"0" %}
+                                            {% if count != "0" %}
+                                                <span class="badge bg-warning text-dark fs-6">{{ count }}</span>
+                                            {% else %}
+                                                <span class="text-muted">0</span>
+                                            {% endif %}
+                                        {% endwith %}
+                                    </td>
+                                    {% endfor %}
+                                    <td class="text-center">
+                                        {% with total=program_data.total.values|sum_values %}
+                                        <span class="badge bg-primary fs-6">{{ total }}</span>
+                                        {% endwith %}
+                                    </td>
+                                </tr>
+                                
+                                <!-- Строки регионов для этой программы -->
+                                {% for region, region_stages in program_data.regions.items %}
+                                <tr>
+                                    <td class="ps-4">
+                                        <i class="bi bi-geo-alt me-2 text-muted"></i>
+                                        <span class="text-muted">{{ region }}</span>
+                                    </td>
+                                    {% for stage_name in stage_stats.keys %}
+                                    <td class="text-center">
+                                        {% with count=region_stages|dict_get:stage_name|default:"0" %}
+                                            {% if count != "0" %}
+                                                <span class="badge bg-secondary">{{ count }}</span>
+                                            {% else %}
+                                                <span class="text-muted small">0</span>
+                                            {% endif %}
+                                        {% endwith %}
+                                    </td>
+                                    {% endfor %}
+                                    <td class="text-center">
+                                        {% with total=region_stages.values|sum_values %}
+                                        <span class="badge bg-success">{{ total }}</span>
+                                        {% endwith %}
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                                
+                                <!-- Разделительная строка между программами -->
+                                {% if not forloop.last %}
+                                <tr>
+                                    <td colspan="{{ stage_stats.keys|length|add:2 }}" class="p-1"></td>
+                                </tr>
+                                {% endif %}
+                            {% endfor %}
+                            
+                            <!-- Итоговая строка -->
+                            <tr class="table-info fw-bold">
+                                <td>
+                                    <i class="bi bi-calculator me-2"></i>
+                                    ИТОГО ПО ВСЕМ ПРОГРАММАМ
+                                </td>
+                                {% for stage_name in stage_stats.keys %}
+                                    {% with stage_data=stage_stats|dict_get:stage_name %}
+                                    <td class="text-center">
+                                        <span class="badge bg-info text-dark fs-6">{{ stage_data.total|default:"0" }}</span>
+                                    </td>
+                                    {% endwith %}
+                                {% endfor %}
+                                <td class="text-center">
+                                    <span class="badge bg-dark fs-6">{{ total_applications }}</span>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Данные для круговой диаграммы
+    const stagesData = {{ stages_chart_data|safe }};
+    
+    // Создаем круговую диаграмму
+    const ctx = document.getElementById('stagesChart').getContext('2d');
+    new Chart(ctx, {
+        type: 'pie',
+        data: {
+            labels: stagesData.labels,
+            datasets: [{
+                data: stagesData.data,
+                backgroundColor: [
+                    '#FF6384',
+                    '#36A2EB',
+                    '#FFCE56',
+                    '#4BC0C0',
+                    '#9966FF',
+                    '#FF9F40',
+                    '#FF6384',
+                    '#C9CBCF'
+                ],
+                borderWidth: 1
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    position: 'right',
+                },
+                tooltip: {
+                    callbacks: {
+                        label: function(context) {
+                            let label = context.label || '';
+                            if (label) {
+                                label += ': ';
+                            }
+                            label += context.parsed;
+                            const total = context.dataset.data.reduce((a, b) => a + b, 0);
+                            const percentage = ((context.parsed / total) * 100).toFixed(1);
+                            label += ' (' + percentage + '%)';
+                            return label;
+                        }
+                    }
+                }
+            }
+        }
+    });
+    
+    // Автоотправка формы при изменении селектов
+    document.querySelectorAll('#filterForm select').forEach(select => {
+        select.addEventListener('change', function() {
+            document.getElementById('filterForm').submit();
+        });
+    });
+    
+
+});
+</script>
+{% endblock %}
