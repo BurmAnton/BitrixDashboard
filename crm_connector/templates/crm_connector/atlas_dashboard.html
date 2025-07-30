@@ -383,56 +383,86 @@
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
 document.addEventListener('DOMContentLoaded', function() {
+    // Проверяем, что Chart.js загружен
+    if (typeof Chart === 'undefined') {
+        console.error('Chart.js не загружен!');
+        const container = document.querySelector('.chart-container');
+        container.innerHTML = '<p class="text-center text-danger">Ошибка: Chart.js не загружен</p>';
+        return;
+    }
+    
     // Данные для круговой диаграммы
     const stagesData = {{ stages_chart_data|safe }};
+    
+    // Отладка: выводим данные в консоль
+    console.log('Stages data:', stagesData);
     
     // Цвета этапов на основе их типа
     const stageColors = [
         {% for stage_name in ordered_stages %}
             {% with stage_info=stages_info|dict_get:stage_name %}
-            '{{ stage_info.color }}',
+            '{{ stage_info.color|default:"#6c757d" }}',
             {% endwith %}
         {% endfor %}
     ];
     
+    console.log('Stage colors:', stageColors);
+    
+    // Проверяем, есть ли данные для отображения
+    if (!stagesData || !stagesData.labels || !stagesData.data || stagesData.data.length === 0) {
+        console.error('Нет данных для графика');
+        document.getElementById('stagesChart').style.display = 'none';
+        const container = document.querySelector('.chart-container');
+        container.innerHTML = '<p class="text-center text-muted">Нет данных для отображения графика</p>';
+        return;
+    }
+    
     // Создаем круговую диаграмму
     const ctx = document.getElementById('stagesChart').getContext('2d');
-    new Chart(ctx, {
-        type: 'pie',
-        data: {
-            labels: stagesData.labels,
-            datasets: [{
-                data: stagesData.data,
-                backgroundColor: stageColors,
-                borderWidth: 2,
-                borderColor: '#ffffff'
-            }]
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            plugins: {
-                legend: {
-                    position: 'right',
-                },
-                tooltip: {
-                    callbacks: {
-                        label: function(context) {
-                            let label = context.label || '';
-                            if (label) {
-                                label += ': ';
+    
+    try {
+        new Chart(ctx, {
+            type: 'pie',
+            data: {
+                labels: stagesData.labels,
+                datasets: [{
+                    data: stagesData.data,
+                    backgroundColor: stageColors,
+                    borderWidth: 2,
+                    borderColor: '#ffffff'
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        position: 'right',
+                    },
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) {
+                                let label = context.label || '';
+                                if (label) {
+                                    label += ': ';
+                                }
+                                label += context.parsed;
+                                const total = context.dataset.data.reduce((a, b) => a + b, 0);
+                                const percentage = ((context.parsed / total) * 100).toFixed(1);
+                                label += ' (' + percentage + '%)';
+                                return label;
                             }
-                            label += context.parsed;
-                            const total = context.dataset.data.reduce((a, b) => a + b, 0);
-                            const percentage = ((context.parsed / total) * 100).toFixed(1);
-                            label += ' (' + percentage + '%)';
-                            return label;
                         }
                     }
                 }
             }
-        }
-    });
+        });
+        console.log('График успешно создан');
+    } catch (error) {
+        console.error('Ошибка создания графика:', error);
+        const container = document.querySelector('.chart-container');
+        container.innerHTML = '<p class="text-center text-danger">Ошибка загрузки графика: ' + error.message + '</p>';
+    }
     
     // Автоотправка формы при изменении селектов
     document.querySelectorAll('#filterForm select').forEach(select => {
