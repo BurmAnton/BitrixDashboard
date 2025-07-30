@@ -26,6 +26,7 @@ class Command(BaseCommand):
         self.stats = {
             'updated_deals': 0,
             'deleted_deals': 0,
+            'duplicate_deals_removed': 0,
             'matched_applications': 0,
             'new_applications': 0,
             'updated_applications': 0,
@@ -55,6 +56,11 @@ class Command(BaseCommand):
             action='store_true',
             help='Не удалять сделки, отсутствующие в Битрикс24'
         )
+        parser.add_argument(
+            '--no-remove-duplicates',
+            action='store_true',
+            help='Не удалять дублированные сделки'
+        )
     
     def handle(self, *args, **options):
         self.stdout.write(self.style.SUCCESS('Начинаем импорт заявок из Атласа...'))
@@ -66,10 +72,16 @@ class Command(BaseCommand):
         # 1. Обновление данных по сделкам из воронки
         self.update_deals_from_bitrix(options['pipeline_name'], options['no_delete'])
         
-        # 2. Загрузка данных из Excel
+        # 2. Поиск и удаление дублированных сделок
+        if not options['no_remove_duplicates']:
+            self.find_and_remove_duplicates(options['dry_run'])
+        else:
+            self.stdout.write("Пропускаем поиск дубликатов (опция --no-remove-duplicates)")
+        
+        # 3. Загрузка данных из Excel
         applications_data = self.load_excel_data(options['excel_file'])
         
-        # 3. Сопоставление и обработка заявок
+        # 4. Сопоставление и обработка заявок
         self.process_applications(applications_data, options['dry_run'])
         
         # Вывод статистики
@@ -158,6 +170,229 @@ class Command(BaseCommand):
                     self.stdout.write(f"Удалено {deleted_count} сделок, отсутствующих в Битрикс24")
         
         self.stdout.write(f"Обновлено {self.stats['updated_deals']} сделок")
+    
+    def find_and_remove_duplicates(self, dry_run=False):
+        """
+        Находит и удаляет дублированные сделки в воронке, оставляя самую старую.
+        
+        Критерии дубликатов:
+        1. Одинаковые ФИО (нормализованные)
+        2. Одинаковые телефоны или email
+        3. В одной воронке
+        """
+        self.stdout.write("Поиск дублированных сделок...")
+        
+        if not self.pipeline:
+            self.stdout.write("Воронка не определена, пропускаем поиск дубликатов")
+            return
+            
+        # Получаем все сделки из воронки
+        deals = Deal.objects.filter(pipeline=self.pipeline).order_by('created_at', 'bitrix_id')
+        
+        # Группируем сделки по ключам для поиска дубликатов
+        deal_groups = {}
+        
+        for deal in deals:
+            # Безопасно работаем с деталями сделки
+            deal_details = deal.details or {}
+            
+            # Извлекаем и нормализуем данные
+            deal_name = deal_details.get('NAME', '') or deal_details.get('TITLE', '')
+            deal_phone = self.extract_phone_from_deal(deal_details)
+            deal_email = self.extract_email_from_deal(deal_details)
+            deal_snils = self.extract_snils_from_deal(deal_details)
+            
+            name_norm = self.normalize_name(deal_name)
+            phone_norm = self.normalize_phone(deal_phone)
+            email_norm = self.normalize_email(deal_email)
+            snils_norm = self.normalize_snils(deal_snils)
+            
+            # Пропускаем сделки без основных данных
+            if not name_norm and not phone_norm and not email_norm and not snils_norm:
+                continue
+                
+            # Создаем ключи для группировки
+            duplicate_keys = []
+            
+            # СНИЛС - самый надежный критерий (если есть)
+            if snils_norm:
+                duplicate_keys.append(('snils', snils_norm))
+            
+            # Ключ по ФИО + телефон
+            if name_norm and phone_norm:
+                duplicate_keys.append(('name_phone', name_norm, phone_norm))
+                
+            # Ключ по ФИО + email  
+            if name_norm and email_norm:
+                duplicate_keys.append(('name_email', name_norm, email_norm))
+                
+            # Ключ по ФИО + СНИЛС
+            if name_norm and snils_norm:
+                duplicate_keys.append(('name_snils', name_norm, snils_norm))
+                
+            # Ключ по телефону (если есть и ФИО)
+            if phone_norm and name_norm:
+                duplicate_keys.append(('phone', phone_norm))
+                
+            # Ключ по email (если есть и ФИО)
+            if email_norm and name_norm:
+                duplicate_keys.append(('email', email_norm))
+            
+            # Добавляем сделку в группы по всем подходящим ключам
+            for key in duplicate_keys:
+                if key not in deal_groups:
+                    deal_groups[key] = []
+                deal_groups[key].append(deal)
+        
+        # Находим группы с дубликатами
+        duplicates_to_remove = []
+        
+        for key, group_deals in deal_groups.items():
+            if len(group_deals) > 1:
+                # Сортируем по дате создания (самые старые первыми)
+                sorted_deals = sorted(group_deals, key=lambda d: (
+                    d.created_at or timezone.now(),
+                    d.bitrix_id
+                ))
+                
+                # Оставляем самую старую, остальные помечаем для удаления
+                keep_deal = sorted_deals[0]
+                remove_deals = sorted_deals[1:]
+                
+                self.stdout.write(f"Найдена группа дубликатов по ключу {key[0]}: "
+                                f"оставляем сделку {keep_deal.bitrix_id}, "
+                                f"удаляем {len(remove_deals)} дубликатов")
+                
+                for deal in remove_deals:
+                    if deal not in duplicates_to_remove:  # Избегаем повторных добавлений
+                        duplicates_to_remove.append(deal)
+        
+        # Удаляем дубликаты
+        if duplicates_to_remove:
+            self.stdout.write(f"Найдено {len(duplicates_to_remove)} дублированных сделок для удаления")
+            
+            if not dry_run:
+                # Удаляем через batch API для эффективности
+                self._delete_deals_in_batches(duplicates_to_remove)
+                        
+                self.stdout.write(f"Удалено {self.stats['duplicate_deals_removed']} дублированных сделок")
+            else:
+                self.stdout.write("ТЕСТОВЫЙ РЕЖИМ: дубликаты не удалены")
+                for deal in duplicates_to_remove:
+                    self.stdout.write(f"  → Будет удалена сделка {deal.bitrix_id}")
+        else:
+            self.stdout.write("Дублированных сделок не найдено")
+    
+    def _delete_deals_in_batches(self, deals_to_delete):
+        """
+        Удаляет сделки пакетами через Битрикс24 API для повышения эффективности
+        """
+        batch_size = 50  # Максимальный размер batch для Битрикс24
+        
+        for i in range(0, len(deals_to_delete), batch_size):
+            batch = deals_to_delete[i:i + batch_size]
+            
+            # Подготавливаем команды для batch удаления
+            batch_commands = {}
+            for j, deal in enumerate(batch):
+                cmd_key = f"delete_{deal.bitrix_id}"
+                batch_commands[cmd_key] = [
+                    'crm.deal.delete',
+                    {'id': deal.bitrix_id}
+                ]
+            
+            self.stdout.write(f"Удаляем пакет сделок из Битрикс24 ({len(batch)} шт.): {[d.bitrix_id for d in batch]}")
+            
+            try:
+                # Выполняем batch удаление в Битрикс24
+                result = self.api.call_batch(batch_commands)
+                
+                # Проверяем результаты и удаляем успешные сделки из локальной базы
+                if result and 'result' in result:
+                    batch_results = result['result']
+                    errors = result['result'].get('result_error', {})
+                    
+                    for j, deal in enumerate(batch):
+                        cmd_key = f"delete_{deal.bitrix_id}"
+                        
+                        # Проверяем есть ли ошибка для этой команды
+                        if cmd_key in errors and errors[cmd_key]:
+                            error_info = errors[cmd_key]
+                            error_desc = error_info.get('error_description', '') if isinstance(error_info, dict) else str(error_info)
+                            
+                            # Если сделка не найдена - это не критичная ошибка, сделка уже удалена
+                            if 'not found' in error_desc.lower() or 'не найден' in error_desc.lower():
+                                self.stdout.write(f"⚠️ Сделка {deal.bitrix_id} уже удалена из Битрикс24")
+                                # Удаляем из локальной базы
+                                self._remove_deal_locally(deal)
+                            else:
+                                logger.error(f"Ошибка при удалении сделки {deal.bitrix_id} из Битрикс24: {error_info}")
+                                self.stdout.write(self.style.ERROR(f"Не удалось удалить сделку {deal.bitrix_id}: {error_desc}"))
+                            continue
+                        
+                        # Если нет ошибки, удаляем локально
+                        self._remove_deal_locally(deal)
+                
+                else:
+                    logger.error(f"Неожиданный ответ batch API: {result}")
+                    self.stdout.write(self.style.ERROR("Ошибка batch удаления: неожиданный ответ API"))
+                    
+                    # Пробуем удалить по одной сделке
+                    for deal in batch:
+                        self._delete_single_deal(deal)
+                        
+            except Exception as e:
+                logger.error(f"Критическая ошибка при batch удалении: {e}")
+                self.stdout.write(self.style.ERROR(f"Ошибка batch удаления: {e}"))
+                
+                # Пробуем удалить по одной сделке
+                for deal in batch:
+                    self._delete_single_deal(deal)
+    
+    def _remove_deal_locally(self, deal):
+        """
+        Удаляет сделку из локальной базы данных
+        """
+        try:
+            # Удаляем связанные AtlasApplication записи
+            AtlasApplication.objects.filter(deal=deal).delete()
+            
+            # Удаляем из локальной базы
+            deal.delete()
+            
+            self.stats['duplicate_deals_removed'] += 1
+            self.stdout.write(f"✅ Удалена дублированная сделка {deal.bitrix_id}")
+            
+        except Exception as e:
+            logger.error(f"Ошибка при удалении сделки {deal.bitrix_id} из локальной базы: {e}")
+            self.stdout.write(self.style.ERROR(f"Ошибка при локальном удалении сделки {deal.bitrix_id}: {e}"))
+    
+    def _delete_single_deal(self, deal):
+        """
+        Удаляет одну сделку через обычный API (fallback для batch)
+        """
+        try:
+            self.stdout.write(f"Удаляем сделку {deal.bitrix_id} по отдельности...")
+            
+            # Удаляем из Битрикс24 через обычный API
+            result = self.api.call_method('crm.deal.delete', {'id': deal.bitrix_id})
+            
+            if result:
+                self._remove_deal_locally(deal)
+            else:
+                logger.error(f"API вернул пустой результат при удалении сделки {deal.bitrix_id}")
+                self.stdout.write(self.style.ERROR(f"Не удалось удалить сделку {deal.bitrix_id}: пустой ответ API"))
+                
+        except Exception as e:
+            error_msg = str(e)
+            
+            # Если сделка не найдена - это не критичная ошибка
+            if 'not found' in error_msg.lower() or 'не найден' in error_msg.lower():
+                self.stdout.write(f"⚠️ Сделка {deal.bitrix_id} уже удалена из Битрикс24")
+                self._remove_deal_locally(deal)
+            else:
+                logger.error(f"Ошибка при удалении сделки {deal.bitrix_id}: {e}")
+                self.stdout.write(self.style.ERROR(f"Не удалось удалить сделку {deal.bitrix_id}: {e}"))
     
     def load_excel_data(self, excel_file):
         """Загружает данные из Excel файла"""
@@ -371,6 +606,49 @@ class Command(BaseCommand):
             return selected_deal
 
         return None
+    
+    def should_update_deal(self, deal, app_data):
+        """
+        Определяет, нужно ли обновить существующую сделку или создать новую.
+        
+        Args:
+            deal: Найденная сделка в базе
+            app_data: Данные заявки из Атласа
+            
+        Returns:
+            bool: True если нужно обновить, False если создать новую сделку
+        """
+        try:
+            # Проверяем, есть ли уже связанная запись AtlasApplication для этой сделки
+            existing_atlas_apps = AtlasApplication.objects.filter(deal=deal)
+            
+            # Получаем ID заявки из данных
+            app_id = app_data.get('ID заявки из РР', '')
+            
+            if existing_atlas_apps.exists():
+                # Если есть существующие записи AtlasApplication для этой сделки
+                for atlas_app in existing_atlas_apps:
+                    # Если ID заявки совпадает - это обновление той же заявки
+                    if atlas_app.application_id == app_id:
+                        return True
+                    
+                    # Проверяем совпадение по ФИО и программе обучения
+                    atlas_program = atlas_app.raw_data.get('Направление обучения', '') if atlas_app.raw_data else ''
+                    new_program = app_data.get('Направление обучения', '')
+                    
+                    if atlas_program == new_program and atlas_app.full_name == self.get_full_name(app_data):
+                        return True
+                
+                # Если это другая программа обучения или другая заявка - создаем новую сделку
+                return False
+            
+            # Если нет связанных записей AtlasApplication - обновляем существующую сделку
+            return True
+            
+        except Exception as e:
+            logger.error(f"Ошибка в should_update_deal для сделки {deal.bitrix_id}: {e}")
+            # В случае ошибки по умолчанию обновляем существующую сделку
+            return True
     
     def update_existing_deal(self, deal, app_data):
         """Обновляет существующую сделку данными из заявки"""
@@ -729,6 +1007,20 @@ class Command(BaseCommand):
             return ''
         return str(email).lower().strip()
     
+    def normalize_snils(self, snils):
+        """Нормализует СНИЛС для сравнения"""
+        if not snils:
+            return ''
+        
+        # Оставляем только цифры
+        digits = re.sub(r'[^\d]', '', str(snils))
+        
+        # СНИЛС должен быть 11 цифр
+        if len(digits) == 11:
+            return digits
+        
+        return ''
+    
     def extract_phone_from_deal(self, deal_details):
         """Извлекает телефон из данных сделки"""
         if not deal_details:
@@ -746,6 +1038,25 @@ class Command(BaseCommand):
         if email and isinstance(email, list) and len(email) > 0:
             return email[0].get('VALUE', '')
         return ''
+    
+    def extract_snils_from_deal(self, deal_details):
+        """Извлекает СНИЛС из данных сделки"""
+        if not deal_details:
+            return ''
+        
+        # СНИЛС хранится в кастомном поле UF_CRM_1750933149374
+        snils_field = 'UF_CRM_1750933149374'
+        snils = deal_details.get(snils_field, '')
+        
+        # Также проверяем альтернативные поля на случай изменений
+        if not snils:
+            alternative_fields = ['UF_CRM_SNILS', 'SNILS', 'UF_SNILS']
+            for field in alternative_fields:
+                snils = deal_details.get(field, '')
+                if snils:
+                    break
+        
+        return str(snils) if snils else ''
     
     def _get_or_create_stage(self, stage_id):
         """Получает или создает этап"""
@@ -818,6 +1129,7 @@ class Command(BaseCommand):
         self.stdout.write("СТАТИСТИКА ИМПОРТА:")
         self.stdout.write(f"Обновлено сделок из Битрикс24: {self.stats['updated_deals']}")
         self.stdout.write(f"Удалено отсутствующих сделок: {self.stats['deleted_deals']}")
+        self.stdout.write(f"Удалено дублированных сделок: {self.stats['duplicate_deals_removed']}")
         self.stdout.write(f"Найдено совпадений с заявками: {self.stats['matched_applications']}")
         self.stdout.write(f"Новых заявок без совпадений: {self.stats['new_applications']}")
         self.stdout.write(f"Обновлено существующих сделок: {self.stats['updated_applications']}")
