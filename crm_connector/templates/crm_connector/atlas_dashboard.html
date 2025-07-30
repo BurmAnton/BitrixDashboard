@@ -25,13 +25,17 @@
         position: relative;
         height: 500px;
         margin: 20px 0;
+        width: 95%;
+        max-width: 95%;
+        margin-left: auto;
+        margin-right: auto;
     }
     
     .data-table {
         margin-top: 20px;
         font-size: 0.9rem;
-        width: 95vw;
-        max-width: 95vw;
+        width: 100%;
+        table-layout: fixed;
         margin-left: auto;
         margin-right: auto;
     }
@@ -62,8 +66,8 @@
         max-height: 80vh;
         overflow-x: auto;
         overflow-y: auto;
-        width: 95vw;
-        max-width: 95vw;
+        width: 95%;
+        max-width: 95%;
         margin-left: auto;
         margin-right: auto;
     }
@@ -88,6 +92,13 @@
         padding-left: 20px;
         font-size: 0.9rem;
         line-height: 1.2;
+    }
+    
+    .wide-card {
+        width: 95%;
+        max-width: 95%;
+        margin-left: auto;
+        margin-right: auto;
     }
     
     .period-info {
@@ -272,7 +283,7 @@
     <!-- Единая иерархическая таблица -->
     <div class="row mt-4">
         <div class="col-md-12">
-            <div class="stats-card">
+            <div class="stats-card wide-card">
                 <h5>Распределение заявок по программам и регионам</h5>
                 <div class="table-responsive">
                     <table class="table table-bordered data-table">
