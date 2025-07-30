@@ -891,7 +891,17 @@ def atlas_dashboard(request):
         ordered_stages = []
         rejected_stages = []
         
+        # Этапы, которые нужно скрыть из отображения
+        hidden_stages = [
+            '1. Необработанная заявка',
+            '2. Направлена инструкция по РвР'
+        ]
+        
         for stage in stages_db:
+            # Пропускаем скрытые этапы
+            if stage.name in hidden_stages:
+                continue
+                
             stages_info[stage.name] = {
                 'type': stage.type,
                 'color': stage.color,
