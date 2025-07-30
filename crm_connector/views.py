@@ -882,18 +882,62 @@ def atlas_dashboard(request):
         except ValueError:
             pass
     
+    # Получаем все этапы воронки для правильного порядка и типов
+    pipeline = Pipeline.objects.filter(name='Заявки (граждане)').first()
+    if pipeline:
+        stages_db = Stage.objects.filter(pipeline=pipeline).order_by('sort')
+        # Создаем словарь этапов с информацией о типе и порядке
+        stages_info = {}
+        ordered_stages = []
+        rejected_stages = []
+        
+        for stage in stages_db:
+            stages_info[stage.name] = {
+                'type': stage.type,
+                'color': stage.color,
+                'sort': stage.sort,
+                'bitrix_id': stage.bitrix_id
+            }
+            
+            if stage.type == 'failure':
+                rejected_stages.append(stage.name)
+            else:
+                ordered_stages.append(stage.name)
+        
+        # Добавляем колонку "Отказы" в конец
+        ordered_stages.append('Отказы')
+        stages_info['Отказы'] = {
+            'type': 'failure',
+            'color': '#d9534f',
+            'sort': 1000,
+            'bitrix_id': 'REJECTED'
+        }
+    else:
+        stages_info = {}
+        ordered_stages = []
+        rejected_stages = []
+    
     # Агрегация данных по этапам сделок
     stage_stats = {}
+    # Инициализируем все этапы
+    for stage_name in ordered_stages:
+        stage_stats[stage_name] = {
+            'total': 0,
+            'by_program': {},
+            'by_region': {},
+            'by_period': {}
+        }
+    
     for app in applications:
         if app.deal and app.deal.stage:
             stage_name = app.deal.stage.name
+            
+            # Если это отказной этап, группируем в "Отказы"
+            if stage_name in rejected_stages:
+                stage_name = 'Отказы'
+            
             if stage_name not in stage_stats:
-                stage_stats[stage_name] = {
-                    'total': 0,
-                    'by_program': {},
-                    'by_region': {},
-                    'by_period': {}
-                }
+                continue
             
             stage_stats[stage_name]['total'] += 1
             
@@ -953,10 +997,10 @@ def atlas_dashboard(request):
     # Подготовка данных для графиков (JSON)
     import json
     
-    # Данные для круговой диаграммы по этапам
+    # Данные для круговой диаграммы по этапам (в правильном порядке)
     stages_chart_data = {
-        'labels': list(stage_stats.keys()),
-        'data': [stage_stats[stage]['total'] for stage in stage_stats.keys()]
+        'labels': ordered_stages,
+        'data': [stage_stats[stage]['total'] for stage in ordered_stages]
     }
     
     # Данные для столбчатой диаграммы по программам
@@ -986,6 +1030,11 @@ def atlas_dashboard(request):
     for app in applications:
         if app.deal and app.deal.stage:
             stage_name = app.deal.stage.name
+            
+            # Если это отказной этап, группируем в "Отказы"
+            if stage_name in rejected_stages:
+                stage_name = 'Отказы'
+            
             raw_data = app.raw_data or {}
             program = raw_data.get('Программа обучения', 'Не указана')
             region = app.region or 'Не указан'
@@ -995,15 +1044,15 @@ def atlas_dashboard(request):
                     'total': {},
                     'regions': {}
                 }
+                # Инициализируем все этапы для программы
+                for stage in ordered_stages:
+                    hierarchical_data[program]['total'][stage] = 0
             
             if region not in hierarchical_data[program]['regions']:
                 hierarchical_data[program]['regions'][region] = {}
-            
-            # Инициализируем счетчики если их нет
-            if stage_name not in hierarchical_data[program]['total']:
-                hierarchical_data[program]['total'][stage_name] = 0
-            if stage_name not in hierarchical_data[program]['regions'][region]:
-                hierarchical_data[program]['regions'][region][stage_name] = 0
+                # Инициализируем все этапы для региона
+                for stage in ordered_stages:
+                    hierarchical_data[program]['regions'][region][stage] = 0
             
             # Увеличиваем счетчики
             hierarchical_data[program]['total'][stage_name] += 1
@@ -1018,6 +1067,8 @@ def atlas_dashboard(request):
         'regions_data': regions_data,
         'region_totals': region_totals,
         'hierarchical_data': hierarchical_data,
+        'ordered_stages': ordered_stages,
+        'stages_info': stages_info,
         'all_programs': all_programs,
         'all_regions': all_regions,
         'all_periods': all_periods,

@@ -99,6 +99,41 @@
     .bi {
         font-size: 1rem;
     }
+    
+    /* Стили для цветного кодирования этапов */
+    .stage-header {
+        transition: all 0.2s ease;
+        position: relative;
+    }
+    
+    .stage-header:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    
+    /* Анимация для значков */
+    .badge {
+        transition: all 0.2s ease;
+    }
+    
+    .badge:hover {
+        transform: scale(1.1);
+    }
+    
+    /* Улучшенные цвета для процессных этапов */
+    .bg-process {
+        background-color: #5bc0de !important;
+    }
+    
+    /* Улучшенные цвета для успешных этапов */
+    .bg-success-custom {
+        background-color: #5cb85c !important;
+    }
+    
+    /* Улучшенные цвета для отказных этапов */
+    .bg-failure {
+        background-color: #d9534f !important;
+    }
 </style>
 {% endblock %}
 
@@ -217,8 +252,14 @@
                         <thead class="table-primary">
                             <tr>
                                 <th class="fw-bold">Программа обучения / Регион</th>
-                                {% for stage_name in stage_stats.keys %}
-                                <th class="text-center">{{ stage_name }}</th>
+                                {% for stage_name in ordered_stages %}
+                                    {% with stage_info=stages_info|dict_get:stage_name %}
+                                    <th class="text-center stage-header" 
+                                        style="background-color: {{ stage_info.color }}20; border-left: 3px solid {{ stage_info.color }};"
+                                        title="Тип: {% if stage_info.type == 'process' %}В процессе{% elif stage_info.type == 'success' %}Успешно{% else %}Отказ{% endif %}">
+                                        <span class="fw-bold" style="color: {{ stage_info.color }};">{{ stage_name }}</span>
+                                    </th>
+                                    {% endwith %}
                                 {% endfor %}
                                 <th class="text-center fw-bold">Всего</th>
                             </tr>
@@ -231,16 +272,24 @@
                                         <i class="bi bi-mortarboard me-2"></i>
                                         {{ program }}
                                     </td>
-                                    {% for stage_name in stage_stats.keys %}
-                                    <td class="text-center">
+                                    {% for stage_name in ordered_stages %}
+                                        {% with stage_info=stages_info|dict_get:stage_name %}
                                         {% with count=program_data.total|dict_get:stage_name|default:"0" %}
+                                        <td class="text-center" style="background-color: {{ stage_info.color }}10;">
                                             {% if count != "0" %}
-                                                <span class="badge bg-warning text-dark fs-6">{{ count }}</span>
+                                                {% if stage_info.type == 'success' %}
+                                                    <span class="badge bg-success fs-6">{{ count }}</span>
+                                                {% elif stage_info.type == 'failure' %}
+                                                    <span class="badge bg-danger fs-6">{{ count }}</span>
+                                                {% else %}
+                                                    <span class="badge bg-primary fs-6">{{ count }}</span>
+                                                {% endif %}
                                             {% else %}
                                                 <span class="text-muted">0</span>
                                             {% endif %}
+                                        </td>
                                         {% endwith %}
-                                    </td>
+                                        {% endwith %}
                                     {% endfor %}
                                     <td class="text-center">
                                         {% with total=program_data.total.values|sum_values %}
@@ -256,16 +305,24 @@
                                         <i class="bi bi-geo-alt me-2 text-muted"></i>
                                         <span class="text-muted">{{ region }}</span>
                                     </td>
-                                    {% for stage_name in stage_stats.keys %}
-                                    <td class="text-center">
+                                    {% for stage_name in ordered_stages %}
+                                        {% with stage_info=stages_info|dict_get:stage_name %}
                                         {% with count=region_stages|dict_get:stage_name|default:"0" %}
+                                        <td class="text-center" style="background-color: {{ stage_info.color }}08;">
                                             {% if count != "0" %}
-                                                <span class="badge bg-secondary">{{ count }}</span>
+                                                {% if stage_info.type == 'success' %}
+                                                    <span class="badge bg-success">{{ count }}</span>
+                                                {% elif stage_info.type == 'failure' %}
+                                                    <span class="badge bg-danger">{{ count }}</span>
+                                                {% else %}
+                                                    <span class="badge bg-info">{{ count }}</span>
+                                                {% endif %}
                                             {% else %}
                                                 <span class="text-muted small">0</span>
                                             {% endif %}
+                                        </td>
                                         {% endwith %}
-                                    </td>
+                                        {% endwith %}
                                     {% endfor %}
                                     <td class="text-center">
                                         {% with total=region_stages.values|sum_values %}
@@ -278,7 +335,7 @@
                                 <!-- Разделительная строка между программами -->
                                 {% if not forloop.last %}
                                 <tr>
-                                    <td colspan="{{ stage_stats.keys|length|add:2 }}" class="p-1"></td>
+                                    <td colspan="{{ ordered_stages|length|add:2 }}" class="p-1"></td>
                                 </tr>
                                 {% endif %}
                             {% endfor %}
@@ -289,11 +346,19 @@
                                     <i class="bi bi-calculator me-2"></i>
                                     ИТОГО ПО ВСЕМ ПРОГРАММАМ
                                 </td>
-                                {% for stage_name in stage_stats.keys %}
+                                {% for stage_name in ordered_stages %}
                                     {% with stage_data=stage_stats|dict_get:stage_name %}
-                                    <td class="text-center">
-                                        <span class="badge bg-info text-dark fs-6">{{ stage_data.total|default:"0" }}</span>
+                                    {% with stage_info=stages_info|dict_get:stage_name %}
+                                    <td class="text-center" style="background-color: {{ stage_info.color }}15;">
+                                        {% if stage_info.type == 'success' %}
+                                            <span class="badge bg-success fs-6">{{ stage_data.total|default:"0" }}</span>
+                                        {% elif stage_info.type == 'failure' %}
+                                            <span class="badge bg-danger fs-6">{{ stage_data.total|default:"0" }}</span>
+                                        {% else %}
+                                            <span class="badge bg-primary fs-6">{{ stage_data.total|default:"0" }}</span>
+                                        {% endif %}
                                     </td>
+                                    {% endwith %}
                                     {% endwith %}
                                 {% endfor %}
                                 <td class="text-center">
@@ -316,6 +381,15 @@ document.addEventListener('DOMContentLoaded', function() {
     // Данные для круговой диаграммы
     const stagesData = {{ stages_chart_data|safe }};
     
+    // Цвета этапов на основе их типа
+    const stageColors = [
+        {% for stage_name in ordered_stages %}
+            {% with stage_info=stages_info|dict_get:stage_name %}
+            '{{ stage_info.color }}',
+            {% endwith %}
+        {% endfor %}
+    ];
+    
     // Создаем круговую диаграмму
     const ctx = document.getElementById('stagesChart').getContext('2d');
     new Chart(ctx, {
@@ -324,17 +398,9 @@ document.addEventListener('DOMContentLoaded', function() {
             labels: stagesData.labels,
             datasets: [{
                 data: stagesData.data,
-                backgroundColor: [
-                    '#FF6384',
-                    '#36A2EB',
-                    '#FFCE56',
-                    '#4BC0C0',
-                    '#9966FF',
-                    '#FF9F40',
-                    '#FF6384',
-                    '#C9CBCF'
-                ],
-                borderWidth: 1
+                backgroundColor: stageColors,
+                borderWidth: 2,
+                borderColor: '#ffffff'
             }]
         },
         options: {
