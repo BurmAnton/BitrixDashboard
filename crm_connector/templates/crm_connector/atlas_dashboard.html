@@ -23,7 +23,7 @@
     
     .chart-container {
         position: relative;
-        height: 400px;
+        height: 500px;
         margin: 20px 0;
     }
     
@@ -228,10 +228,10 @@
     
     <!-- График на всю ширину -->
     <div class="row">
-        <!-- Круговая диаграмма по этапам -->
+        <!-- Горизонтальная столбчатая диаграмма по этапам -->
         <div class="col-md-12">
             <div class="stats-card">
-                <h5>Распределение заявок по этапам</h5>
+                <h5>Количество заявок по этапам</h5>
                 <div class="chart-container">
                     <canvas id="stagesChart"></canvas>
                 </div>
@@ -381,6 +381,7 @@
 
 {% block extra_js %}
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2"></script>
 <script>
 document.addEventListener('DOMContentLoaded', function() {
     // Проверяем, что Chart.js загружен
@@ -391,7 +392,12 @@ document.addEventListener('DOMContentLoaded', function() {
         return;
     }
     
-    // Данные для круговой диаграммы
+    // Регистрируем плагин для подписей данных
+    if (typeof ChartDataLabels !== 'undefined') {
+        Chart.register(ChartDataLabels);
+    }
+    
+    // Данные для столбчатой диаграммы
     const stagesData = {{ stages_chart_data|safe }};
     
     // Отладка: выводим данные в консоль
@@ -417,39 +423,83 @@ document.addEventListener('DOMContentLoaded', function() {
         return;
     }
     
-    // Создаем круговую диаграмму
+    // Создаем горизонтальную столбчатую диаграмму
     const ctx = document.getElementById('stagesChart').getContext('2d');
     
     try {
         new Chart(ctx, {
-            type: 'pie',
+            type: 'bar',
             data: {
                 labels: stagesData.labels,
                 datasets: [{
+                    label: 'Количество заявок',
                     data: stagesData.data,
                     backgroundColor: stageColors,
-                    borderWidth: 2,
-                    borderColor: '#ffffff'
+                    borderWidth: 1,
+                    borderColor: stageColors.map(color => color)
                 }]
             },
             options: {
                 responsive: true,
                 maintainAspectRatio: false,
+                indexAxis: 'y', // Горизонтальные столбцы
                 plugins: {
                     legend: {
-                        position: 'right',
+                        display: false // Убираем легенду для горизонтальной диаграммы
                     },
                     tooltip: {
                         callbacks: {
                             label: function(context) {
-                                let label = context.label || '';
-                                if (label) {
-                                    label += ': ';
-                                }
-                                label += context.parsed;
                                 const total = context.dataset.data.reduce((a, b) => a + b, 0);
-                                const percentage = ((context.parsed / total) * 100).toFixed(1);
-                                label += ' (' + percentage + '%)';
+                                const percentage = ((context.parsed.x / total) * 100).toFixed(1);
+                                return context.parsed.x + ' заявок (' + percentage + '%)';
+                            }
+                        }
+                    },
+                    // Подписи значений (если плагин загружен)
+                    ...(typeof ChartDataLabels !== 'undefined' ? {
+                        datalabels: {
+                            anchor: 'end',
+                            align: 'right',
+                            formatter: function(value, context) {
+                                if (value > 0) {
+                                    const total = context.dataset.data.reduce((a, b) => a + b, 0);
+                                    const percentage = ((value / total) * 100).toFixed(1);
+                                    return value + ' (' + percentage + '%)';
+                                }
+                                return '';
+                            },
+                            color: 'black',
+                            font: {
+                                weight: 'bold',
+                                size: 11
+                            }
+                        }
+                    } : {})
+                },
+                scales: {
+                    x: {
+                        beginAtZero: true,
+                        title: {
+                            display: true,
+                            text: 'Количество заявок'
+                        },
+                        grid: {
+                            display: true
+                        }
+                    },
+                    y: {
+                        title: {
+                            display: true,
+                            text: 'Этапы'
+                        },
+                        ticks: {
+                            // Обрезаем длинные названия этапов для лучшей читаемости
+                            callback: function(value, index, ticks) {
+                                const label = this.getLabelForValue(value);
+                                if (label.length > 30) {
+                                    return label.substring(0, 27) + '...';
+                                }
                                 return label;
                             }
                         }
