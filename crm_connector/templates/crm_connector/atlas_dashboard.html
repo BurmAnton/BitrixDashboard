@@ -6,6 +6,10 @@
 
 {% block extra_css %}
 <style>
+    .container{
+        width: 95%; 
+        max-width: 95%;
+    }
     .filter-section {
         background: #f8f9fa;
         padding: 20px;
@@ -95,8 +99,6 @@
     }
     
     .wide-card {
-        width: 95%;
-        max-width: 95%;
         margin-left: auto;
         margin-right: auto;
     }
@@ -139,12 +141,14 @@
     }
     
     .badge {
-        font-size: 0.75em;
+        font-size: 1em;
     }
     
     .table thead th {
         vertical-align: middle;
         text-align: center;
+        max-width: 100px;
+        text-wrap: wrap;
     }
     
     .fw-medium {
@@ -288,7 +292,7 @@
                 <div class="table-responsive">
                     <table class="table table-bordered data-table">
                         <thead class="table-primary" style="background-color: #0d6efd !important; opacity: 1 !important;">
-                            <tr>
+                            <tr style="border-width: 0;">
                                 <th class="fw-bold program-region-cell">Программа обучения / Регион / Период</th>
                                 {% for stage_name in ordered_stages %}
                                     {% with stage_info=stages_info|dict_get:stage_name %}
@@ -364,7 +368,7 @@
                                                     <span class="badge bg-info">{{ count }}</span>
                                                 {% endif %}
                                             {% else %}
-                                                <span class="text-muted small">0</span>
+                                                <span class="text-muted">0</span>
                                             {% endif %}
                                         </td>
                                         {% endwith %}
