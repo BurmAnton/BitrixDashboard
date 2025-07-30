@@ -30,33 +30,61 @@
     .data-table {
         margin-top: 20px;
         font-size: 0.9rem;
+        width: 95%;
+        margin-left: auto;
+        margin-right: auto;
     }
     
     .data-table th {
-        background-color: #f8f9fa;
+        background-color: #f8f9fa !important;
         position: sticky;
         top: 0;
         z-index: 10;
         white-space: nowrap;
         padding: 8px 6px;
         min-width: 80px;
+        opacity: 1 !important;
     }
     
     .data-table td {
         padding: 6px 4px;
         white-space: nowrap;
+        vertical-align: middle;
+    }
+    
+    .data-table .program-region-cell {
+        white-space: normal !important;
+        vertical-align: top !important;
     }
     
     .table-responsive {
         max-height: 80vh;
         overflow-x: auto;
         overflow-y: auto;
+        width: 95%;
+        margin-left: auto;
+        margin-right: auto;
     }
     
     .program-region-cell {
         min-width: 280px;
         max-width: 350px;
-        white-space: normal;
+        white-space: normal !important;
+        word-wrap: break-word;
+        word-break: break-word;
+        line-height: 1.3;
+        vertical-align: top;
+    }
+    
+    .program-row .program-region-cell {
+        font-weight: bold;
+        background-color: #fff3cd !important;
+        padding: 12px 8px;
+    }
+    
+    .region-row .program-region-cell {
+        padding-left: 20px;
+        font-size: 0.9rem;
         line-height: 1.2;
     }
     
@@ -246,25 +274,25 @@
                 <h5>Распределение заявок по программам и регионам</h5>
                 <div class="table-responsive">
                     <table class="table table-bordered data-table">
-                        <thead class="table-primary">
+                        <thead class="table-primary" style="background-color: #0d6efd !important; opacity: 1 !important;">
                             <tr>
-                                <th class="fw-bold program-region-cell">Программа обучения / Регион / Период</th>
+                                <th class="fw-bold program-region-cell text-white">Программа обучения / Регион / Период</th>
                                 {% for stage_name in ordered_stages %}
                                     {% with stage_info=stages_info|dict_get:stage_name %}
-                                    <th class="text-center stage-header" 
-                                        style="background-color: {{ stage_info.color }}20; border-left: 3px solid {{ stage_info.color }};"
+                                    <th class="text-center stage-header text-white" 
+                                        style="background-color: {{ stage_info.color }} !important; border-left: 3px solid {{ stage_info.color }}; opacity: 1 !important;"
                                         title="Тип: {% if stage_info.type == 'process' %}В процессе{% elif stage_info.type == 'success' %}Успешно{% else %}Отказ{% endif %}">
-                                        <span class="fw-bold" style="color: {{ stage_info.color }};">{{ stage_name }}</span>
+                                        <span class="fw-bold text-white">{{ stage_name }}</span>
                                     </th>
                                     {% endwith %}
                                 {% endfor %}
-                                <th class="text-center fw-bold">Всего</th>
+                                <th class="text-center fw-bold text-white">Всего</th>
                             </tr>
                         </thead>
                         <tbody>
                             {% for program, program_data in hierarchical_data.items %}
                                 <!-- Строка программы (суммарная) -->
-                                <tr class="table-warning fw-bold">
+                                <tr class="table-warning fw-bold program-row">
                                     <td class="program-region-cell">
                                         <i class="bi bi-mortarboard me-2"></i>
                                         {{ program }}
@@ -297,8 +325,8 @@
                                 
                                 <!-- Строки регионов с периодами для этой программы -->
                                 {% for region_period_key, region_period_data in program_data.region_periods.items %}
-                                <tr>
-                                    <td class="ps-4 program-region-cell">
+                                <tr class="region-row">
+                                    <td class="program-region-cell">
                                         <div>
                                             <i class="bi bi-geo-alt me-2 text-muted"></i>
                                             <span class="text-muted fw-medium">{{ region_period_data.region }}</span>
