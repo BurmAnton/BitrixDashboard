@@ -1025,7 +1025,7 @@ def atlas_dashboard(request):
             regions_data[region][stage_name] = count
             region_totals[region] += count
     
-    # Создаем иерархическую структуру: программа -> регионы
+    # Создаем иерархическую структуру: программа -> регионы с периодами
     hierarchical_data = {}
     for app in applications:
         if app.deal and app.deal.stage:
@@ -1039,24 +1039,39 @@ def atlas_dashboard(request):
             program = raw_data.get('Программа обучения', 'Не указана')
             region = app.region or 'Не указан'
             
+            # Извлекаем период обучения
+            period_start = raw_data.get('Начало периода обучения', '')
+            period_end = raw_data.get('Окончание периода обучения', '')
+            if period_start and period_end:
+                period = f"{period_start} - {period_end}"
+            else:
+                period = "Период не указан"
+            
+            # Создаем уникальный ключ для региона + период
+            region_period_key = f"{region}|{period}"
+            
             if program not in hierarchical_data:
                 hierarchical_data[program] = {
                     'total': {},
-                    'regions': {}
+                    'region_periods': {}
                 }
                 # Инициализируем все этапы для программы
                 for stage in ordered_stages:
                     hierarchical_data[program]['total'][stage] = 0
             
-            if region not in hierarchical_data[program]['regions']:
-                hierarchical_data[program]['regions'][region] = {}
-                # Инициализируем все этапы для региона
+            if region_period_key not in hierarchical_data[program]['region_periods']:
+                hierarchical_data[program]['region_periods'][region_period_key] = {
+                    'region': region,
+                    'period': period,
+                    'stages': {}
+                }
+                # Инициализируем все этапы для региона+периода
                 for stage in ordered_stages:
-                    hierarchical_data[program]['regions'][region][stage] = 0
+                    hierarchical_data[program]['region_periods'][region_period_key]['stages'][stage] = 0
             
             # Увеличиваем счетчики
             hierarchical_data[program]['total'][stage_name] += 1
-            hierarchical_data[program]['regions'][region][stage_name] += 1
+            hierarchical_data[program]['region_periods'][region_period_key]['stages'][stage_name] += 1
     
     context = {
         'total_applications': total_applications,

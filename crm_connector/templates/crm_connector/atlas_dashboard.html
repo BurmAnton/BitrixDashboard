@@ -29,6 +29,7 @@
     
     .data-table {
         margin-top: 20px;
+        font-size: 0.9rem;
     }
     
     .data-table th {
@@ -36,6 +37,36 @@
         position: sticky;
         top: 0;
         z-index: 10;
+        white-space: nowrap;
+        padding: 8px 6px;
+        min-width: 80px;
+    }
+    
+    .data-table td {
+        padding: 6px 4px;
+        white-space: nowrap;
+    }
+    
+    .table-responsive {
+        max-height: 80vh;
+        overflow-x: auto;
+        overflow-y: auto;
+    }
+    
+    .program-region-cell {
+        min-width: 280px;
+        max-width: 350px;
+        white-space: normal;
+        line-height: 1.2;
+    }
+    
+    .period-info {
+        font-size: 0.8rem;
+        margin-top: 4px;
+        padding: 2px 6px;
+        background-color: #e7f3ff;
+        border-radius: 4px;
+        display: inline-block;
     }
     
     .region-table {
@@ -251,7 +282,7 @@
                     <table class="table table-bordered data-table">
                         <thead class="table-primary">
                             <tr>
-                                <th class="fw-bold">Программа обучения / Регион</th>
+                                <th class="fw-bold program-region-cell">Программа обучения / Регион / Период</th>
                                 {% for stage_name in ordered_stages %}
                                     {% with stage_info=stages_info|dict_get:stage_name %}
                                     <th class="text-center stage-header" 
@@ -268,7 +299,7 @@
                             {% for program, program_data in hierarchical_data.items %}
                                 <!-- Строка программы (суммарная) -->
                                 <tr class="table-warning fw-bold">
-                                    <td>
+                                    <td class="program-region-cell">
                                         <i class="bi bi-mortarboard me-2"></i>
                                         {{ program }}
                                     </td>
@@ -298,16 +329,24 @@
                                     </td>
                                 </tr>
                                 
-                                <!-- Строки регионов для этой программы -->
-                                {% for region, region_stages in program_data.regions.items %}
+                                <!-- Строки регионов с периодами для этой программы -->
+                                {% for region_period_key, region_period_data in program_data.region_periods.items %}
                                 <tr>
-                                    <td class="ps-4">
-                                        <i class="bi bi-geo-alt me-2 text-muted"></i>
-                                        <span class="text-muted">{{ region }}</span>
+                                    <td class="ps-4 program-region-cell">
+                                        <div>
+                                            <i class="bi bi-geo-alt me-2 text-muted"></i>
+                                            <span class="text-muted fw-medium">{{ region_period_data.region }}</span>
+                                        </div>
+                                        <div class="mt-1">
+                                            <span class="period-info">
+                                                <i class="bi bi-calendar3 me-1"></i>
+                                                {{ region_period_data.period }}
+                                            </span>
+                                        </div>
                                     </td>
                                     {% for stage_name in ordered_stages %}
                                         {% with stage_info=stages_info|dict_get:stage_name %}
-                                        {% with count=region_stages|dict_get:stage_name|default:"0" %}
+                                        {% with count=region_period_data.stages|dict_get:stage_name|default:"0" %}
                                         <td class="text-center" style="background-color: {{ stage_info.color }}08;">
                                             {% if count != "0" %}
                                                 {% if stage_info.type == 'success' %}
@@ -325,7 +364,7 @@
                                         {% endwith %}
                                     {% endfor %}
                                     <td class="text-center">
-                                        {% with total=region_stages.values|sum_values %}
+                                        {% with total=region_period_data.stages.values|sum_values %}
                                         <span class="badge bg-success">{{ total }}</span>
                                         {% endwith %}
                                     </td>
@@ -342,7 +381,7 @@
                             
                             <!-- Итоговая строка -->
                             <tr class="table-info fw-bold">
-                                <td>
+                                <td class="program-region-cell">
                                     <i class="bi bi-calculator me-2"></i>
                                     ИТОГО ПО ВСЕМ ПРОГРАММАМ
                                 </td>
