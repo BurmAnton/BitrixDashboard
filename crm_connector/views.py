@@ -1044,6 +1044,9 @@ def atlas_dashboard(request):
             # Если это отказной этап, группируем в "Отказы"
             if stage_name in rejected_stages:
                 stage_name = 'Отказы'
+            # Пропускаем скрытые этапы
+            if stage_name in hidden_stages:
+                continue
             
             raw_data = app.raw_data or {}
             program = raw_data.get('Программа обучения', 'Не указана')
