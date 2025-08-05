@@ -861,49 +861,69 @@ def atlas_dashboard(request):
     start_date = request.GET.get('start_date', '')
     end_date = request.GET.get('end_date', '')
     
-    # Получаем все заявки с связанными сделками
-    applications = AtlasApplication.objects.select_related('deal__stage', 'deal__pipeline').filter(deal__isnull=False)
+    # Получаем воронку "Заявки (граждане)"
+    pipeline = Pipeline.objects.filter(name='Заявки (граждане)').first()
+    if not pipeline:
+        # Если воронка не найдена, возвращаем пустую страницу
+        return render(request, 'crm_connector/atlas_dashboard.html', {'error': 'Воронка "Заявки (граждане)" не найдена'})
     
-    # Применяем фильтры
-    if selected_program:
-        applications = applications.filter(
-            Q(raw_data__icontains=f'"Программа обучения": "{selected_program}"') |
-            Q(raw_data__icontains=f'"Направление обучения": "{selected_program}"')
-        )
+    # Получаем все сделки из этой воронки
+    deals = Deal.objects.select_related('stage').filter(pipeline=pipeline).exclude(stage__name__in=['1. Необработанная заявка', '2. Направлена инструкция по РвР'])
     
-    if selected_region:
-        applications = applications.filter(region=selected_region)
+    # Получаем связанные AtlasApplication для фильтрации
+    # Создаем словарь сделка -> заявка для быстрого доступа
+    atlas_apps_dict = {}
+    atlas_apps = AtlasApplication.objects.select_related('deal').filter(deal__pipeline=pipeline)
+    for app in atlas_apps:
+        atlas_apps_dict[app.deal_id] = app
     
-    if start_date and end_date:
-        try:
-            start = datetime.strptime(start_date, '%Y-%m-%d')
-            end = datetime.strptime(end_date, '%Y-%m-%d')
-            # Фильтрация по периоду обучения в raw_data
-            applications = applications.filter(
-                Q(raw_data__icontains=f'"Начало периода обучения"') &
-                Q(created_at__gte=start) &
-                Q(created_at__lte=end)
+    # Применяем фильтры через AtlasApplication, если они есть
+    if selected_program or selected_region or (start_date and end_date):
+        # Фильтруем AtlasApplication
+        filtered_apps = atlas_apps
+        
+        if selected_program:
+            filtered_apps = filtered_apps.filter(
+                Q(raw_data__icontains=f'"Программа обучения": "{selected_program}"') |
+                Q(raw_data__icontains=f'"Направление обучения": "{selected_program}"')
             )
-        except ValueError:
-            pass
+        
+        if selected_region:
+            filtered_apps = filtered_apps.filter(region=selected_region)
+        
+        if start_date and end_date:
+            try:
+                start = datetime.strptime(start_date, '%Y-%m-%d')
+                end = datetime.strptime(end_date, '%Y-%m-%d')
+                filtered_apps = filtered_apps.filter(
+                    Q(raw_data__icontains=f'"Начало периода обучения"') &
+                    Q(created_at__gte=start) &
+                    Q(created_at__lte=end)
+                )
+            except ValueError:
+                pass
+        
+        # Получаем ID сделок из отфильтрованных заявок
+        deal_ids = filtered_apps.values_list('deal_id', flat=True)
+        deals = deals.filter(id__in=deal_ids)
     
     # Получаем все этапы воронки для правильного порядка и типов
-    pipeline = Pipeline.objects.filter(name='Заявки (граждане)').first()
-    if pipeline:
-        stages_db = Stage.objects.filter(pipeline=pipeline).order_by('sort')
+    stages_db = Stage.objects.filter(pipeline=pipeline).order_by('sort')
+    if stages_db.exists():
         # Создаем словарь этапов с информацией о типе и порядке
         stages_info = {}
         ordered_stages = []
         rejected_stages = []
         
         # Этапы, которые нужно скрыть из отображения
+        # Закомментировано для отображения всех этапов
         hidden_stages = [
             '1. Необработанная заявка',
             '2. Направлена инструкция по РвР'
         ]
         
         for stage in stages_db:
-            # Пропускаем скрытые этапы
+            # Пропускаем скрытые этапы - закомментировано
             if stage.name in hidden_stages:
                 continue
                 
@@ -914,12 +934,13 @@ def atlas_dashboard(request):
                 'bitrix_id': stage.bitrix_id
             }
             
+            if stage.name not in hidden_stages and stage.type != 'failure':
+                ordered_stages.append(stage.name)
+            
             if stage.type == 'failure':
                 rejected_stages.append(stage.name)
-            else:
-                ordered_stages.append(stage.name)
         
-        # Добавляем колонку "Отказы" в конец
+        # НЕ добавляем колонку "Отказы" - показываем все этапы отдельно
         ordered_stages.append('Отказы')
         stages_info['Отказы'] = {
             'type': 'failure',
@@ -962,11 +983,11 @@ def atlas_dashboard(request):
         })
     weeks.reverse()  # Чтобы самая ранняя неделя была первой
     
-    for app in applications:
-        if app.deal and app.deal.stage:
-            stage_name = app.deal.stage.name
+    for deal in deals:
+        if deal.stage:
+            stage_name = deal.stage.name
             
-            # Если это отказной этап, группируем в "Отказы"
+            # НЕ группируем отказные этапы - показываем каждый отдельно
             if stage_name in rejected_stages:
                 stage_name = 'Отказы'
             
@@ -975,25 +996,36 @@ def atlas_dashboard(request):
             
             stage_stats[stage_name]['total'] += 1
             
-            # Извлекаем данные из raw_data
-            raw_data = app.raw_data or {}
-            program = raw_data.get('Программа обучения', 'Не указана')
-            region = app.region or 'Не указан'
-            period_start = raw_data.get('Начало периода обучения', '')
-            period_end = raw_data.get('Окончание периода обучения', '')
-            rr_submission_date = raw_data.get('Дата подачи заявки на РР', '')
+            # Проверяем, есть ли связанная AtlasApplication
+            atlas_app = atlas_apps_dict.get(deal.id)
             
-            # Подсчет для недельного графика
-            if rr_submission_date:
-                try:
-                    # Обновляем формат даты
-                    submission_date = datetime.strptime(rr_submission_date, '%d.%m.%Y %H:%M:%S')
-                    for week in weeks:
-                        if week['start'] <= submission_date <= week['end']:
-                            week['count'] += 1
-                            break
-                except ValueError:
-                    pass
+            if atlas_app:
+                # Извлекаем данные из raw_data
+                raw_data = atlas_app.raw_data or {}
+                program = raw_data.get('Программа обучения', 'Не указана')
+                region = atlas_app.region or 'Не указан'
+                period_start = raw_data.get('Начало периода обучения', '')
+                period_end = raw_data.get('Окончание периода обучения', '')
+                rr_submission_date = raw_data.get('Дата подачи заявки на РР', '')
+                
+                # Подсчет для недельного графика
+                if rr_submission_date:
+                    try:
+                        # Обновляем формат даты
+                        submission_date = datetime.strptime(rr_submission_date, '%d.%m.%Y %H:%M:%S')
+                        for week in weeks:
+                            if week['start'] <= submission_date <= week['end']:
+                                week['count'] += 1
+                                break
+                    except ValueError:
+                        pass
+            else:
+                # Для сделок без AtlasApplication используем значения по умолчанию
+                program = 'Не указана'
+                region = 'Не указан'
+                period = 'Период не указан'
+                period_start = ''
+                period_end = ''
             
             # Группировка по программе
             if program not in stage_stats[stage_name]['by_program']:
@@ -1039,7 +1071,7 @@ def atlas_dashboard(request):
     all_periods = sorted(list(all_periods))
     
     # Общая статистика
-    total_applications = applications.count()
+    total_applications = deals.count()
     
     # Подготовка данных для графиков (JSON)
     import json
@@ -1080,28 +1112,37 @@ def atlas_dashboard(request):
     
     # Создаем иерархическую структуру: программа -> регионы с периодами
     hierarchical_data = {}
-    for app in applications:
-        if app.deal and app.deal.stage:
-            stage_name = app.deal.stage.name
+    for deal in deals:
+        if deal.stage:
+            stage_name = deal.stage.name
             
-            # Если это отказной этап, группируем в "Отказы"
+            # НЕ группируем отказные этапы
             if stage_name in rejected_stages:
                 stage_name = 'Отказы'
-            # Пропускаем скрытые этапы
+            # НЕ пропускаем этапы
             if stage_name in hidden_stages:
                 continue
             
-            raw_data = app.raw_data or {}
-            program = raw_data.get('Программа обучения', 'Не указана')
-            region = app.region or 'Не указан'
+            # Проверяем, есть ли связанная AtlasApplication
+            atlas_app = atlas_apps_dict.get(deal.id)
             
-            # Извлекаем период обучения
-            period_start = raw_data.get('Начало периода обучения', '')
-            period_end = raw_data.get('Окончание периода обучения', '')
-            if period_start and period_end:
-                period = f"{period_start} - {period_end}"
+            if atlas_app:
+                raw_data = atlas_app.raw_data or {}
+                program = raw_data.get('Программа обучения', 'Не указана')
+                region = atlas_app.region or 'Не указан'
+                
+                # Извлекаем период обучения
+                period_start = raw_data.get('Начало периода обучения', '')
+                period_end = raw_data.get('Окончание периода обучения', '')
+                if period_start and period_end:
+                    period = f"{period_start} - {period_end}"
+                else:
+                    period = "Период не указан"
             else:
-                period = "Период не указан"
+                # Для сделок без AtlasApplication
+                program = 'Не указана'
+                region = 'Не указан'
+                period = 'Период не указан'
             
             # Создаем уникальный ключ для региона + период
             region_period_key = f"{region}|{period}"
@@ -1123,6 +1164,8 @@ def atlas_dashboard(request):
                 }
                 # Инициализируем все этапы для региона+периода
                 for stage in ordered_stages:
+                    if stage in rejected_stages:
+                        stage = 'Отказы'
                     hierarchical_data[program]['region_periods'][region_period_key]['stages'][stage] = 0
             
             # Увеличиваем счетчики
