@@ -5,8 +5,8 @@ from django.conf.urls.static import static
 
 urlpatterns = [
     path('admin/', admin.site.urls),
-    path('crm/', include('crm_connector.urls')),
-    path('bitrix24/', include('crm_connector.urls')),
+    path('', include('crm_connector.urls')),
+    # path('bitrix24/', include('crm_connector.urls')),
     path('education/', include('education_planner.urls')),
 ]
 

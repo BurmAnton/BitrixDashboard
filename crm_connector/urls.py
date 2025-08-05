@@ -5,6 +5,7 @@ from .views import ObjectHistoryView
 app_name = 'crm_connector'
 
 urlpatterns = [
+    path('', views.index, name='index'),
     path('dashboard/', views.dashboard, name='dashboard'),
     path('pipelines/', views.pipelines_dashboard, name='pipelines_dashboard'),
     path('sync/', views.sync_data, name='sync_data'),

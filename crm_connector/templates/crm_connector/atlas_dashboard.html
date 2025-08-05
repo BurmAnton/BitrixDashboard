@@ -274,11 +274,20 @@
     <!-- График на всю ширину -->
     <div class="row">
         <!-- Горизонтальная столбчатая диаграмма по этапам -->
-        <div class="col-md-12">
+        <div class="col-md-6">
             <div class="stats-card">
                 <h5>Количество заявок по этапам</h5>
                 <div class="chart-container">
                     <canvas id="stagesChart"></canvas>
+                </div>
+            </div>
+        </div>
+        <!-- Столбчатая диаграмма по недельным данным -->
+        <div class="col-md-6">
+            <div class="stats-card">
+                <h5>Количество заявок по неделям (Дата подачи на РР)</h5>
+                <div class="chart-container">
+                    <canvas id="weeklyChart"></canvas>
                 </div>
             </div>
         </div>
@@ -442,11 +451,15 @@ document.addEventListener('DOMContentLoaded', function() {
         Chart.register(ChartDataLabels);
     }
     
-    // Данные для столбчатой диаграммы
+    // Данные для столбчатой диаграммы по этапам
     const stagesData = {{ stages_chart_data|safe }};
+    
+    // Данные для недельного графика
+    const weeklyData = {{ weekly_chart_data|safe }};
     
     // Отладка: выводим данные в консоль
     console.log('Stages data:', stagesData);
+    console.log('Weekly data:', weeklyData);
     
     // Цвета этапов на основе их типа
     const stageColors = [
@@ -459,20 +472,20 @@ document.addEventListener('DOMContentLoaded', function() {
     
     console.log('Stage colors:', stageColors);
     
-    // Проверяем, есть ли данные для отображения
+    // Проверяем, есть ли данные для отображения графика по этапам
     if (!stagesData || !stagesData.labels || !stagesData.data || stagesData.data.length === 0) {
-        console.error('Нет данных для графика');
+        console.error('Нет данных для графика по этапам');
         document.getElementById('stagesChart').style.display = 'none';
         const container = document.querySelector('.chart-container');
         container.innerHTML = '<p class="text-center text-muted">Нет данных для отображения графика</p>';
         return;
     }
     
-    // Создаем горизонтальную столбчатую диаграмму
-    const ctx = document.getElementById('stagesChart').getContext('2d');
+    // Создаем горизонтальную столбчатую диаграмму по этапам
+    const stagesCtx = document.getElementById('stagesChart').getContext('2d');
     
     try {
-        new Chart(ctx, {
+        new Chart(stagesCtx, {
             type: 'bar',
             data: {
                 labels: stagesData.labels,
@@ -552,9 +565,90 @@ document.addEventListener('DOMContentLoaded', function() {
                 }
             }
         });
-        console.log('График успешно создан');
+        console.log('График по этапам успешно создан');
     } catch (error) {
-        console.error('Ошибка создания графика:', error);
+        console.error('Ошибка создания графика по этапам:', error);
+        const container = document.querySelector('.chart-container');
+        container.innerHTML = '<p class="text-center text-danger">Ошибка загрузки графика: ' + error.message + '</p>';
+    }
+    
+    // Проверяем, есть ли данные для отображения недельного графика
+    if (!weeklyData || !weeklyData.labels || !weeklyData.data || weeklyData.data.length === 0) {
+        console.error('Нет данных для недельного графика');
+        document.getElementById('weeklyChart').style.display = 'none';
+        const container = document.querySelector('.chart-container');
+        container.innerHTML = '<p class="text-center text-muted">Нет данных для отображения графика</p>';
+        return;
+    }
+    
+    // Создаем столбчатую диаграмму по недельным данным
+    const weeklyCtx = document.getElementById('weeklyChart').getContext('2d');
+    
+    try {
+        new Chart(weeklyCtx, {
+            type: 'bar',
+            data: {
+                labels: weeklyData.labels,
+                datasets: [{
+                    label: 'Количество заявок',
+                    data: weeklyData.data,
+                    backgroundColor: '#3498db',
+                    borderWidth: 1,
+                    borderColor: '#2980b9'
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        display: false
+                    },
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) {
+                                return context.parsed.y + ' заявок';
+                            }
+                        }
+                    },
+                    ...(typeof ChartDataLabels !== 'undefined' ? {
+                        datalabels: {
+                            anchor: 'end',
+                            align: 'top',
+                            formatter: function(value) {
+                                if (value > 0) {
+                                    return value;
+                                }
+                                return '';
+                            },
+                            color: 'black',
+                            font: {
+                                weight: 'bold',
+                                size: 11
+                            }
+                        }
+                    } : {})
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        title: {
+                            display: true,
+                            text: 'Количество заявок'
+                        }
+                    },
+                    x: {
+                        title: {
+                            display: true,
+                            text: 'Недели'
+                        }
+                    }
+                }
+            }
+        });
+        console.log('Недельный график успешно создан');
+    } catch (error) {
+        console.error('Ошибка создания недельного графика:', error);
         const container = document.querySelector('.chart-container');
         container.innerHTML = '<p class="text-center text-danger">Ошибка загрузки графика: ' + error.message + '</p>';
     }

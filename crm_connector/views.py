@@ -1,6 +1,7 @@
 from django.shortcuts import render, redirect
-from django.http import JsonResponse, Http404
+from django.http import HttpResponseRedirect, JsonResponse, Http404
 from django.conf import settings
+from django.urls import reverse
 from django.utils import timezone
 
 from .tasks import sync_leads, sync_deals, sync_contacts, sync_pipelines_task
@@ -12,10 +13,14 @@ from django.contrib import messages
 import logging
 import pandas as pd
 from .forms import ExcelImportForm
+from datetime import datetime, timedelta
 
 logger = logging.getLogger(__name__)
 
 # OAuth функции удалены - проект использует webhook-аутентификацию через переменные окружения
+
+def index(request):
+    return HttpResponseRedirect(reverse('crm_connector:atlas_dashboard'))
 
 def dashboard(request):
     """Представление для дашборда с данными из Битрикс24"""
@@ -679,7 +684,7 @@ def map_stage_to_bitrix_id(stage_name, stages_map=None):
 
 @csrf_protect
 def import_atlas_applications(request):
-    """Представление для импорта заявок из выгрузки Атлас"""
+    """Представление для импорта заявок из выгрузки Атласа"""
     if not request.user.is_authenticated:
         messages.warning(request, 'Для импорта данных необходимо войти в систему.')
         return redirect(f'{settings.LOGIN_URL}?next={request.path}')
@@ -848,7 +853,7 @@ class ObjectHistoryView(LoginRequiredMixin, ListView):
 def atlas_dashboard(request):
     """Дашборд для заявок из Атласа с визуализацией по этапам, программам и регионам"""
     from django.db.models import Q
-    from datetime import datetime
+    from datetime import datetime, timedelta
     
     # Получаем параметры фильтрации из запроса
     selected_program = request.GET.get('program', '')
@@ -938,6 +943,25 @@ def atlas_dashboard(request):
             'by_period': {}
         }
     
+    # Подготовка данных для недельного графика по дате подачи заявки на РР
+    weekly_data = {}
+    today = datetime.now()
+    # Находим начало текущей недели (понедельник)
+    start_of_week = today - timedelta(days=today.weekday())
+    # Создаем список из 5 недель, начиная с текущей
+    weeks = []
+    for i in range(5):
+        week_start = start_of_week - timedelta(weeks=i)
+        week_end = week_start + timedelta(days=6)
+        week_label = f"{week_start.strftime('%d.%m')} - {week_end.strftime('%d.%m.%Y')}"
+        weeks.append({
+            'label': week_label,
+            'start': week_start,
+            'end': week_end,
+            'count': 0
+        })
+    weeks.reverse()  # Чтобы самая ранняя неделя была первой
+    
     for app in applications:
         if app.deal and app.deal.stage:
             stage_name = app.deal.stage.name
@@ -957,6 +981,19 @@ def atlas_dashboard(request):
             region = app.region or 'Не указан'
             period_start = raw_data.get('Начало периода обучения', '')
             period_end = raw_data.get('Окончание периода обучения', '')
+            rr_submission_date = raw_data.get('Дата подачи заявки на РР', '')
+            
+            # Подсчет для недельного графика
+            if rr_submission_date:
+                try:
+                    # Обновляем формат даты
+                    submission_date = datetime.strptime(rr_submission_date, '%d.%m.%Y %H:%M:%S')
+                    for week in weeks:
+                        if week['start'] <= submission_date <= week['end']:
+                            week['count'] += 1
+                            break
+                except ValueError:
+                    pass
             
             # Группировка по программе
             if program not in stage_stats[stage_name]['by_program']:
@@ -1011,6 +1048,12 @@ def atlas_dashboard(request):
     stages_chart_data = {
         'labels': ordered_stages,
         'data': [stage_stats[stage]['total'] for stage in ordered_stages]
+    }
+    
+    # Данные для недельного графика
+    weekly_chart_data = {
+        'labels': [week['label'] for week in weeks],
+        'data': [week['count'] for week in weeks]
     }
     
     # Данные для столбчатой диаграммы по программам
@@ -1090,6 +1133,7 @@ def atlas_dashboard(request):
         'total_applications': total_applications,
         'stage_stats': stage_stats,
         'stages_chart_data': json.dumps(stages_chart_data, ensure_ascii=False),
+        'weekly_chart_data': json.dumps(weekly_chart_data, ensure_ascii=False),
         'programs_data': programs_data,
         'program_totals': program_totals,
         'regions_data': regions_data,
