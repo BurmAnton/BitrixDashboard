@@ -496,7 +496,7 @@
                                                                 <i class="bi bi-pencil"></i>
                                                             </button>
                                                             <button type="button" class="btn btn-outline-danger btn-sm" 
-                                                                    onclick="deleteQuota({{ quota.id }})" 
+                                                                    onclick="deleteQuota({{ quota.id }}, {{ agreement.id }})" 
                                                                     title="Удалить квоту">
                                                                 <i class="bi bi-trash"></i>
                                                             </button>
@@ -1526,6 +1526,9 @@ function editQuota(quotaId) {
     .then(response => response.json())
     .then(data => {
         if (data.success) {
+            // Сохраняем ID договора для использования при сохранении
+            currentAgreementId = data.quota.agreement_id;
+            
             // Заполняем форму редактирования
             document.getElementById('editQuotaId').value = quotaId;
             document.getElementById('editQuotaProgram').innerHTML = `<option value="${data.quota.education_program.id}">${data.quota.education_program.name}</option>`;
@@ -1620,7 +1623,7 @@ function saveEditedQuota() {
     });
 }
 
-function deleteQuota(quotaId) {
+function deleteQuota(quotaId, agreementId) {
     if (!confirm('Вы уверены, что хотите удалить эту квоту?')) return;
     
     const data = {
@@ -1628,7 +1631,7 @@ function deleteQuota(quotaId) {
         quota_id: quotaId
     };
     
-    fetch(`/education/agreements/${currentAgreementId}/quotas/`, {
+    fetch(`/education/agreements/${agreementId}/quotas/`, {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',

@@ -413,6 +413,7 @@ def quota_detail(request, quota_id):
                 'quantity': quota.quantity,
                 'cost_per_quota': float(quota.cost_per_quota),
                 'region_ids': region_ids,
+                'agreement_id': quota.agreement.id,
                 'education_program': {
                     'id': quota.education_program.id,
                     'name': quota.education_program.name,
