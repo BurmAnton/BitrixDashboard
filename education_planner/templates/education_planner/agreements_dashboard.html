@@ -557,6 +557,11 @@
                                     title="Добавить допсоглашение">
                                 <i class="bi bi-file-earmark-plus"></i>
                             </button>
+                            <button class="btn btn-sm btn-outline-info" 
+                                    onclick="openImportSupplementModal({{ agreement.id }})"
+                                    title="Импорт допсоглашения из Excel">
+                                <i class="bi bi-file-earmark-excel"></i>
+                            </button>
                             <button class="btn btn-sm btn-outline-danger" 
                                     onclick="deleteAgreement({{ agreement.id }})"
                                     title="Удалить">
@@ -1181,6 +1186,106 @@
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
                 <button type="button" class="btn btn-success" onclick="saveRegionMappings()">
                     <i class="bi bi-check-circle me-2"></i>Сохранить и продолжить импорт
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Import Supplement Modal -->
+<div class="modal fade" id="importSupplementModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="bi bi-file-earmark-excel me-2"></i>Импорт дополнительного соглашения
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="alert alert-info">
+                    <h6><i class="bi bi-info-circle me-2"></i>Инструкция:</h6>
+                    <ol class="mb-0">
+                        <li>Скачайте шаблон Excel</li>
+                        <li>Заполните данные в соответствии с инструкциями на листе "Инструкция"</li>
+                        <li>Загрузите заполненный файл ниже</li>
+                        <li>Система автоматически определит изменения по сравнению с текущими квотами</li>
+                    </ol>
+                </div>
+                
+                <form id="importSupplementForm" enctype="multipart/form-data">
+                    {% csrf_token %}
+                    <input type="hidden" id="supplementAgreementId" name="agreement_id" value="">
+                    
+                    <div class="row">
+                        <div class="col-md-6">
+                            <label class="form-label">Номер дополнительного соглашения</label>
+                            <input type="text" class="form-control" id="supplementNumber" name="supplement_number" required>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Excel файл с квотами</label>
+                            <input type="file" class="form-control" id="supplementExcelFile" name="file" accept=".xlsx,.xls" required>
+                            <div class="form-text">Поддерживаются файлы .xlsx и .xls</div>
+                        </div>
+                    </div>
+                    
+                    <div class="mt-3">
+                        <label class="form-label">Описание изменений (необязательно)</label>
+                        <textarea class="form-control" id="supplementDescription" name="supplement_description" rows="3" placeholder="Краткое описание изменений в дополнительном соглашении"></textarea>
+                    </div>
+                    
+                    <div class="mt-3 d-flex gap-2">
+                        <a href="{% url 'education_planner:download_supplement_template' %}" class="btn btn-outline-secondary">
+                            <i class="bi bi-download me-2"></i>Скачать шаблон Excel
+                        </a>
+                    </div>
+                </form>
+                
+                <!-- Индикатор загрузки -->
+                <div id="supplementImportProgress" class="d-none mt-3">
+                    <div class="d-flex align-items-center">
+                        <div class="spinner-border spinner-border-sm me-2" role="status"></div>
+                        <span>Анализ файла и определение изменений...</span>
+                    </div>
+                </div>
+                
+                <!-- Результаты анализа -->
+                <div id="supplementImportResults" class="d-none mt-3"></div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
+                <button type="button" class="btn btn-success" onclick="submitSupplementImportForm()">
+                    <i class="bi bi-upload me-2"></i>Анализировать и импортировать
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Supplement Region Mapping Modal -->
+<div class="modal fade" id="supplementRegionMappingModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="bi bi-geo-alt-fill me-2"></i>Настройка регионов для дополнительного соглашения
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="alert alert-warning">
+                    <i class="bi bi-exclamation-triangle me-2"></i>
+                    Обнаружены неопознанные регионы. Выберите действие для каждого региона:
+                </div>
+                
+                <div id="supplementRegionMappingContainer">
+                    <!-- Динамически заполняется JavaScript -->
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
+                <button type="button" class="btn btn-primary" onclick="saveSupplementRegionMappings()">
+                    <i class="bi bi-check-lg me-2"></i>Применить настройки
                 </button>
             </div>
         </div>
@@ -2292,5 +2397,328 @@ function proceedWithImport() {
         `;
     });
 }
+
+// ========== ФУНКЦИИ ДЛЯ ИМПОРТА ДОПОЛНИТЕЛЬНЫХ СОГЛАШЕНИЙ ==========
+
+function openImportSupplementModal(agreementId) {
+    const modal = new bootstrap.Modal(document.getElementById('importSupplementModal'));
+    document.getElementById('supplementAgreementId').value = agreementId;
+    
+    // Очищаем форму
+    document.getElementById('importSupplementForm').reset();
+    document.getElementById('supplementAgreementId').value = agreementId;
+    document.getElementById('supplementImportProgress').classList.add('d-none');
+    document.getElementById('supplementImportResults').classList.add('d-none');
+    
+    // Сбрасываем кнопку
+    const submitBtn = document.querySelector('#importSupplementModal .btn-success');
+    submitBtn.disabled = false;
+    submitBtn.innerHTML = '<i class="bi bi-upload me-2"></i>Анализировать и импортировать';
+    
+    modal.show();
+}
+
+function submitSupplementImportForm() {
+    const form = document.getElementById('importSupplementForm');
+    const fileInput = document.getElementById('supplementExcelFile');
+    const numberInput = document.getElementById('supplementNumber');
+    const progressDiv = document.getElementById('supplementImportProgress');
+    const resultsDiv = document.getElementById('supplementImportResults');
+    const submitBtn = document.querySelector('#importSupplementModal .btn-success');
+    
+    // Валидация
+    if (!fileInput.files.length) {
+        alert('Выберите файл для импорта');
+        return;
+    }
+    
+    if (!numberInput.value.trim()) {
+        alert('Укажите номер дополнительного соглашения');
+        return;
+    }
+    
+    // Показываем индикатор загрузки
+    progressDiv.classList.remove('d-none');
+    resultsDiv.classList.add('d-none');
+    submitBtn.disabled = true;
+    submitBtn.innerHTML = '<i class="bi bi-hourglass-split me-2"></i>Анализ файла и поиск изменений...';
+    
+    // Создаем FormData
+    const formData = new FormData(form);
+    
+    // Отправляем файл на анализ
+    fetch('{% url "education_planner:analyze_supplement_excel" %}', {
+        method: 'POST',
+        body: formData,
+        headers: {
+            'X-CSRFToken': getCookie('csrftoken')
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        progressDiv.classList.add('d-none');
+        
+        if (data.success) {
+            if (data.needs_user_input) {
+                // Есть неопознанные регионы - показываем модал настройки
+                showSupplementRegionMappingModal(data.unrecognized_regions);
+                
+                resultsDiv.classList.remove('d-none');
+                resultsDiv.innerHTML = `
+                    <div class="alert alert-warning">
+                        <i class="bi bi-exclamation-triangle me-2"></i>
+                        <strong>Требуется настройка регионов</strong><br>
+                        Найдено строк: ${data.total_rows}<br>
+                        Валидных квот: ${data.valid_quotas}<br>
+                        Найдено изменений: ${data.changes_count}<br>
+                        Неопознанных регионов: ${data.unrecognized_regions.length}
+                    </div>
+                    <div class="mt-2">
+                        <h6>Обнаруженные изменения:</h6>
+                        <div class="d-flex gap-2">
+                            ${data.changes_summary.ADD ? `<span class="badge bg-success">Добавлений: ${data.changes_summary.ADD}</span>` : ''}
+                            ${data.changes_summary.MODIFY ? `<span class="badge bg-warning">Изменений: ${data.changes_summary.MODIFY}</span>` : ''}
+                            ${data.changes_summary.REMOVE ? `<span class="badge bg-danger">Удалений: ${data.changes_summary.REMOVE}</span>` : ''}
+                        </div>
+                    </div>
+                `;
+            } else {
+                // Нет неопознанных регионов - показываем результаты анализа и переходим к импорту
+                resultsDiv.classList.remove('d-none');
+                resultsDiv.innerHTML = `
+                    <div class="alert alert-success">
+                        <i class="bi bi-check-circle me-2"></i>
+                        <strong>Анализ завершен успешно!</strong><br>
+                        Найдено строк: ${data.total_rows}<br>
+                        Валидных квот: ${data.valid_quotas}<br>
+                        Найдено изменений: ${data.changes_count}<br>
+                        Все регионы распознаны, переходим к созданию допсоглашения...
+                    </div>
+                    <div class="mt-2">
+                        <h6>Обнаруженные изменения:</h6>
+                        <div class="d-flex gap-2">
+                            ${data.changes_summary.ADD ? `<span class="badge bg-success">Добавлений: ${data.changes_summary.ADD}</span>` : ''}
+                            ${data.changes_summary.MODIFY ? `<span class="badge bg-warning">Изменений: ${data.changes_summary.MODIFY}</span>` : ''}
+                            ${data.changes_summary.REMOVE ? `<span class="badge bg-danger">Удалений: ${data.changes_summary.REMOVE}</span>` : ''}
+                        </div>
+                    </div>
+                `;
+                
+                // Небольшая задержка для отображения сообщения, затем импорт
+                setTimeout(() => {
+                    proceedWithSupplementImport();
+                }, 2000);
+            }
+        } else {
+            resultsDiv.classList.remove('d-none');
+            resultsDiv.innerHTML = `
+                <div class="alert alert-danger">
+                    <i class="bi bi-exclamation-triangle me-2"></i>
+                    <strong>Ошибка анализа файла:</strong> ${data.message}
+                </div>
+            `;
+        }
+        
+        // Восстанавливаем кнопку
+        submitBtn.disabled = false;
+        submitBtn.innerHTML = '<i class="bi bi-upload me-2"></i>Анализировать и импортировать';
+    })
+    .catch(error => {
+        progressDiv.classList.add('d-none');
+        resultsDiv.classList.remove('d-none');
+        resultsDiv.innerHTML = `
+            <div class="alert alert-danger">
+                <i class="bi bi-exclamation-triangle me-2"></i>
+                <strong>Ошибка анализа:</strong> ${error.message}
+            </div>
+        `;
+        
+        submitBtn.disabled = false;
+        submitBtn.innerHTML = '<i class="bi bi-upload me-2"></i>Анализировать и импортировать';
+    });
+}
+
+function showSupplementRegionMappingModal(unrecognizedRegions) {
+    const modal = new bootstrap.Modal(document.getElementById('supplementRegionMappingModal'));
+    const container = document.getElementById('supplementRegionMappingContainer');
+    
+    container.innerHTML = '';
+    
+    unrecognizedRegions.forEach(regionData => {
+        const regionDiv = document.createElement('div');
+        regionDiv.className = 'mb-3 p-3 border rounded';
+        regionDiv.innerHTML = `
+            <h6 class="mb-2">Регион: <strong>${regionData.name}</strong></h6>
+            <div class="row">
+                <div class="col-md-4">
+                    <div class="form-check">
+                        <input class="form-check-input" type="radio" name="region_${regionData.name}" 
+                               id="map_${regionData.name}" value="map" checked>
+                        <label class="form-check-label" for="map_${regionData.name}">
+                            Сопоставить с существующим
+                        </label>
+                    </div>
+                </div>
+                <div class="col-md-5">
+                    <select class="form-select form-select-sm" id="mapping_${regionData.name}">
+                        <option value="">Выберите регион</option>
+                        ${regionData.suggestions.map(s => `<option value="${s}">${s}</option>`).join('')}
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <div class="form-check">
+                        <input class="form-check-input" type="radio" name="region_${regionData.name}" 
+                               id="create_${regionData.name}" value="create">
+                        <label class="form-check-label" for="create_${regionData.name}">
+                            Создать новый
+                        </label>
+                    </div>
+                    <div class="form-check">
+                        <input class="form-check-input" type="radio" name="region_${regionData.name}" 
+                               id="skip_${regionData.name}" value="skip">
+                        <label class="form-check-label" for="skip_${regionData.name}">
+                            Пропустить
+                        </label>
+                    </div>
+                </div>
+            </div>
+        `;
+        container.appendChild(regionDiv);
+    });
+    
+    modal.show();
+}
+
+function saveSupplementRegionMappings() {
+    const container = document.getElementById('supplementRegionMappingContainer');
+    const mappings = {};
+    
+    container.querySelectorAll('[id^="map_"], [id^="create_"], [id^="skip_"]').forEach(input => {
+        if (input.checked) {
+            const regionName = input.name.replace('region_', '');
+            const action = input.value;
+            
+            mappings[regionName] = {
+                action: action,
+                target_region: action === 'map' ? 
+                    document.getElementById(`mapping_${regionName}`).value : 
+                    null
+            };
+        }
+    });
+    
+    // Проверяем что все регионы настроены
+    const hasEmptyMappings = Object.values(mappings).some(m => 
+        m.action === 'map' && !m.target_region
+    );
+    
+    if (hasEmptyMappings) {
+        alert('Выберите целевой регион для всех сопоставлений');
+        return;
+    }
+    
+    // Сохраняем mappings
+    fetch('{% url "education_planner:save_supplement_region_mappings" %}', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': getCookie('csrftoken')
+        },
+        body: JSON.stringify({
+            mappings: mappings
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            // Скрываем модал настройки регионов
+            const modal = bootstrap.Modal.getInstance(document.getElementById('supplementRegionMappingModal'));
+            modal.hide();
+            
+            // Переходим к импорту
+            setTimeout(() => {
+                proceedWithSupplementImport();
+            }, 500);
+        } else {
+            alert('Ошибка сохранения настроек: ' + data.message);
+        }
+    })
+    .catch(error => {
+        alert('Ошибка сохранения настроек: ' + error.message);
+    });
+}
+
+function proceedWithSupplementImport() {
+    const progressDiv = document.getElementById('supplementImportProgress');
+    const resultsDiv = document.getElementById('supplementImportResults');
+    const submitBtn = document.querySelector('#importSupplementModal .btn-success');
+    
+    // Показываем индикатор импорта
+    progressDiv.classList.remove('d-none');
+    progressDiv.querySelector('span').textContent = 'Создание дополнительного соглашения...';
+    submitBtn.disabled = true;
+    submitBtn.innerHTML = '<i class="bi bi-hourglass-split me-2"></i>Создание допсоглашения...';
+    
+    // Получаем данные формы
+    const form = document.getElementById('importSupplementForm');
+    const formData = new FormData(form);
+    
+    // Выполняем финальный импорт
+    fetch('{% url "education_planner:import_supplement_excel" %}', {
+        method: 'POST',
+        body: formData,
+        headers: {
+            'X-CSRFToken': getCookie('csrftoken')
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        progressDiv.classList.add('d-none');
+        resultsDiv.classList.remove('d-none');
+        
+        if (data.success) {
+            resultsDiv.innerHTML = `
+                <div class="alert alert-success">
+                    <i class="bi bi-check-circle me-2"></i>
+                    <strong>Импорт завершен успешно!</strong><br>
+                    ${data.message}<br>
+                    <ul class="mb-0 mt-2">
+                        <li>Создано изменений: ${data.changes_count}</li>
+                    </ul>
+                </div>
+            `;
+            
+            // Перезагружаем страницу через 3 секунды
+            setTimeout(() => {
+                location.reload();
+            }, 3000);
+        } else {
+            resultsDiv.innerHTML = `
+                <div class="alert alert-danger">
+                    <i class="bi bi-exclamation-triangle me-2"></i>
+                    <strong>Ошибка импорта:</strong> ${data.message}
+                </div>
+            `;
+        }
+        
+        // Восстанавливаем кнопку
+        submitBtn.disabled = false;
+        submitBtn.innerHTML = '<i class="bi bi-upload me-2"></i>Анализировать и импортировать';
+    })
+    .catch(error => {
+        progressDiv.classList.add('d-none');
+        resultsDiv.classList.remove('d-none');
+        resultsDiv.innerHTML = `
+            <div class="alert alert-danger">
+                <i class="bi bi-exclamation-triangle me-2"></i>
+                <strong>Ошибка импорта:</strong> ${error.message}
+            </div>
+        `;
+        
+        submitBtn.disabled = false;
+        submitBtn.innerHTML = '<i class="bi bi-upload me-2"></i>Анализировать и импортировать';
+    });
+}
+
 </script>
 {% endblock %}

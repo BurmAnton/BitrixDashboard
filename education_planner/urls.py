@@ -27,4 +27,10 @@ urlpatterns = [
     # Маршруты для допсоглашений
     path('agreements/<int:agreement_id>/supplements/create/', views.create_supplement, name='create_supplement'),
     path('supplements/<int:pk>/', views.supplement_detail, name='supplement_detail'),
+    
+    # Маршруты для импорта допсоглашений
+    path('supplements/analyze/', views.analyze_supplement_excel, name='analyze_supplement_excel'),
+    path('supplements/regions/save/', views.save_supplement_region_mappings, name='save_supplement_region_mappings'),
+    path('supplements/import/', views.import_supplement_excel, name='import_supplement_excel'),
+    path('supplements/template/', views.download_supplement_template, name='download_supplement_template'),
 ] 

@@ -1,13 +1,15 @@
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
-from django.http import JsonResponse
+from django.http import JsonResponse, HttpResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 from django.db.models import Q, Count, Sum, Prefetch
 from django.core.paginator import Paginator
 from django.utils import timezone
 from django.db import transaction
+from django.core.files.storage import default_storage
+from django.core.files.base import ContentFile
 from .forms import EducationProgramForm, ProgramSectionFormSet
 from .models import (
     EducationProgram, EduAgreement, Quota, Supplement, QuotaChange, Region
@@ -15,6 +17,8 @@ from .models import (
 import json
 import pandas as pd
 import re
+import io
+import os
 
 # Create your views here.
 
@@ -1202,13 +1206,6 @@ def import_quotas_excel(request):
         })
         
     except Exception as e:
-        # Удаляем временный файл в случае ошибки
-        try:
-            if 'full_path' in locals() and os.path.exists(full_path):
-                os.remove(full_path)
-        except:
-            pass
-        
         return JsonResponse({
             'success': False, 
             'message': f'Ошибка при обработке файла: {str(e)}'
@@ -1276,5 +1273,405 @@ def download_quota_template(request):
         content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
     )
     response['Content-Disposition'] = 'attachment; filename="template_import_quotas.xlsx"'
+    
+    return response
+
+
+def compare_quotas(current_quotas, new_quotas):
+    """
+    Сравнивает текущие квоты договора с новыми из доп. соглашения
+    Возвращает список изменений
+    """
+    changes = []
+    
+    # Создаем словари для удобного сравнения
+    # Ключ: (program_id, region_name)
+    current_dict = {}
+    for quota in current_quotas:
+        for region in quota.regions.all():
+            key = (quota.education_program.id, region.name)
+            current_dict[key] = quota.quantity
+    
+    new_dict = {}
+    for quota_data in new_quotas:
+        program_id = quota_data['program_id']
+        for region_name in quota_data['regions']:
+            key = (program_id, region_name)
+            current_quantity = new_dict.get(key, 0)
+            new_dict[key] = current_quantity + quota_data['quantity']
+    
+    # Находим изменения
+    all_keys = set(current_dict.keys()) | set(new_dict.keys())
+    
+    for key in all_keys:
+        program_id, region_name = key
+        old_quantity = current_dict.get(key, 0)
+        new_quantity = new_dict.get(key, 0)
+        
+        if old_quantity == 0 and new_quantity > 0:
+            # Добавление новой квоты
+            changes.append({
+                'type': 'ADD',
+                'program_id': program_id,
+                'region': region_name,
+                'old_quantity': None,
+                'new_quantity': new_quantity
+            })
+        elif old_quantity > 0 and new_quantity == 0:
+            # Удаление квоты
+            changes.append({
+                'type': 'REMOVE',
+                'program_id': program_id,
+                'region': region_name,
+                'old_quantity': old_quantity,
+                'new_quantity': 0
+            })
+        elif old_quantity != new_quantity:
+            # Изменение количества
+            changes.append({
+                'type': 'MODIFY',
+                'program_id': program_id,
+                'region': region_name,
+                'old_quantity': old_quantity,
+                'new_quantity': new_quantity
+            })
+    
+    return changes
+
+
+@login_required
+@csrf_exempt
+@require_http_methods(["POST"])
+def analyze_supplement_excel(request):
+    """
+    Анализирует Excel файл дополнительного соглашения
+    """
+    try:
+        if 'file' not in request.FILES:
+            return JsonResponse({'success': False, 'message': 'Файл не найден'})
+        
+        file = request.FILES['file']
+        agreement_id = request.POST.get('agreement_id')
+        
+        if not agreement_id:
+            return JsonResponse({'success': False, 'message': 'ID договора не указан'})
+        
+        try:
+            agreement = EduAgreement.objects.get(id=agreement_id)
+        except EduAgreement.DoesNotExist:
+            return JsonResponse({'success': False, 'message': 'Договор не найден'})
+        
+        # Читаем Excel файл
+        try:
+            df = pd.read_excel(file, engine='openpyxl')
+        except Exception as e:
+            return JsonResponse({'success': False, 'message': f'Ошибка чтения файла: {str(e)}'})
+        
+        # Проверяем наличие необходимых колонок
+        required_columns = ['Программа обучения', 'Форма обучения', 'Регионы реализации', 'Количество мест']
+        missing_columns = [col for col in required_columns if col not in df.columns]
+        
+        if missing_columns:
+            return JsonResponse({
+                'success': False,
+                'message': f'Отсутствуют обязательные колонки: {", ".join(missing_columns)}'
+            })
+        
+        # Очищаем и парсим данные
+        new_quotas = []
+        unrecognized_regions = set()
+        
+        for index, row in df.iterrows():
+            if pd.isna(row['Программа обучения']) or pd.isna(row['Количество мест']):
+                continue
+            
+            program_name = clean_text_data(str(row['Программа обучения']))
+            program_type = clean_text_data(str(row.get('Форма обучения', '')))
+            regions_text = clean_text_data(str(row['Регионы реализации']))
+            
+            try:
+                quantity = int(row['Количество мест'])
+            except (ValueError, TypeError):
+                continue
+            
+            if quantity <= 0:
+                continue
+            
+            # Ищем программу
+            program = None
+            programs = EducationProgram.objects.filter(name__icontains=program_name)
+            
+            if program_type:
+                for pt_choice, pt_display in EducationProgram.ProgramType.choices:
+                    if program_type.lower() in pt_display.lower():
+                        programs = programs.filter(program_type=pt_choice)
+                        break
+            
+            if programs.exists():
+                program = programs.first()
+            else:
+                return JsonResponse({
+                    'success': False,
+                    'message': f'Программа не найдена: {program_name} ({program_type})'
+                })
+            
+            # Парсим регионы
+            regions_names = []
+            for name in regions_text.split(','):
+                cleaned_name = clean_text_data(name)
+                if cleaned_name:
+                    # Убираем содержимое в скобках
+                    cleaned_name = re.sub(r'\([^)]*\)', '', cleaned_name).strip()
+                    if cleaned_name:
+                        regions_names.append(cleaned_name)
+            
+            # Проверяем регионы
+            valid_regions = []
+            for region_name in regions_names:
+                region_match = find_region_without_creating(region_name)
+                if region_match['found']:
+                    valid_regions.append(region_match['region_name'])
+                else:
+                    unrecognized_regions.add(region_name)
+            
+            if valid_regions:
+                new_quotas.append({
+                    'program_id': program.id,
+                    'program_name': program.name,
+                    'regions': valid_regions,
+                    'quantity': quantity
+                })
+        
+        # Получаем текущие квоты договора
+        current_quotas = agreement.get_actual_quotas()
+        
+        # Сравниваем и находим изменения
+        changes = compare_quotas(current_quotas, new_quotas)
+        
+        # Сохраняем данные в сессии
+        request.session['supplement_file_data'] = {
+            'agreement_id': agreement_id,
+            'new_quotas': new_quotas,
+            'changes': changes
+        }
+        request.session['supplement_file_name'] = file.name
+        request.session.modified = True
+        
+        # Подготавливаем ответ
+        response_data = {
+            'success': True,
+            'total_rows': len(df),
+            'valid_quotas': len(new_quotas),
+            'changes_count': len(changes),
+            'changes_summary': {},
+            'needs_user_input': len(unrecognized_regions) > 0,
+            'unrecognized_regions': []
+        }
+        
+        # Группируем изменения по типам
+        for change in changes:
+            change_type = change['type']
+            response_data['changes_summary'][change_type] = response_data['changes_summary'].get(change_type, 0) + 1
+        
+        # Добавляем неопознанные регионы с предложениями
+        if unrecognized_regions:
+            for region_name in unrecognized_regions:
+                suggestions = find_region_without_creating(region_name)['suggestions']
+                response_data['unrecognized_regions'].append({
+                    'name': region_name,
+                    'suggestions': suggestions
+                })
+        
+        return JsonResponse(response_data)
+        
+    except Exception as e:
+        return JsonResponse({'success': False, 'message': f'Ошибка обработки файла: {str(e)}'})
+
+
+@login_required
+@csrf_exempt
+@require_http_methods(["POST"])
+def import_supplement_excel(request):
+    """
+    Выполняет импорт дополнительного соглашения из Excel
+    """
+    try:
+        # Получаем данные из сессии
+        if 'supplement_file_data' not in request.session:
+            return JsonResponse({'success': False, 'message': 'Данные файла не найдены. Повторите анализ файла.'})
+        
+        file_data = request.session['supplement_file_data']
+        file_name = request.session.get('supplement_file_name', 'unknown.xlsx')
+        
+        # Получаем mappings регионов, если есть
+        region_mappings = request.session.get('supplement_region_mappings', {})
+        
+        # Получаем данные дополнительного соглашения
+        supplement_number = request.POST.get('supplement_number', '')
+        supplement_description = request.POST.get('supplement_description', '')
+        
+        if not supplement_number:
+            return JsonResponse({'success': False, 'message': 'Номер дополнительного соглашения обязателен'})
+        
+        agreement_id = file_data['agreement_id']
+        changes = file_data['changes']
+        
+        try:
+            agreement = EduAgreement.objects.get(id=agreement_id)
+        except EduAgreement.DoesNotExist:
+            return JsonResponse({'success': False, 'message': 'Договор не найден'})
+        
+        with transaction.atomic():
+            # Создаем дополнительное соглашение
+            supplement = Supplement.objects.create(
+                agreement=agreement,
+                number=supplement_number,
+                description=supplement_description or f'Импорт из файла {file_name}',
+                status=Supplement.SupplementStatus.DRAFT
+            )
+            
+            # Создаем изменения квот
+            created_changes = []
+            for change in changes:
+                try:
+                    program = EducationProgram.objects.get(id=change['program_id'])
+                    
+                    # Применяем mapping регионов если есть
+                    region_name = change['region']
+                    if region_name in region_mappings:
+                        mapping = region_mappings[region_name]
+                        if mapping['action'] == 'map':
+                            region_name = mapping['target_region']
+                        elif mapping['action'] == 'skip':
+                            continue
+                        # Для 'create' оставляем как есть
+                    
+                    quota_change = QuotaChange.objects.create(
+                        supplement=supplement,
+                        change_type=change['type'],
+                        education_program=program,
+                        region=region_name,
+                        old_quantity=change['old_quantity'],
+                        new_quantity=change['new_quantity']
+                    )
+                    created_changes.append(quota_change)
+                    
+                except EducationProgram.DoesNotExist:
+                    # Программа была удалена между анализом и импортом
+                    continue
+        
+        # Очищаем сессию
+        if 'supplement_file_data' in request.session:
+            del request.session['supplement_file_data']
+        if 'supplement_file_name' in request.session:
+            del request.session['supplement_file_name']
+        if 'supplement_region_mappings' in request.session:
+            del request.session['supplement_region_mappings']
+        request.session.modified = True
+        
+        return JsonResponse({
+            'success': True,
+            'supplement_id': supplement.id,
+            'supplement_number': supplement.number,
+            'changes_count': len(created_changes),
+            'message': f'Дополнительное соглашение №{supplement.number} успешно создано с {len(created_changes)} изменениями'
+        })
+        
+    except Exception as e:
+        return JsonResponse({'success': False, 'message': f'Ошибка импорта: {str(e)}'})
+
+
+@login_required
+@csrf_exempt
+@require_http_methods(["POST"])
+def save_supplement_region_mappings(request):
+    """
+    Сохраняет mappings регионов для импорта дополнительного соглашения
+    """
+    try:
+        import json
+        data = json.loads(request.body)
+        mappings = data.get('mappings', {})
+        
+        # Сохраняем в сессии
+        request.session['supplement_region_mappings'] = mappings
+        request.session.modified = True
+        
+        return JsonResponse({'success': True})
+        
+    except Exception as e:
+        return JsonResponse({'success': False, 'message': f'Ошибка сохранения: {str(e)}'})
+
+
+@login_required
+def download_supplement_template(request):
+    """
+    Скачивает шаблон Excel для импорта дополнительных соглашений
+    """
+    output = io.BytesIO()
+    
+    with pd.ExcelWriter(output, engine='openpyxl') as writer:
+        # Создаем основной шаблон
+        template_data = {
+            'Программа обучения': [
+                'Повышение квалификации по программе "Основы цифровой экономики"',
+                'Профессиональная переподготовка "Управление проектами"'
+            ],
+            'Форма обучения': [
+                'Очно-заочная',
+                'Заочная'
+            ],
+            'Регионы реализации': [
+                'Республика Татарстан, Пермский край',
+                'Московская область'
+            ],
+            'Количество мест': [50, 30],
+            'Дата начала': ['01.09.2024', '15.09.2024'],
+            'Дата окончания': ['01.12.2024', '15.12.2024'],
+            'Стоимость за заявку': [15000, 25000]
+        }
+        template = pd.DataFrame(template_data)
+        template.to_excel(writer, sheet_name='Квоты', index=False)
+        
+        # Создаем лист с инструкциями
+        instructions_data = {
+            'Поле': [
+                'Программа обучения',
+                'Форма обучения', 
+                'Регионы реализации',
+                'Количество мест',
+                'Дата начала',
+                'Дата окончания',
+                'Стоимость за заявку'
+            ],
+            'Описание': [
+                'Название программы обучения (должна существовать в системе)',
+                'Тип программы: Повышение квалификации, Профессиональная переподготовка, Курсы',
+                'Список регионов через запятую. Регионы должны быть в системе.',
+                'Целое число больше 0',
+                'Дата в формате ДД.ММ.ГГГГ',
+                'Дата в формате ДД.ММ.ГГГГ (не раньше даты начала)',
+                'Стоимость в рублях (число)'
+            ],
+            'Обязательность': [
+                'Обязательно',
+                'Обязательно',
+                'Обязательно', 
+                'Обязательно',
+                'Необязательно',
+                'Необязательно',
+                'Необязательно'
+            ]
+        }
+        instructions = pd.DataFrame(instructions_data)
+        instructions.to_excel(writer, sheet_name='Инструкция', index=False)
+    
+    output.seek(0)
+    
+    response = HttpResponse(
+        output.getvalue(),
+        content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    )
+    response['Content-Disposition'] = 'attachment; filename="template_import_supplement.xlsx"'
     
     return response
