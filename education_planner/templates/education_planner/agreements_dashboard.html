@@ -347,9 +347,26 @@
     .quotas-table thead th:nth-child(3) { width: 80px; }   /* Количество мест */
     .quotas-table thead th:nth-child(4) { width: 100px; }  /* Стоимость за заявку */
     .quotas-table thead th:nth-child(5) { width: 120px; }  /* Общая стоимость */
-    .quotas-table thead th:nth-child(6) { width: 90px; }   /* Дата начала */
-    .quotas-table thead th:nth-child(7) { width: 90px; }   /* Дата окончания */
-    .quotas-table thead th:nth-child(8) { width: 80px; }   /* Действия */
+    .quotas-table thead th:nth-child(6) { width: 140px; }  /* Период обучения */
+    .quotas-table thead th:nth-child(7) { width: 80px; }   /* Действия */
+    
+    /* Стили для ячейки с периодом обучения */
+    .quotas-table .period-cell {
+        font-size: 0.9rem !important;
+        line-height: 1.3;
+        white-space: nowrap;
+        text-align: center;
+        vertical-align: middle;
+    }
+    
+    .quotas-table .period-cell .fw-bold {
+        font-size: 0.95rem;
+        color: #0d6efd;
+    }
+    
+    .quotas-table .period-cell .text-muted {
+        font-size: 0.85rem;
+    }
 </style>
 {% endblock %}
 
@@ -595,8 +612,7 @@
                                                     <th style="min-width: 80px;">Количество мест</th>
                                                     <th style="min-width: 100px;">Стоимость за заявку</th>
                                                     <th style="min-width: 120px;">Общая стоимость</th>
-                                                    <th style="min-width: 90px;">Дата начала</th>
-                                                    <th style="min-width: 90px;">Дата окончания</th>
+                                                    <th style="min-width: 140px;">Период обучения</th>
                                                     <th style="min-width: 80px;">Действия</th>
                                                 </tr>
                                             </thead>
@@ -625,11 +641,18 @@
                                                     <td>
                                                         <span class="badge bg-primary">{{ quota.formatted_total_cost }}</span>
                                                     </td>
-                                                    <td>
-                                                        <span class="badge bg-secondary">{{ quota.formatted_start_date }}</span>
-                                                    </td>
-                                                    <td>
-                                                        <span class="badge bg-secondary">{{ quota.formatted_end_date }}</span>
+                                                    <td class="period-cell">
+                                                        <div class="d-flex flex-column">
+                                                            {% if quota.formatted_start_date %}
+                                                                <span class="fw-bold">{{ quota.formatted_start_date }}</span>
+                                                            {% endif %}
+                                                            {% if quota.formatted_end_date %}
+                                                                <span class="text-muted">{{ quota.formatted_end_date }}</span>
+                                                            {% endif %}
+                                                            {% if not quota.formatted_start_date and not quota.formatted_end_date %}
+                                                                <span class="text-muted">—</span>
+                                                            {% endif %}
+                                                        </div>
                                                     </td>
                                                     <td>
                                                         <div class="btn-group btn-group-sm" role="group">
