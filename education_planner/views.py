@@ -1456,9 +1456,9 @@ def analyze_supplement_excel(request):
             # Проверяем регионы
             valid_regions = []
             for region_name in regions_names:
-                region_match = find_region_without_creating(region_name)
-                if region_match['found']:
-                    valid_regions.append(region_match['region_name'])
+                region, match_type = find_region_without_creating(region_name)
+                if match_type != 'not_found' and region:
+                    valid_regions.append(region.name)
                 else:
                     unrecognized_regions.add(region_name)
             
@@ -1504,10 +1504,14 @@ def analyze_supplement_excel(request):
         # Добавляем неопознанные регионы с предложениями
         if unrecognized_regions:
             for region_name in unrecognized_regions:
-                suggestions = find_region_without_creating(region_name)['suggestions']
+                # Ищем похожие регионы для предложений
+                suggestions = Region.objects.filter(
+                    name__icontains=region_name[:3] if len(region_name) > 3 else region_name
+                ).values_list('name', flat=True)[:5]
+                
                 response_data['unrecognized_regions'].append({
                     'name': region_name,
-                    'suggestions': suggestions
+                    'suggestions': list(suggestions)
                 })
         
         return JsonResponse(response_data)
