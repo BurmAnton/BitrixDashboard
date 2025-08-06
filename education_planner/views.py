@@ -34,8 +34,64 @@ def clean_text_data(text):
     return text
 
 
+def find_region_without_creating(region_name_input):
+    """Поиск региона по названию БЕЗ автоматического создания"""
+    region_name = clean_text_data(region_name_input)
+    
+    if not region_name:
+        return None, 'empty_name'
+    
+    # Сначала точный поиск
+    region = Region.objects.filter(name__iexact=region_name).first()
+    if region:
+        return region, 'exact_match'
+    
+    # Поиск по частичному совпадению
+    region = Region.objects.filter(name__icontains=region_name).first()
+    if region:
+        return region, 'partial_match'
+    
+    # Поиск в обратную сторону (может регион содержит введенное название)
+    region = Region.objects.filter(name__icontains=region_name.split()[0] if region_name.split() else region_name).first()
+    if region:
+        return region, 'reverse_match'
+    
+    # Если не найден, пытаемся определить по ключевым словам
+    region_mapping = {
+        'москва': 'Москва',
+        'московская': 'Московская область',
+        'спб': 'Санкт-Петербург',
+        'санкт-петербург': 'Санкт-Петербург',
+        'ленинградская': 'Ленинградская область',
+        'екатеринбург': 'Свердловская область',
+        'новосибирск': 'Новосибирская область',
+        'казань': 'Республика Татарстан',
+        'нижний новгород': 'Нижегородская область',
+        'челябинск': 'Челябинская область',
+        'омск': 'Омская область',
+        'самара': 'Самарская область',
+        'ростов': 'Ростовская область',
+        'уфа': 'Республика Башкортостан',
+        'красноярск': 'Красноярский край',
+        'воронеж': 'Воронежская область',
+        'пермь': 'Пермский край',
+        'волгоград': 'Волгоградская область',
+    }
+    
+    region_lower = region_name.lower()
+    for key, standard_name in region_mapping.items():
+        if key in region_lower:
+            # Ищем стандартное название
+            region = Region.objects.filter(name__icontains=standard_name).first()
+            if region:
+                return region, 'keyword_match'
+    
+    # Если ничего не подошло, возвращаем None с типом ошибки
+    return None, 'not_found'
+
+
 def find_or_create_region(region_name_input):
-    """Поиск региона по названию или создание псевдонима"""
+    """Поиск региона по названию или создание псевдонима (старая функция для совместимости)"""
     region_name = clean_text_data(region_name_input)
     
     if not region_name:
@@ -560,8 +616,8 @@ def quota_detail(request, quota_id):
 
 @login_required
 @require_http_methods(["POST"])
-def import_quotas_excel(request):
-    """Импорт квот из Excel файла"""
+def analyze_quotas_excel(request):
+    """Предварительный анализ Excel файла для выявления неопознанных регионов"""
     from django.core.files.storage import default_storage
     from django.core.files.base import ContentFile
     import pandas as pd
@@ -579,12 +635,118 @@ def import_quotas_excel(request):
     
     try:
         # Сохраняем временный файл
-        file_name = f'temp_import_{timezone.now().timestamp()}_{excel_file.name}'
+        file_name = f'temp_analyze_{timezone.now().timestamp()}_{excel_file.name}'
         file_path = default_storage.save(file_name, ContentFile(excel_file.read()))
         full_path = default_storage.path(file_path)
         
         # Читаем Excel файл
         df = pd.read_excel(full_path)
+        
+        # Проверяем необходимые колонки
+        required_columns = [
+            'договор_номер', 'программа_название', 'программа_тип', 'программа_часы', 
+            'программа_форма', 'регионы', 'количество', 'стоимость_за_заявку'
+        ]
+        
+        missing_columns = [col for col in required_columns if col not in df.columns]
+        if missing_columns:
+            # Удаляем временный файл
+            if default_storage.exists(file_path):
+                default_storage.delete(file_path)
+            return JsonResponse({
+                'success': False, 
+                'message': f'Отсутствуют необходимые колонки: {", ".join(missing_columns)}'
+            })
+        
+        # Анализируем регионы
+        unrecognized_regions = []
+        region_suggestions = {}
+        total_rows = 0
+        
+        for index, row in df.iterrows():
+            total_rows += 1
+            try:
+                regions_text = clean_text_data(row['регионы'])
+                if not regions_text:
+                    continue
+                    
+                regions_names = [clean_text_data(name) for name in regions_text.split(',') if clean_text_data(name)]
+                
+                for region_name in regions_names:
+                    region, match_type = find_region_without_creating(region_name)
+                    
+                    if match_type == 'not_found':
+                        if region_name not in [ur['original'] for ur in unrecognized_regions]:
+                            # Ищем возможные совпадения для предложений
+                            suggestions = Region.objects.filter(
+                                name__icontains=region_name[:3] if len(region_name) > 3 else region_name
+                            )[:5]
+                            
+                            unrecognized_regions.append({
+                                'original': region_name,
+                                'suggestions': [{'id': r.id, 'name': r.name} for r in suggestions]
+                            })
+                            
+            except Exception as e:
+                continue
+        
+        # Удаляем временный файл
+        if default_storage.exists(file_path):
+            default_storage.delete(file_path)
+        
+        # Сохраняем данные файла в сессии для последующего импорта
+        request.session['import_file_data'] = df.to_json()
+        request.session['import_file_name'] = excel_file.name
+        
+        return JsonResponse({
+            'success': True,
+            'total_rows': total_rows,
+            'unrecognized_regions': unrecognized_regions,
+            'needs_user_input': len(unrecognized_regions) > 0
+        })
+        
+    except Exception as e:
+        # Удаляем временный файл в случае ошибки
+        if 'file_path' in locals() and default_storage.exists(file_path):
+            default_storage.delete(file_path)
+        return JsonResponse({'success': False, 'message': f'Ошибка анализа файла: {str(e)}'})
+
+
+@login_required
+@require_http_methods(["POST"])
+def save_region_mappings(request):
+    """Сохранение пользовательских выборов регионов"""
+    try:
+        data = json.loads(request.body)
+        region_mappings = data.get('region_mappings', {})
+        
+        # Сохраняем маппинг в сессии
+        request.session['region_mappings'] = region_mappings
+        
+        return JsonResponse({'success': True, 'message': 'Настройки регионов сохранены'})
+        
+    except Exception as e:
+        return JsonResponse({'success': False, 'message': f'Ошибка сохранения настроек: {str(e)}'})
+
+
+@login_required
+@require_http_methods(["POST"])
+def import_quotas_excel(request):
+    """Финальный импорт квот из Excel файла с пользовательскими настройками регионов"""
+    import pandas as pd
+    from datetime import datetime
+    import json
+    
+    try:
+        # Получаем данные из сессии
+        import_file_data = request.session.get('import_file_data')
+        region_mappings = request.session.get('region_mappings', {})
+        
+        if not import_file_data:
+            return JsonResponse({'success': False, 'message': 'Данные файла не найдены. Повторите анализ файла.'})
+        
+        # Восстанавливаем DataFrame из JSON
+        df = pd.read_json(import_file_data)
         
         # Проверяем необходимые колонки
         required_columns = [
@@ -666,27 +828,58 @@ def import_quotas_excel(request):
                             error_count += 1
                             continue
 
-                    # Парсим регионы с автоматическим созданием
+                    # Парсим регионы с использованием пользовательских выборов
                     regions_names = [clean_text_data(name) for name in regions_text.split(',') if clean_text_data(name)]
                     regions = []
-                    region_messages = []
                     
                     for region_name in regions_names:
-                        region, message = find_or_create_region(region_name)
+                        # Сначала пытаемся найти регион стандартным способом
+                        region, match_type = find_region_without_creating(region_name)
+                        
                         if region:
                             regions.append(region)
-                            if message:
-                                region_messages.append(f'Строка {index + 2}: {message}')
                         else:
-                            errors.append(f'Строка {index + 2}: {message}')
+                            # Если не найден, ищем в пользовательских выборах
+                            if region_name in region_mappings:
+                                mapping_info = region_mappings[region_name]
+                                
+                                if mapping_info['action'] == 'map':
+                                    # Пользователь выбрал существующий регион
+                                    mapped_region = Region.objects.filter(id=mapping_info['region_id']).first()
+                                    if mapped_region:
+                                        regions.append(mapped_region)
+                                    else:
+                                        errors.append(f'Строка {index + 2}: Выбранный регион (ID: {mapping_info["region_id"]}) не найден')
+                                        
+                                elif mapping_info['action'] == 'create':
+                                    # Пользователь выбрал создать новый регион
+                                    new_region_name = mapping_info['new_name']
+                                    
+                                    # Проверяем, не создан ли уже этот регион
+                                    existing_region = Region.objects.filter(name=new_region_name).first()
+                                    if existing_region:
+                                        regions.append(existing_region)
+                                    else:
+                                        try:
+                                            new_region = Region.objects.create(
+                                                name=new_region_name,
+                                                code=new_region_name[:10].upper().replace(' ', '_').replace('-', '_'),
+                                                is_active=True
+                                            )
+                                            regions.append(new_region)
+                                        except Exception as e:
+                                            errors.append(f'Строка {index + 2}: Ошибка создания региона "{new_region_name}": {str(e)}')
+                                            
+                                elif mapping_info['action'] == 'skip':
+                                    # Пользователь выбрал пропустить этот регион
+                                    continue
+                            else:
+                                # Регион не найден и нет пользовательского выбора
+                                errors.append(f'Строка {index + 2}: Регион "{region_name}" не найден и не настроен')
                     
                     if not regions:
                         error_count += 1
                         continue
-                    
-                    # Добавляем информационные сообщения о созданных регионах
-                    if region_messages:
-                        errors.extend(region_messages)
 
                     # Обрабатываем даты
                     start_date = None

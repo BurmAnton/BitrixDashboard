@@ -18,6 +18,8 @@ urlpatterns = [
     path('quotas/<int:quota_id>/detail/', views.quota_detail, name='quota_detail'),
     
     # Маршруты для импорта квот
+    path('quotas/analyze/', views.analyze_quotas_excel, name='analyze_quotas_excel'),
+    path('quotas/regions/save/', views.save_region_mappings, name='save_region_mappings'),
     path('quotas/import/', views.import_quotas_excel, name='import_quotas_excel'),
     path('quotas/template/', views.download_quota_template, name='download_quota_template'),
     

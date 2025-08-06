@@ -1156,6 +1156,37 @@
     </div>
 </div>
 
+<!-- Region Mapping Modal -->
+<div class="modal fade" id="regionMappingModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="bi bi-geo-alt-fill me-2"></i>Настройка регионов
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="alert alert-info">
+                    <i class="bi bi-info-circle me-2"></i>
+                    <strong>Найдены неопознанные регионы в вашем файле.</strong><br>
+                    Пожалуйста, для каждого региона выберите действие:
+                </div>
+                
+                <div id="regionMappingList">
+                    <!-- Здесь будут динамически добавляться элементы -->
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
+                <button type="button" class="btn btn-success" onclick="saveRegionMappings()">
+                    <i class="bi bi-check-circle me-2"></i>Сохранить и продолжить импорт
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
 {% endblock %}
 
 {% block extra_js %}
@@ -1965,15 +1996,234 @@ function submitImportForm() {
     progressDiv.classList.remove('d-none');
     resultsDiv.classList.add('d-none');
     submitBtn.disabled = true;
-    submitBtn.innerHTML = '<i class="bi bi-hourglass-split me-2"></i>Обработка...';
+    submitBtn.innerHTML = '<i class="bi bi-hourglass-split me-2"></i>Анализ файла...';
     
     // Создаем FormData
     const formData = new FormData(form);
     
-    // Отправляем файл
-    fetch('{% url "education_planner:import_quotas_excel" %}', {
+    // Отправляем файл на анализ
+    fetch('{% url "education_planner:analyze_quotas_excel" %}', {
         method: 'POST',
         body: formData,
+        headers: {
+            'X-CSRFToken': getCookie('csrftoken')
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        progressDiv.classList.add('d-none');
+        
+        if (data.success) {
+            if (data.needs_user_input) {
+                // Есть неопознанные регионы - показываем модал настройки
+                showRegionMappingModal(data.unrecognized_regions);
+                
+                resultsDiv.innerHTML = `
+                    <div class="alert alert-warning">
+                        <i class="bi bi-exclamation-triangle me-2"></i>
+                        <strong>Требуется настройка регионов</strong><br>
+                        Найдено строк: ${data.total_rows}<br>
+                        Неопознанных регионов: ${data.unrecognized_regions.length}
+                    </div>
+                `;
+            } else {
+                // Нет неопознанных регионов - можем сразу импортировать
+                proceedWithImport();
+            }
+        } else {
+            resultsDiv.classList.remove('d-none');
+            resultsDiv.innerHTML = `
+                <div class="alert alert-danger">
+                    <i class="bi bi-exclamation-triangle me-2"></i>
+                    <strong>Ошибка анализа файла:</strong> ${data.message}
+                </div>
+            `;
+        }
+    })
+    .catch(error => {
+        progressDiv.classList.add('d-none');
+        resultsDiv.classList.remove('d-none');
+        resultsDiv.innerHTML = `
+            <div class="alert alert-danger">
+                <i class="bi bi-exclamation-triangle me-2"></i>
+                <strong>Произошла ошибка:</strong><br>
+                ${error.message || 'Неизвестная ошибка'}
+            </div>
+        `;
+        console.error('Import error:', error);
+    })
+    .finally(() => {
+        submitBtn.disabled = false;
+        submitBtn.innerHTML = '<i class="bi bi-upload me-2"></i>Импортировать';
+    });
+}
+
+// Функция для отображения модального окна настройки регионов
+function showRegionMappingModal(unrecognizedRegions) {
+    const regionMappingList = document.getElementById('regionMappingList');
+    regionMappingList.innerHTML = '';
+    
+    unrecognizedRegions.forEach((regionInfo, index) => {
+        const regionDiv = document.createElement('div');
+        regionDiv.className = 'border rounded p-3 mb-3';
+        regionDiv.innerHTML = `
+            <div class="row">
+                <div class="col-md-4">
+                    <strong>Найден в файле:</strong><br>
+                    <span class="badge bg-warning text-dark">${regionInfo.original}</span>
+                </div>
+                <div class="col-md-8">
+                    <label class="form-label"><strong>Выберите действие:</strong></label>
+                    <div class="mb-2">
+                        <input type="radio" class="form-check-input" 
+                               name="action_${index}" id="map_${index}" value="map" checked>
+                        <label class="form-check-label ms-2" for="map_${index}">
+                            Сопоставить с существующим регионом
+                        </label>
+                    </div>
+                    <div class="mb-2">
+                        <select class="form-select" id="region_select_${index}" 
+                                ${regionInfo.suggestions.length === 0 ? 'disabled' : ''}>
+                            <option value="">Выберите регион</option>
+                            ${regionInfo.suggestions.map(s => 
+                                `<option value="${s.id}">${s.name}</option>`
+                            ).join('')}
+                        </select>
+                    </div>
+                    <div class="mb-2">
+                        <input type="radio" class="form-check-input" 
+                               name="action_${index}" id="create_${index}" value="create">
+                        <label class="form-check-label ms-2" for="create_${index}">
+                            Создать новый регион
+                        </label>
+                    </div>
+                    <div class="mb-2">
+                        <input type="text" class="form-control" id="new_region_name_${index}" 
+                               placeholder="Название нового региона" disabled>
+                    </div>
+                    <div>
+                        <input type="radio" class="form-check-input" 
+                               name="action_${index}" id="skip_${index}" value="skip">
+                        <label class="form-check-label ms-2" for="skip_${index}">
+                            Пропустить этот регион
+                        </label>
+                    </div>
+                </div>
+            </div>
+        `;
+        
+        regionMappingList.appendChild(regionDiv);
+        
+        // Добавляем обработчики событий
+        const mapRadio = document.getElementById(`map_${index}`);
+        const createRadio = document.getElementById(`create_${index}`);
+        const skipRadio = document.getElementById(`skip_${index}`);
+        const regionSelect = document.getElementById(`region_select_${index}`);
+        const newRegionName = document.getElementById(`new_region_name_${index}`);
+        
+        mapRadio.addEventListener('change', () => {
+            regionSelect.disabled = false;
+            newRegionName.disabled = true;
+        });
+        
+        createRadio.addEventListener('change', () => {
+            regionSelect.disabled = true;
+            newRegionName.disabled = false;
+            newRegionName.value = regionInfo.original;
+        });
+        
+        skipRadio.addEventListener('change', () => {
+            regionSelect.disabled = true;
+            newRegionName.disabled = true;
+        });
+    });
+    
+    // Закрываем модал импорта и показываем модал настройки
+    bootstrap.Modal.getInstance(document.getElementById('importQuotasModal')).hide();
+    new bootstrap.Modal(document.getElementById('regionMappingModal')).show();
+}
+
+// Функция для сохранения настроек регионов
+function saveRegionMappings() {
+    const regionMappingList = document.getElementById('regionMappingList');
+    const regionDivs = regionMappingList.querySelectorAll('.border.rounded');
+    const regionMappings = {};
+    let hasErrors = false;
+    
+    regionDivs.forEach((regionDiv, index) => {
+        const originalName = regionDiv.querySelector('.badge').textContent;
+        const actionRadios = regionDiv.querySelectorAll(`input[name="action_${index}"]`);
+        const selectedAction = Array.from(actionRadios).find(r => r.checked)?.value;
+        
+        if (selectedAction === 'map') {
+            const regionSelect = document.getElementById(`region_select_${index}`);
+            if (!regionSelect.value) {
+                alert(`Выберите регион для сопоставления: ${originalName}`);
+                hasErrors = true;
+                return;
+            }
+            regionMappings[originalName] = {
+                action: 'map',
+                region_id: parseInt(regionSelect.value)
+            };
+        } else if (selectedAction === 'create') {
+            const newRegionName = document.getElementById(`new_region_name_${index}`).value.trim();
+            if (!newRegionName) {
+                alert(`Укажите название нового региона для: ${originalName}`);
+                hasErrors = true;
+                return;
+            }
+            regionMappings[originalName] = {
+                action: 'create',
+                new_name: newRegionName
+            };
+        } else if (selectedAction === 'skip') {
+            regionMappings[originalName] = {
+                action: 'skip'
+            };
+        }
+    });
+    
+    if (hasErrors) return;
+    
+    // Сохраняем настройки на сервере
+    fetch('{% url "education_planner:save_region_mappings" %}', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': getCookie('csrftoken')
+        },
+        body: JSON.stringify({
+            region_mappings: regionMappings
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            // Закрываем модал настройки и продолжаем импорт
+            bootstrap.Modal.getInstance(document.getElementById('regionMappingModal')).hide();
+            proceedWithImport();
+        } else {
+            alert('Ошибка сохранения настроек: ' + data.message);
+        }
+    })
+    .catch(error => {
+        console.error('Ошибка:', error);
+        alert('Ошибка сохранения настроек');
+    });
+}
+
+// Функция для финального импорта
+function proceedWithImport() {
+    const progressDiv = document.getElementById('importProgress');
+    const resultsDiv = document.getElementById('importResults');
+    
+    progressDiv.classList.remove('d-none');
+    resultsDiv.classList.add('d-none');
+    
+    // Выполняем финальный импорт
+    fetch('{% url "education_planner:import_quotas_excel" %}', {
+        method: 'POST',
         headers: {
             'X-CSRFToken': getCookie('csrftoken')
         }
@@ -1994,7 +2244,7 @@ function submitImportForm() {
                     </ul>
                     ${data.errors && data.errors.length > 0 ? `
                         <div class="mt-2">
-                            <strong>Ошибки:</strong>
+                            <strong>Детали ошибок:</strong>
                             <ul class="mb-0">
                                 ${data.errors.map(error => `<li>${error}</li>`).join('')}
                             </ul>
@@ -2007,32 +2257,25 @@ function submitImportForm() {
             setTimeout(() => {
                 location.reload();
             }, 3000);
-            
         } else {
             resultsDiv.innerHTML = `
                 <div class="alert alert-danger">
                     <i class="bi bi-exclamation-triangle me-2"></i>
-                    <strong>Ошибка импорта:</strong><br>
-                    ${data.message}
+                    <strong>Ошибка импорта:</strong> ${data.message}
                 </div>
             `;
         }
     })
     .catch(error => {
+        console.error('Ошибка:', error);
         progressDiv.classList.add('d-none');
         resultsDiv.classList.remove('d-none');
         resultsDiv.innerHTML = `
             <div class="alert alert-danger">
                 <i class="bi bi-exclamation-triangle me-2"></i>
-                <strong>Произошла ошибка:</strong><br>
-                ${error.message || 'Неизвестная ошибка'}
+                <strong>Ошибка импорта:</strong> ${error.message}
             </div>
         `;
-        console.error('Import error:', error);
-    })
-    .finally(() => {
-        submitBtn.disabled = false;
-        submitBtn.innerHTML = '<i class="bi bi-upload me-2"></i>Импортировать';
     });
 }
 </script>
