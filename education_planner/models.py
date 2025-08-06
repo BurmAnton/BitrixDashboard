@@ -231,9 +231,9 @@ class Quota(models.Model):
     
     @property
     def regions_display(self):
-        """Возвращает строку с названиями регионов"""
+        """Возвращает строку с названиями регионов с новой строки"""
         if self.regions.exists():
-            return ", ".join([r.name for r in self.regions.all()])
+            return "\n".join([r.name for r in self.regions.all()])
         return self.region or "Не указан"
     
     @property

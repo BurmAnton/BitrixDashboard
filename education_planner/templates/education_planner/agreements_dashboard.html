@@ -7,6 +7,9 @@
 {% block extra_css %}
 
 <style>
+    .container {
+        max-width: 90% !important; 
+    }
     .agreements-container {
         padding: 20px;
     }
@@ -301,22 +304,25 @@
         font-size: 0.7rem;
         padding: 4px 6px;
         white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
         display: inline-block;
     }
     
-    /* Специальные стили для обрезания текста */
-    .text-truncate {
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
+    /* Стили для отображения регионов с новой строки */
+    .quotas-table .regions-cell {
+        white-space: pre-line;
+        line-height: 1.4;
+        font-size: 0.8rem;
     }
     
     /* Улучшение отображения на маленьких экранах */
     @media (max-width: 992px) {
         .quotas-table th:first-child,
         .quotas-table td:first-child {
+            min-width: 250px !important;
+        }
+        
+        .quotas-table th:nth-child(2),
+        .quotas-table td:nth-child(2) {
             min-width: 150px !important;
         }
         
@@ -329,19 +335,21 @@
         .quotas-table td {
             padding: 4px 2px;
         }
+        
+        .quotas-table .regions-cell {
+            font-size: 0.7rem;
+        }
     }
     
     /* Фиксированные ширины для стабильного отображения */
-    .quotas-table thead th:nth-child(1) { width: 200px; }
-    .quotas-table thead th:nth-child(2) { width: 80px; }
-    .quotas-table thead th:nth-child(3) { width: 80px; }
-    .quotas-table thead th:nth-child(4) { width: 150px; }
-    .quotas-table thead th:nth-child(5) { width: 80px; }
-    .quotas-table thead th:nth-child(6) { width: 100px; }
-    .quotas-table thead th:nth-child(7) { width: 120px; }
-    .quotas-table thead th:nth-child(8) { width: 90px; }
-    .quotas-table thead th:nth-child(9) { width: 90px; }
-    .quotas-table thead th:nth-child(10) { width: 80px; }
+    .quotas-table thead th:nth-child(1) { width: 300px; }  /* Программа + длительность + форма */
+    .quotas-table thead th:nth-child(2) { width: 200px; }  /* Регионы */
+    .quotas-table thead th:nth-child(3) { width: 80px; }   /* Количество мест */
+    .quotas-table thead th:nth-child(4) { width: 100px; }  /* Стоимость за заявку */
+    .quotas-table thead th:nth-child(5) { width: 120px; }  /* Общая стоимость */
+    .quotas-table thead th:nth-child(6) { width: 90px; }   /* Дата начала */
+    .quotas-table thead th:nth-child(7) { width: 90px; }   /* Дата окончания */
+    .quotas-table thead th:nth-child(8) { width: 80px; }   /* Действия */
 </style>
 {% endblock %}
 
@@ -577,10 +585,8 @@
                                         <table class="table table-sm table-striped mb-0 quotas-table">
                                             <thead class="table-dark">
                                                 <tr>
-                                                    <th style="min-width: 200px;">Программа обучения</th>
-                                                    <th style="min-width: 80px;">Длительность</th>
-                                                    <th style="min-width: 80px;">Форма обучения</th>
-                                                    <th style="min-width: 150px;">Регионы реализации</th>
+                                                    <th style="min-width: 300px;">Программа обучения</th>
+                                                    <th style="min-width: 200px;">Регионы реализации</th>
                                                     <th style="min-width: 80px;">Количество мест</th>
                                                     <th style="min-width: 100px;">Стоимость за заявку</th>
                                                     <th style="min-width: 120px;">Общая стоимость</th>
@@ -594,26 +600,16 @@
                                                 <tr>
                                                     <td class="text-start">
                                                         <div class="d-flex flex-column">
-                                                            <strong class="text-truncate" style="max-width: 180px;" title="{{ quota.education_program.name }}">
-                                                                {{ quota.education_program.name }}
-                                                            </strong>
+                                                            <strong>{{ quota.education_program.name }}</strong>
                                                             <small class="text-muted">
-                                                                {{ quota.education_program.get_program_type_display }}
+                                                                {{ quota.education_program.get_program_type_display }} • 
+                                                                {{ quota.education_program.academic_hours }} ч. • 
+                                                                {{ quota.education_program.get_study_form_display }}
                                                             </small>
                                                         </div>
                                                     </td>
-                                                    <td>
-                                                        {{ quota.education_program.academic_hours }} ч.
-                                                    </td>
-                                                    <td>
-                                                        {{ quota.education_program.get_study_form_display }}
-                                                    </td>
-                                                    <td>
-                                                        <span class="badge bg-light text-dark text-truncate" 
-                                                              style="max-width: 140px;" 
-                                                              title="{{ quota.regions_display }}">
-                                                            {{ quota.regions_display }}
-                                                        </span>
+                                                    <td class="text-start regions-cell">
+                                                        {{ quota.regions_display }}
                                                     </td>
                                                     <td>
                                                         <span class="badge bg-success">{{ quota.quantity }} мест</span>
