@@ -517,8 +517,9 @@ document.addEventListener('DOMContentLoaded', function() {
                     // Подписи значений (если плагин загружен)
                     ...(typeof ChartDataLabels !== 'undefined' ? {
                         datalabels: {
-                            anchor: 'end',
+                            anchor: 'middle',
                             align: 'right',
+     
                             formatter: function(value, context) {
                                 if (value > 0) {
                                     const total = context.dataset.data.reduce((a, b) => a + b, 0);

@@ -966,19 +966,20 @@ def atlas_dashboard(request):
     
     # Подготовка данных для недельного графика по дате подачи заявки на РР
     weekly_data = {}
-    today = datetime.now()
-    # Находим начало текущей недели (понедельник)
+    # Подготовка данных для календарных недель (понедельник-воскресенье)
+    today = datetime.now().date()
+    # Находим понедельник текущей недели
     start_of_week = today - timedelta(days=today.weekday())
-    # Создаем список из 5 недель, начиная с текущей
+    
     weeks = []
     for i in range(5):
-        week_start = start_of_week - timedelta(weeks=i)
-        week_end = week_start + timedelta(days=6)
-        week_label = f"{week_start.strftime('%d.%m')} - {week_end.strftime('%d.%m.%Y')}"
+        week_start_date = start_of_week - timedelta(weeks=i)
+        week_end_date = week_start_date + timedelta(days=6)
+        week_label = f"{week_start_date.strftime('%d.%m')} - {week_end_date.strftime('%d.%m.%Y')}"
         weeks.append({
             'label': week_label,
-            'start': week_start,
-            'end': week_end,
+            'start': week_start_date,
+            'end': week_end_date,
             'count': 0
         })
     weeks.reverse()  # Чтобы самая ранняя неделя была первой
@@ -1012,7 +1013,8 @@ def atlas_dashboard(request):
                 if rr_submission_date:
                     try:
                         # Обновляем формат даты
-                        submission_date = datetime.strptime(rr_submission_date, '%d.%m.%Y %H:%M:%S')
+                        submission_dt = datetime.strptime(rr_submission_date, '%d.%m.%Y %H:%M:%S')
+                        submission_date = submission_dt.date()
                         for week in weeks:
                             if week['start'] <= submission_date <= week['end']:
                                 week['count'] += 1
