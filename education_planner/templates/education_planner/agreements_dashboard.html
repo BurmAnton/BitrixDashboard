@@ -617,9 +617,7 @@
                                                         {{ quota.regions_display }}
                                                     </td>
                                                     <td>
-                                                        <span class="badge bg-success">
-                                                            {% if quota.actual_quantity %}{{ quota.actual_quantity }}{% else %}{{ quota.quantity }}{% endif %} мест
-                                                        </span>
+                                                        <span class="badge bg-success">{{ quota.quantity }} мест</span>
                                                     </td>
                                                     <td>
                                                         <span class="badge bg-info">{{ quota.formatted_cost_per_quota }}</span>

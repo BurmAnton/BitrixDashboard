@@ -156,49 +156,9 @@ class EduAgreement(models.Model):
     
     def get_actual_quotas(self):
         """Возвращает актуальные квоты с учетом всех дополнительных соглашений"""
-        from collections import defaultdict
-        
-        # Получаем базовые квоты
-        base_quotas = self.quotas.filter(is_active=True).select_related('education_program').prefetch_related('regions')
-        
-        # Создаем словарь для отслеживания количества по ключам (program_id, region_name)
-        quota_amounts = defaultdict(int)
-        quota_objects = {}  # Сохраняем объекты квот для возврата
-        
-        # Добавляем базовые квоты
-        for quota in base_quotas:
-            for region in quota.regions.all():
-                key = (quota.education_program.id, region.name)
-                quota_amounts[key] += quota.quantity
-                quota_objects[key] = quota  # Сохраняем объект квоты
-        
-        # Применяем изменения из всех дополнительных соглашений (кроме черновиков)
-        active_supplements = self.supplements.exclude(
-            status=Supplement.SupplementStatus.DRAFT
-        ).order_by('signing_date', 'created_at')
-        
-        for supplement in active_supplements:
-            for change in supplement.quota_changes.all():
-                key = (change.education_program.id, change.region)
-                
-                if change.change_type == QuotaChange.ChangeType.ADD:
-                    quota_amounts[key] += change.new_quantity
-                elif change.change_type == QuotaChange.ChangeType.REMOVE:
-                    quota_amounts[key] -= change.old_quantity if change.old_quantity else 0
-                elif change.change_type == QuotaChange.ChangeType.MODIFY:
-                    quota_amounts[key] = quota_amounts[key] - (change.old_quantity or 0) + change.new_quantity
-        
-        # Возвращаем только квоты с положительным количеством
-        result_quotas = []
-        for key, amount in quota_amounts.items():
-            if amount > 0:
-                if key in quota_objects:
-                    quota = quota_objects[key]
-                    # Создаем копию объекта с обновленным количеством
-                    quota.actual_quantity = amount
-                    result_quotas.append(quota)
-        
-        return result_quotas
+        # Пока возвращаем просто базовые квоты
+        # Логика дополнительных соглашений требует доработки
+        return self.quotas.filter(is_active=True).select_related('education_program').prefetch_related('regions')
     
     def get_total_quota_places(self):
         """Возвращает общее количество мест по всем квотам"""
