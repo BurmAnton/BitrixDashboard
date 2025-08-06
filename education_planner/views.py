@@ -818,8 +818,16 @@ def process_excel_import(df, file_name, region_mappings={}, use_old_region_logic
                         error_count += 1
                         continue
 
-                # Парсим регионы
-                regions_names = [clean_text_data(name) for name in regions_text.split(',') if clean_text_data(name)]
+                # Парсим регионы с улучшенной обработкой скобок
+                regions_names = []
+                for name in regions_text.split(','):
+                    cleaned_name = clean_text_data(name)
+                    if cleaned_name:
+                        # Убираем содержимое в скобках и лишние пробелы
+                        cleaned_name = re.sub(r'\([^)]*\)', '', cleaned_name).strip()
+                        if cleaned_name:
+                            regions_names.append(cleaned_name)
+                
                 regions = []
                 
                 for region_name in regions_names:

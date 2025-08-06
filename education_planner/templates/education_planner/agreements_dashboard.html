@@ -1996,13 +1996,13 @@ function submitImportForm() {
     progressDiv.classList.remove('d-none');
     resultsDiv.classList.add('d-none');
     submitBtn.disabled = true;
-    submitBtn.innerHTML = '<i class="bi bi-hourglass-split me-2"></i>Анализ файла...';
+    submitBtn.innerHTML = '<i class="bi bi-hourglass-split me-2"></i>Анализ файла и проверка регионов...';
     
     // Создаем FormData
     const formData = new FormData(form);
     
-    // ВРЕМЕННО: Отправляем файл на прямой импорт для тестирования
-    fetch('{% url "education_planner:import_quotas_excel_direct" %}', {
+    // Отправляем файл на анализ с интерактивным выбором регионов
+    fetch('{% url "education_planner:analyze_quotas_excel" %}', {
         method: 'POST',
         body: formData,
         headers: {
@@ -2012,37 +2012,44 @@ function submitImportForm() {
     .then(response => response.json())
     .then(data => {
         progressDiv.classList.add('d-none');
-        resultsDiv.classList.remove('d-none');
         
         if (data.success) {
-            resultsDiv.innerHTML = `
-                <div class="alert alert-success">
-                    <i class="bi bi-check-circle me-2"></i>
-                    <strong>Импорт завершен успешно!</strong>
-                    <ul class="mb-0 mt-2">
-                        <li>Создано квот: ${data.created_count}</li>
-                        ${data.error_count > 0 ? `<li>Ошибок: ${data.error_count}</li>` : ''}
-                    </ul>
-                    ${data.errors && data.errors.length > 0 ? `
-                        <div class="mt-2">
-                            <strong>Детали ошибок:</strong>
-                            <ul class="mb-0">
-                                ${data.errors.map(error => `<li>${error}</li>`).join('')}
-                            </ul>
-                        </div>
-                    ` : ''}
-                </div>
-            `;
-            
-            // Перезагружаем страницу через 3 секунды
-            setTimeout(() => {
-                location.reload();
-            }, 3000);
+            if (data.needs_user_input) {
+                // Есть неопознанные регионы - показываем модал настройки
+                showRegionMappingModal(data.unrecognized_regions);
+                
+                resultsDiv.classList.remove('d-none');
+                resultsDiv.innerHTML = `
+                    <div class="alert alert-warning">
+                        <i class="bi bi-exclamation-triangle me-2"></i>
+                        <strong>Требуется настройка регионов</strong><br>
+                        Найдено строк: ${data.total_rows}<br>
+                        Неопознанных регионов: ${data.unrecognized_regions.length}
+                    </div>
+                `;
+            } else {
+                // Нет неопознанных регионов - показываем успех анализа и переходим к импорту
+                resultsDiv.classList.remove('d-none');
+                resultsDiv.innerHTML = `
+                    <div class="alert alert-success">
+                        <i class="bi bi-check-circle me-2"></i>
+                        <strong>Анализ завершен успешно!</strong><br>
+                        Найдено строк: ${data.total_rows}<br>
+                        Все регионы распознаны, переходим к импорту...
+                    </div>
+                `;
+                
+                // Небольшая задержка для отображения сообщения, затем импорт
+                setTimeout(() => {
+                    proceedWithImport();
+                }, 1000);
+            }
         } else {
+            resultsDiv.classList.remove('d-none');
             resultsDiv.innerHTML = `
                 <div class="alert alert-danger">
                     <i class="bi bi-exclamation-triangle me-2"></i>
-                    <strong>Ошибка импорта:</strong> ${data.message}
+                    <strong>Ошибка анализа файла:</strong> ${data.message}
                 </div>
             `;
         }
