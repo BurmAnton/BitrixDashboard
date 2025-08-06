@@ -683,58 +683,60 @@
                 
                 <!-- Форма добавления квоты -->
                 <div class="quota-form-section">
-                    <form id="addQuotaForm" class="row g-3">
-                        <div class="col-md-6">
-                            <label class="form-label">
-                                <i class="bi bi-geo-alt me-2"></i>Регионы реализации
-                            </label>
-                            <div class="search-select-container">
-                                <input type="text" id="regionSearchInput" class="form-control mb-2" 
-                                       placeholder="🔍 Поиск региона..." 
-                                       onkeyup="filterRegions()">
-                                <select name="regions" id="regionsSelect" class="form-select" multiple required style="height: 120px;">
-                                    {% for region in regions %}
-                                        <option value="{{ region.id }}">{{ region.name }}</option>
-                                    {% endfor %}
-                                </select>
+                    <form id="addQuotaForm">
+                        <!-- Первая строка: Регионы -->
+                        <div class="row g-3 mb-3">
+                            <div class="col-12">
+                                <label class="form-label">
+                                    <i class="bi bi-geo-alt me-2"></i>Регионы реализации
+                                </label>
+                                <div class="search-select-container">
+                                    <input type="text" id="regionSearchInput" class="form-control mb-2" 
+                                           placeholder="🔍 Поиск региона..." 
+                                           onkeyup="filterRegions()">
+                                    <select name="regions" id="regionsSelect" class="form-select" multiple required style="height: 80px;">
+                                        {% for region in regions %}
+                                            <option value="{{ region.id }}">{{ region.name }}</option>
+                                        {% endfor %}
+                                    </select>
+                                </div>
+                                <small class="form-text text-muted">Выберите один или несколько регионов (удерживайте Ctrl)</small>
                             </div>
-                            <small class="form-text text-muted">Выберите один или несколько регионов (удерживайте Ctrl)</small>
                         </div>
-                        <div class="col-md-2">
-                            <label class="form-label">
-                                <i class="bi bi-hash me-2"></i>Количество мест
-                            </label>
-                            <input type="number" name="quantity" class="form-control" 
-                                   placeholder="Кол-во" min="1" required>
-                        </div>
-                        <div class="col-md-2">
-                            <label class="form-label">
-                                <i class="bi bi-currency-exchange me-2"></i>Стоимость за заявку
-                            </label>
-                            <input type="number" name="cost_per_quota" class="form-control" 
-                                   placeholder="₽" min="0" step="0.01" required>
-                        </div>
-                        <div class="col-md-2">
-                            <label class="form-label">
-                                <i class="bi bi-calendar-event me-2"></i>Дата начала
-                            </label>
-                            <input type="date" name="start_date" class="form-control">
-                        </div>
-                    </div>
-                    <div class="row g-3 mt-2">
-                        <div class="col-md-6">
-                            <!-- Пустая колонка для выравнивания -->
-                        </div>
-                        <div class="col-md-2">
-                            <label class="form-label">
-                                <i class="bi bi-calendar-check me-2"></i>Дата окончания
-                            </label>
-                            <input type="date" name="end_date" class="form-control">
-                        </div>
-                        <div class="col-md-2 d-flex align-items-end">
-                            <button type="button" class="btn btn-success w-100" onclick="addQuota()">
-                                <i class="bi bi-plus-circle me-2"></i>Добавить квоту
-                            </button>
+                        
+                        <!-- Вторая строка: Все остальные поля горизонтально -->
+                        <div class="row g-3 align-items-end">
+                            <div class="col-md-2">
+                                <label class="form-label">
+                                    <i class="bi bi-hash me-2"></i>Количество мест
+                                </label>
+                                <input type="number" name="quantity" class="form-control" 
+                                       placeholder="Кол-во" min="1" required>
+                            </div>
+                            <div class="col-md-2">
+                                <label class="form-label">
+                                    <i class="bi bi-currency-exchange me-2"></i>Стоимость за заявку
+                                </label>
+                                <input type="number" name="cost_per_quota" class="form-control" 
+                                       placeholder="₽" min="0" step="0.01" required>
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label">
+                                    <i class="bi bi-calendar-event me-2"></i>Дата начала обучения
+                                </label>
+                                <input type="date" name="start_date" class="form-control">
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label">
+                                    <i class="bi bi-calendar-check me-2"></i>Дата окончания обучения
+                                </label>
+                                <input type="date" name="end_date" class="form-control">
+                            </div>
+                            <div class="col-md-2">
+                                <button type="button" class="btn btn-success w-100" onclick="addQuota()">
+                                    <i class="bi bi-plus-circle me-2"></i>Добавить квоту
+                                </button>
+                            </div>
                         </div>
                     </form>
                 </div>
@@ -889,8 +891,10 @@
             <div class="modal-body">
                 <form id="editQuotaForm">
                     <input type="hidden" id="editQuotaId" name="quota_id">
-                    <div class="row g-3">
-                        <div class="col-md-12">
+                    
+                    <!-- Программа обучения (только для информации) -->
+                    <div class="row g-3 mb-3">
+                        <div class="col-12">
                             <label class="form-label">
                                 <i class="bi bi-mortarboard me-2"></i>Программа обучения
                             </label>
@@ -899,7 +903,11 @@
                             </select>
                             <small class="text-muted">Программу обучения нельзя изменить при редактировании</small>
                         </div>
-                        <div class="col-md-6">
+                    </div>
+                    
+                    <!-- Регионы (отдельная строка) -->
+                    <div class="row g-3 mb-3">
+                        <div class="col-12">
                             <label class="form-label">
                                 <i class="bi bi-geo-alt me-2"></i>Регионы реализации
                             </label>
@@ -907,7 +915,7 @@
                                 <input type="text" id="editRegionSearchInput" class="form-control mb-2" 
                                        placeholder="🔍 Поиск региона..." 
                                        onkeyup="filterEditRegions()">
-                                <select id="editQuotaRegions" class="form-select" multiple required style="height: 120px;">
+                                <select id="editQuotaRegions" class="form-select" multiple required style="height: 80px;">
                                     {% for region in regions %}
                                         <option value="{{ region.id }}">{{ region.name }}</option>
                                     {% endfor %}
@@ -915,6 +923,10 @@
                             </div>
                             <small class="form-text text-muted">Выберите один или несколько регионов (удерживайте Ctrl)</small>
                         </div>
+                    </div>
+                    
+                    <!-- Количество, стоимость и даты в одну строку -->
+                    <div class="row g-3">
                         <div class="col-md-3">
                             <label class="form-label">
                                 <i class="bi bi-hash me-2"></i>Количество мест
@@ -929,15 +941,13 @@
                             <input type="number" id="editQuotaCost" name="cost_per_quota" class="form-control" 
                                    placeholder="₽" min="0" step="0.01" required>
                         </div>
-                    </div>
-                    <div class="row g-3 mt-2">
-                        <div class="col-md-6">
+                        <div class="col-md-3">
                             <label class="form-label">
                                 <i class="bi bi-calendar-event me-2"></i>Дата начала обучения
                             </label>
                             <input type="date" id="editQuotaStartDate" name="start_date" class="form-control">
                         </div>
-                        <div class="col-md-6">
+                        <div class="col-md-3">
                             <label class="form-label">
                                 <i class="bi bi-calendar-check me-2"></i>Дата окончания обучения
                             </label>
