@@ -1572,11 +1572,58 @@ def import_supplement_excel(request):
                     if not valid_regions:
                         continue
                     
+                    # Парсим даты
+                    start_date = None
+                    end_date = None
+                    cost_per_quota = None
+                    
+                    # Дата начала
+                    if 'Дата начала' in row and pd.notna(row['Дата начала']):
+                        try:
+                            start_date_str = str(row['Дата начала']).strip()
+                            if start_date_str and start_date_str != 'nan':
+                                # Пробуем разные форматы дат
+                                for date_format in ['%d.%m.%Y', '%Y-%m-%d', '%d/%m/%Y']:
+                                    try:
+                                        start_date = datetime.strptime(start_date_str, date_format).date()
+                                        break
+                                    except ValueError:
+                                        continue
+                        except (ValueError, TypeError):
+                            pass
+                    
+                    # Дата окончания
+                    if 'Дата окончания' in row and pd.notna(row['Дата окончания']):
+                        try:
+                            end_date_str = str(row['Дата окончания']).strip()
+                            if end_date_str and end_date_str != 'nan':
+                                # Пробуем разные форматы дат
+                                for date_format in ['%d.%m.%Y', '%Y-%m-%d', '%d/%m/%Y']:
+                                    try:
+                                        end_date = datetime.strptime(end_date_str, date_format).date()
+                                        break
+                                    except ValueError:
+                                        continue
+                        except (ValueError, TypeError):
+                            pass
+                    
+                    # Стоимость за заявку
+                    if 'Стоимость за заявку' in row and pd.notna(row['Стоимость за заявку']):
+                        try:
+                            cost_str = str(row['Стоимость за заявку']).replace(' ', '').replace(',', '.')
+                            if cost_str and cost_str != 'nan':
+                                cost_per_quota = float(cost_str)
+                        except (ValueError, TypeError):
+                            pass
+                    
                     # Создаем новую квоту
                     quota = Quota.objects.create(
                         agreement=agreement,
                         education_program=program,
                         quantity=quantity,
+                        start_date=start_date,
+                        end_date=end_date,
+                        cost_per_quota=cost_per_quota,
                         is_active=True
                     )
                     quota.regions.set(valid_regions)
