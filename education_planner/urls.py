@@ -15,6 +15,7 @@ urlpatterns = [
     
     # Маршруты для управления квотами
     path('agreements/<int:agreement_id>/quotas/', views.manage_quota, name='manage_quota'),
+    path('quotas/<int:quota_id>/detail/', views.quota_detail, name='quota_detail'),
     
     # Маршруты для допсоглашений
     path('agreements/<int:agreement_id>/supplements/create/', views.create_supplement, name='create_supplement'),

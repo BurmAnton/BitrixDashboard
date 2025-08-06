@@ -1,4 +1,5 @@
 {% extends 'base.html' %}
+{% load form_extras %}
 {% load static %}
 
 {% block title %}Управление договорами на обучение{% endblock %}
@@ -450,13 +451,14 @@
                                         <table class="table table-sm table-striped mb-0 quotas-table">
                                             <thead class="table-dark">
                                                 <tr>
-                                                    <th width="25%">Программа обучения</th>
-                                                    <th width="10%">Длительность</th>
-                                                    <th width="10%">Форма обучения</th>
-                                                    <th width="20%">Регионы реализации</th>
-                                                    <th width="10%">Количество мест</th>
-                                                    <th width="12%">Стоимость за заявку</th>
-                                                    <th width="13%">Общая стоимость</th>
+                                                    <th width="22%">Программа обучения</th>
+                                                    <th width="9%">Длительность</th>
+                                                    <th width="9%">Форма обучения</th>
+                                                    <th width="18%">Регионы реализации</th>
+                                                    <th width="9%">Количество мест</th>
+                                                    <th width="11%">Стоимость за заявку</th>
+                                                    <th width="12%">Общая стоимость</th>
+                                                    <th width="10%">Действия</th>
                                                 </tr>
                                             </thead>
                                             <tbody>
@@ -485,6 +487,20 @@
                                                     </td>
                                                     <td>
                                                         <span class="badge bg-primary">{{ quota.formatted_total_cost }}</span>
+                                                    </td>
+                                                    <td>
+                                                        <div class="btn-group btn-group-sm" role="group">
+                                                            <button type="button" class="btn btn-outline-primary btn-sm" 
+                                                                    onclick="editQuota({{ quota.id }})" 
+                                                                    title="Редактировать квоту">
+                                                                <i class="bi bi-pencil"></i>
+                                                            </button>
+                                                            <button type="button" class="btn btn-outline-danger btn-sm" 
+                                                                    onclick="deleteQuota({{ quota.id }})" 
+                                                                    title="Удалить квоту">
+                                                                <i class="bi bi-trash"></i>
+                                                            </button>
+                                                        </div>
                                                     </td>
                                                 </tr>
                                                 {% endfor %}
@@ -830,6 +846,72 @@
             <div class="modal-footer">
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
                 <button type="button" class="btn btn-primary" onclick="saveEditedAgreement()">Сохранить изменения</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Модальное окно редактирования квоты -->
+<div class="modal fade" id="editQuotaModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header bg-warning text-dark">
+                <h5 class="modal-title">
+                    <i class="bi bi-pencil-square me-2"></i>Редактирование квоты
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Закрыть"></button>
+            </div>
+            <div class="modal-body">
+                <form id="editQuotaForm">
+                    <input type="hidden" id="editQuotaId" name="quota_id">
+                    <div class="row g-3">
+                        <div class="col-md-12">
+                            <label class="form-label">
+                                <i class="bi bi-mortarboard me-2"></i>Программа обучения
+                            </label>
+                            <select id="editQuotaProgram" class="form-select" readonly>
+                                <option value="">Программа будет загружена...</option>
+                            </select>
+                            <small class="text-muted">Программу обучения нельзя изменить при редактировании</small>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">
+                                <i class="bi bi-geo-alt me-2"></i>Регионы реализации
+                            </label>
+                            <div class="search-select-container">
+                                <input type="text" id="editRegionSearchInput" class="form-control mb-2" 
+                                       placeholder="🔍 Поиск региона..." 
+                                       onkeyup="filterEditRegions()">
+                                <select id="editQuotaRegions" class="form-select" multiple required style="height: 120px;">
+                                    {% for region in regions %}
+                                        <option value="{{ region.id }}">{{ region.name }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <small class="form-text text-muted">Выберите один или несколько регионов (удерживайте Ctrl)</small>
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label">
+                                <i class="bi bi-hash me-2"></i>Количество мест
+                            </label>
+                            <input type="number" id="editQuotaQuantity" name="quantity" class="form-control" 
+                                   placeholder="Кол-во" min="1" required>
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label">
+                                <i class="bi bi-currency-exchange me-2"></i>Стоимость за заявку
+                            </label>
+                            <input type="number" id="editQuotaCost" name="cost_per_quota" class="form-control" 
+                                   placeholder="₽" min="0" step="0.01" required>
+                        </div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
+                <button type="button" class="btn btn-warning" onclick="saveEditedQuota()">
+                    <i class="bi bi-check-circle me-2"></i>Сохранить изменения
+                </button>
             </div>
         </div>
     </div>
@@ -1431,6 +1513,162 @@ function clearProgramSearch() {
 function clearRegionSearch() {
     document.getElementById('regionSearchInput').value = '';
     filterRegions();
+}
+
+// Функции для редактирования квот
+function editQuota(quotaId) {
+    // Загружаем данные квоты через AJAX
+    fetch(`/education/quotas/${quotaId}/detail/`, {
+        headers: {
+            'X-Requested-With': 'XMLHttpRequest'
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            // Заполняем форму редактирования
+            document.getElementById('editQuotaId').value = quotaId;
+            document.getElementById('editQuotaProgram').innerHTML = `<option value="${data.quota.education_program.id}">${data.quota.education_program.name}</option>`;
+            document.getElementById('editQuotaQuantity').value = data.quota.quantity;
+            document.getElementById('editQuotaCost').value = data.quota.cost_per_quota;
+            
+            // Устанавливаем выбранные регионы
+            const regionsSelect = document.getElementById('editQuotaRegions');
+            Array.from(regionsSelect.options).forEach(option => {
+                option.selected = data.quota.region_ids.includes(parseInt(option.value));
+            });
+            
+            // Показываем модальное окно
+            new bootstrap.Modal(document.getElementById('editQuotaModal')).show();
+        } else {
+            alert('Ошибка при загрузке данных квоты: ' + data.message);
+        }
+    })
+    .catch(error => {
+        console.error('Error loading quota details:', error);
+        alert('Произошла ошибка при загрузке данных квоты');
+    });
+}
+
+function saveEditedQuota() {
+    const quotaId = document.getElementById('editQuotaId').value;
+    const quantity = document.getElementById('editQuotaQuantity').value;
+    const costPerQuota = document.getElementById('editQuotaCost').value;
+    const regionsSelect = document.getElementById('editQuotaRegions');
+    const selectedRegions = Array.from(regionsSelect.selectedOptions).map(option => option.value);
+    
+    // Валидация
+    if (!quantity || quantity <= 0) {
+        alert('Укажите количество мест больше 0');
+        return;
+    }
+    
+    if (!costPerQuota || costPerQuota < 0) {
+        alert('Укажите стоимость за заявку (0 или больше)');
+        return;
+    }
+    
+    if (!selectedRegions || selectedRegions.length === 0) {
+        alert('Выберите хотя бы один регион');
+        return;
+    }
+    
+    const data = {
+        action: 'update',
+        quota_id: quotaId,
+        quantity: parseInt(quantity),
+        cost_per_quota: parseFloat(costPerQuota),
+        regions: selectedRegions
+    };
+    
+    // Показываем индикатор загрузки
+    const button = document.querySelector('#editQuotaModal .btn-warning');
+    const originalText = button.innerHTML;
+    button.innerHTML = '<i class="bi bi-hourglass-split me-2"></i>Сохранение...';
+    button.disabled = true;
+    
+    fetch(`/education/agreements/${currentAgreementId}/quotas/`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': getCookie('csrftoken')
+        },
+        body: JSON.stringify(data)
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showNotification('success', 'Квота успешно обновлена');
+            
+            // Закрываем модальное окно
+            bootstrap.Modal.getInstance(document.getElementById('editQuotaModal')).hide();
+            
+            // Перезагружаем страницу
+            setTimeout(() => location.reload(), 1000);
+        } else {
+            showNotification('error', 'Ошибка: ' + data.message);
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        showNotification('error', 'Произошла ошибка при обновлении квоты');
+    })
+    .finally(() => {
+        // Восстанавливаем кнопку
+        button.innerHTML = originalText;
+        button.disabled = false;
+    });
+}
+
+function deleteQuota(quotaId) {
+    if (!confirm('Вы уверены, что хотите удалить эту квоту?')) return;
+    
+    const data = {
+        action: 'delete',
+        quota_id: quotaId
+    };
+    
+    fetch(`/education/agreements/${currentAgreementId}/quotas/`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': getCookie('csrftoken')
+        },
+        body: JSON.stringify(data)
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showNotification('success', 'Квота успешно удалена');
+            setTimeout(() => location.reload(), 1000);
+        } else {
+            showNotification('error', 'Ошибка: ' + data.message);
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        showNotification('error', 'Произошла ошибка при удалении квоты');
+    });
+}
+
+// Функция фильтрации регионов в модальном окне редактирования
+function filterEditRegions() {
+    const searchInput = document.getElementById('editRegionSearchInput');
+    const selectElement = document.getElementById('editQuotaRegions');
+    const searchText = searchInput.value.toLowerCase();
+    
+    // Получаем все опции
+    const options = selectElement.querySelectorAll('option');
+    
+    // Фильтруем опции
+    options.forEach(option => {
+        const optionText = option.textContent.toLowerCase();
+        if (optionText.includes(searchText)) {
+            option.style.display = '';
+        } else {
+            option.style.display = 'none';
+        }
+    });
 }
 </script>
 {% endblock %}

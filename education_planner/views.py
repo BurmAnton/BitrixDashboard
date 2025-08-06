@@ -282,6 +282,11 @@ def manage_quota(request, agreement_id):
             quota.cost_per_quota = data.get('cost_per_quota', quota.cost_per_quota)
             quota.save()
             
+            # Обновляем регионы если они переданы
+            region_ids = data.get('regions', [])
+            if region_ids:
+                quota.regions.set(region_ids)
+            
             return JsonResponse({
                 'success': True,
                 'message': 'Квота успешно обновлена'
@@ -389,3 +394,33 @@ def supplement_detail(request, pk):
     }
     
     return render(request, 'education_planner/supplement_detail.html', context)
+
+
+@login_required
+@require_http_methods(["GET"])
+def quota_detail(request, quota_id):
+    """Получение деталей квоты для редактирования"""
+    quota = get_object_or_404(Quota, pk=quota_id)
+    
+    if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+        # Возвращаем JSON для AJAX запроса
+        region_ids = list(quota.regions.values_list('id', flat=True))
+        
+        return JsonResponse({
+            'success': True,
+            'quota': {
+                'id': quota.id,
+                'quantity': quota.quantity,
+                'cost_per_quota': float(quota.cost_per_quota),
+                'region_ids': region_ids,
+                'education_program': {
+                    'id': quota.education_program.id,
+                    'name': quota.education_program.name,
+                    'academic_hours': quota.education_program.academic_hours,
+                    'study_form': quota.education_program.get_study_form_display()
+                }
+            }
+        })
+    
+    # Для обычного запроса можно вернуть HTML или редирект
+    return JsonResponse({'success': False, 'message': 'Метод не поддерживается'})
