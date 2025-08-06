@@ -7,11 +7,13 @@ from django.views.decorators.http import require_http_methods
 from django.db.models import Q, Count, Sum, Prefetch
 from django.core.paginator import Paginator
 from django.utils import timezone
+from django.db import transaction
 from .forms import EducationProgramForm, ProgramSectionFormSet
 from .models import (
     EducationProgram, EduAgreement, Quota, Supplement, QuotaChange, Region
 )
 import json
+import pandas as pd
 
 # Create your views here.
 
@@ -467,3 +469,220 @@ def quota_detail(request, quota_id):
     
     # Для обычного запроса можно вернуть HTML или редирект
     return JsonResponse({'success': False, 'message': 'Метод не поддерживается'})
+
+
+@login_required
+@require_http_methods(["POST"])
+def import_quotas_excel(request):
+    """Импорт квот из Excel файла"""
+    from django.core.files.storage import default_storage
+    from django.core.files.base import ContentFile
+    import pandas as pd
+    from datetime import datetime
+    import os
+    
+    if not request.FILES.get('excel_file'):
+        return JsonResponse({'success': False, 'message': 'Файл не выбран'})
+    
+    excel_file = request.FILES['excel_file']
+    
+    # Проверяем расширение файла
+    if not excel_file.name.endswith(('.xlsx', '.xls')):
+        return JsonResponse({'success': False, 'message': 'Поддерживаются только файлы Excel (.xlsx, .xls)'})
+    
+    try:
+        # Сохраняем временный файл
+        file_name = f'temp_import_{timezone.now().timestamp()}_{excel_file.name}'
+        file_path = default_storage.save(file_name, ContentFile(excel_file.read()))
+        full_path = default_storage.path(file_path)
+        
+        # Читаем Excel файл
+        df = pd.read_excel(full_path)
+        
+        # Проверяем необходимые колонки
+        required_columns = [
+            'договор_номер', 'программа_название', 'программа_часы', 
+            'программа_форма', 'регионы', 'количество', 'стоимость_за_заявку'
+        ]
+        
+        missing_columns = [col for col in required_columns if col not in df.columns]
+        if missing_columns:
+            return JsonResponse({
+                'success': False, 
+                'message': f'Отсутствуют обязательные колонки: {", ".join(missing_columns)}'
+            })
+        
+        # Статистика
+        created_count = 0
+        error_count = 0
+        errors = []
+        
+        with transaction.atomic():
+            for index, row in df.iterrows():
+                try:
+                    # Ищем договор
+                    agreement = EduAgreement.objects.filter(
+                        number=str(row['договор_номер']).strip()
+                    ).first()
+                    
+                    if not agreement:
+                        errors.append(f'Строка {index + 2}: Договор {row["договор_номер"]} не найден')
+                        error_count += 1
+                        continue
+
+                    # Ищем программу обучения
+                    program = EducationProgram.objects.filter(
+                        name__icontains=str(row['программа_название']).strip(),
+                        academic_hours=int(row['программа_часы'])
+                    ).first()
+                    
+                    if not program:
+                        errors.append(f'Строка {index + 2}: Программа "{row["программа_название"]}" ({row["программа_часы"]} ч.) не найдена')
+                        error_count += 1
+                        continue
+
+                    # Парсим регионы
+                    regions_names = [name.strip() for name in str(row['регионы']).split(',')]
+                    regions = []
+                    for region_name in regions_names:
+                        region = Region.objects.filter(name__icontains=region_name).first()
+                        if region:
+                            regions.append(region)
+                        else:
+                            errors.append(f'Строка {index + 2}: Регион "{region_name}" не найден')
+                    
+                    if not regions:
+                        error_count += 1
+                        continue
+
+                    # Обрабатываем даты
+                    start_date = None
+                    end_date = None
+                    
+                    if 'дата_начала' in df.columns and pd.notna(row['дата_начала']):
+                        try:
+                            if isinstance(row['дата_начала'], str):
+                                start_date = datetime.strptime(row['дата_начала'], '%d.%m.%Y').date()
+                            else:
+                                start_date = row['дата_начала'].date()
+                        except (ValueError, AttributeError):
+                            errors.append(f'Строка {index + 2}: Неверный формат даты начала')
+                    
+                    if 'дата_окончания' in df.columns and pd.notna(row['дата_окончания']):
+                        try:
+                            if isinstance(row['дата_окончания'], str):
+                                end_date = datetime.strptime(row['дата_окончания'], '%d.%m.%Y').date()
+                            else:
+                                end_date = row['дата_окончания'].date()
+                        except (ValueError, AttributeError):
+                            errors.append(f'Строка {index + 2}: Неверный формат даты окончания')
+
+                    # Валидация дат
+                    if start_date and end_date and start_date > end_date:
+                        errors.append(f'Строка {index + 2}: Дата начала не может быть позже даты окончания')
+                        error_count += 1
+                        continue
+
+                    # Создаем квоту
+                    quota = Quota.objects.create(
+                        agreement=agreement,
+                        education_program=program,
+                        quantity=int(row['количество']),
+                        cost_per_quota=float(row['стоимость_за_заявку']),
+                        start_date=start_date,
+                        end_date=end_date
+                    )
+                    quota.regions.set(regions)
+                    created_count += 1
+
+                except Exception as e:
+                    errors.append(f'Строка {index + 2}: Ошибка импорта - {str(e)}')
+                    error_count += 1
+        
+        # Удаляем временный файл
+        if os.path.exists(full_path):
+            os.remove(full_path)
+        
+        return JsonResponse({
+            'success': True,
+            'message': f'Импорт завершен! Создано квот: {created_count}',
+            'created_count': created_count,
+            'error_count': error_count,
+            'errors': errors[:10]  # Ограничиваем количество ошибок для отображения
+        })
+        
+    except Exception as e:
+        # Удаляем временный файл в случае ошибки
+        try:
+            if 'full_path' in locals() and os.path.exists(full_path):
+                os.remove(full_path)
+        except:
+            pass
+        
+        return JsonResponse({
+            'success': False, 
+            'message': f'Ошибка при обработке файла: {str(e)}'
+        })
+
+
+@login_required
+def download_quota_template(request):
+    """Скачивание шаблона Excel для импорта квот"""
+    import pandas as pd
+    from django.http import HttpResponse
+    import io
+    
+    # Создаем образец данных
+    sample_data = {
+        'договор_номер': ['ДОГ-001', 'ДОГ-002'],
+        'программа_название': ['Основы искусственного интеллекта', 'Специалист по борьбе с беспилотными летательными аппаратами'],
+        'программа_часы': [144, 72],
+        'программа_форма': ['Очная', 'Заочная'],
+        'регионы': ['Москва, Московская область', 'Санкт-Петербург'],
+        'количество': [25, 15],
+        'стоимость_за_заявку': [50000.00, 35000.00],
+        'дата_начала': ['01.09.2024', '15.10.2024'],
+        'дата_окончания': ['15.12.2024', '30.11.2024']
+    }
+    
+    df = pd.DataFrame(sample_data)
+    
+    # Создаем Excel файл в памяти
+    output = io.BytesIO()
+    with pd.ExcelWriter(output, engine='openpyxl') as writer:
+        # Основные данные
+        df.to_excel(writer, sheet_name='Квоты', index=False)
+        
+        # Инструкции на отдельном листе
+        instructions = pd.DataFrame({
+            'Колонка': [
+                'договор_номер', 'программа_название', 'программа_часы', 'программа_форма',
+                'регионы', 'количество', 'стоимость_за_заявку', 'дата_начала', 'дата_окончания'
+            ],
+            'Описание': [
+                'Номер договора (должен существовать в системе)',
+                'Название программы обучения (должна существовать в системе)',
+                'Количество академических часов программы',
+                'Форма обучения (Очная/Заочная/Очно-заочная)',
+                'Регионы через запятую (должны существовать в системе)',
+                'Количество мест по квоте (целое число)',
+                'Стоимость обучения одного человека (число с точкой)',
+                'Дата начала обучения в формате ДД.ММ.ГГГГ (необязательно)',
+                'Дата окончания обучения в формате ДД.ММ.ГГГГ (необязательно)'
+            ],
+            'Обязательность': [
+                'Обязательно', 'Обязательно', 'Обязательно', 'Обязательно',
+                'Обязательно', 'Обязательно', 'Обязательно', 'Необязательно', 'Необязательно'
+            ]
+        })
+        instructions.to_excel(writer, sheet_name='Инструкция', index=False)
+    
+    output.seek(0)
+    
+    response = HttpResponse(
+        output.getvalue(),
+        content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    )
+    response['Content-Disposition'] = 'attachment; filename="template_import_quotas.xlsx"'
+    
+    return response

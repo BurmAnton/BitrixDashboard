@@ -239,9 +239,25 @@
 <div class="agreements-container">
     <div class="d-flex justify-content-between align-items-center mb-4">
         <h1>Управление договорами на обучение</h1>
-        <button class="btn btn-primary" onclick="openCreateAgreementModal()">
-            <i class="bi bi-plus-circle"></i> Новый договор
-        </button>
+        <div class="btn-group" role="group">
+            <button class="btn btn-primary" onclick="openCreateAgreementModal()">
+                <i class="bi bi-plus-circle"></i> Новый договор
+            </button>
+            <div class="btn-group" role="group">
+                <button type="button" class="btn btn-success dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false">
+                    <i class="bi bi-file-earmark-excel"></i> Импорт квот
+                </button>
+                <ul class="dropdown-menu">
+                    <li><a class="dropdown-item" href="{% url 'education_planner:download_quota_template' %}">
+                        <i class="bi bi-download me-2"></i>Скачать шаблон Excel
+                    </a></li>
+                    <li><hr class="dropdown-divider"></li>
+                    <li><a class="dropdown-item" href="#" onclick="openImportQuotasModal()">
+                        <i class="bi bi-upload me-2"></i>Загрузить Excel файл
+                    </a></li>
+                </ul>
+            </div>
+        </div>
     </div>
     
     <!-- Фильтры -->
@@ -960,6 +976,66 @@
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
                 <button type="button" class="btn btn-warning" onclick="saveEditedQuota()">
                     <i class="bi bi-check-circle me-2"></i>Сохранить изменения
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Модальное окно импорта квот -->
+<div class="modal fade" id="importQuotasModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-success text-white">
+                <h5 class="modal-title">
+                    <i class="bi bi-file-earmark-excel me-2"></i>Импорт квот из Excel
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Закрыть"></button>
+            </div>
+            <div class="modal-body">
+                <div class="alert alert-info">
+                    <i class="bi bi-info-circle me-2"></i>
+                    <strong>Инструкция:</strong>
+                    <ol class="mb-0 mt-2">
+                        <li>Сначала <a href="{% url 'education_planner:download_quota_template' %}" class="alert-link">скачайте шаблон Excel</a></li>
+                        <li>Заполните данные в соответствии с инструкциями на листе "Инструкция"</li>
+                        <li>Загрузите заполненный файл ниже</li>
+                    </ol>
+                </div>
+                
+                <form id="importQuotasForm" enctype="multipart/form-data">
+                    {% csrf_token %}
+                    <div class="mb-3">
+                        <label for="excelFile" class="form-label">
+                            <i class="bi bi-file-earmark-excel me-2"></i>Выберите Excel файл
+                        </label>
+                        <input type="file" class="form-control" id="excelFile" name="excel_file" 
+                               accept=".xlsx,.xls" required>
+                        <div class="form-text">Поддерживаются файлы .xlsx и .xls</div>
+                    </div>
+                </form>
+                
+                <!-- Индикатор загрузки -->
+                <div id="importProgress" class="d-none">
+                    <div class="d-flex align-items-center">
+                        <div class="spinner-border spinner-border-sm text-success me-2" role="status">
+                            <span class="visually-hidden">Загрузка...</span>
+                        </div>
+                        <span>Обработка файла...</span>
+                    </div>
+                    <div class="progress mt-2">
+                        <div class="progress-bar progress-bar-striped progress-bar-animated bg-success" 
+                             role="progressbar" style="width: 100%"></div>
+                    </div>
+                </div>
+                
+                <!-- Результаты импорта -->
+                <div id="importResults" class="d-none mt-3"></div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
+                <button type="button" class="btn btn-success" onclick="submitImportForm()">
+                    <i class="bi bi-upload me-2"></i>Импортировать
                 </button>
             </div>
         </div>
@@ -1744,6 +1820,105 @@ function filterEditRegions() {
         } else {
             option.style.display = 'none';
         }
+    });
+}
+
+// Функции для импорта квот
+function openImportQuotasModal() {
+    // Сбрасываем форму и результаты
+    document.getElementById('importQuotasForm').reset();
+    document.getElementById('importProgress').classList.add('d-none');
+    document.getElementById('importResults').classList.add('d-none');
+    
+    // Показываем модальное окно
+    new bootstrap.Modal(document.getElementById('importQuotasModal')).show();
+}
+
+function submitImportForm() {
+    const form = document.getElementById('importQuotasForm');
+    const fileInput = document.getElementById('excelFile');
+    const progressDiv = document.getElementById('importProgress');
+    const resultsDiv = document.getElementById('importResults');
+    const submitBtn = document.querySelector('#importQuotasModal .btn-success');
+    
+    // Валидация
+    if (!fileInput.files.length) {
+        alert('Выберите файл для импорта');
+        return;
+    }
+    
+    // Показываем индикатор загрузки
+    progressDiv.classList.remove('d-none');
+    resultsDiv.classList.add('d-none');
+    submitBtn.disabled = true;
+    submitBtn.innerHTML = '<i class="bi bi-hourglass-split me-2"></i>Обработка...';
+    
+    // Создаем FormData
+    const formData = new FormData(form);
+    
+    // Отправляем файл
+    fetch('{% url "education_planner:import_quotas_excel" %}', {
+        method: 'POST',
+        body: formData,
+        headers: {
+            'X-CSRFToken': getCookie('csrftoken')
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        progressDiv.classList.add('d-none');
+        resultsDiv.classList.remove('d-none');
+        
+        if (data.success) {
+            resultsDiv.innerHTML = `
+                <div class="alert alert-success">
+                    <i class="bi bi-check-circle me-2"></i>
+                    <strong>Импорт завершен успешно!</strong>
+                    <ul class="mb-0 mt-2">
+                        <li>Создано квот: ${data.created_count}</li>
+                        ${data.error_count > 0 ? `<li>Ошибок: ${data.error_count}</li>` : ''}
+                    </ul>
+                    ${data.errors && data.errors.length > 0 ? `
+                        <div class="mt-2">
+                            <strong>Ошибки:</strong>
+                            <ul class="mb-0">
+                                ${data.errors.map(error => `<li>${error}</li>`).join('')}
+                            </ul>
+                        </div>
+                    ` : ''}
+                </div>
+            `;
+            
+            // Перезагружаем страницу через 3 секунды
+            setTimeout(() => {
+                location.reload();
+            }, 3000);
+            
+        } else {
+            resultsDiv.innerHTML = `
+                <div class="alert alert-danger">
+                    <i class="bi bi-exclamation-triangle me-2"></i>
+                    <strong>Ошибка импорта:</strong><br>
+                    ${data.message}
+                </div>
+            `;
+        }
+    })
+    .catch(error => {
+        progressDiv.classList.add('d-none');
+        resultsDiv.classList.remove('d-none');
+        resultsDiv.innerHTML = `
+            <div class="alert alert-danger">
+                <i class="bi bi-exclamation-triangle me-2"></i>
+                <strong>Произошла ошибка:</strong><br>
+                ${error.message || 'Неизвестная ошибка'}
+            </div>
+        `;
+        console.error('Import error:', error);
+    })
+    .finally(() => {
+        submitBtn.disabled = false;
+        submitBtn.innerHTML = '<i class="bi bi-upload me-2"></i>Импортировать';
     });
 }
 </script>

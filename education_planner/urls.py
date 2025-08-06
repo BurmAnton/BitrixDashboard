@@ -17,6 +17,10 @@ urlpatterns = [
     path('agreements/<int:agreement_id>/quotas/', views.manage_quota, name='manage_quota'),
     path('quotas/<int:quota_id>/detail/', views.quota_detail, name='quota_detail'),
     
+    # Маршруты для импорта квот
+    path('quotas/import/', views.import_quotas_excel, name='import_quotas_excel'),
+    path('quotas/template/', views.download_quota_template, name='download_quota_template'),
+    
     # Маршруты для допсоглашений
     path('agreements/<int:agreement_id>/supplements/create/', views.create_supplement, name='create_supplement'),
     path('supplements/<int:pk>/', views.supplement_detail, name='supplement_detail'),
