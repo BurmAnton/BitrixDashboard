@@ -155,10 +155,19 @@ class EduAgreement(models.Model):
         return f"{self.get_federal_operator_display()} - {self.number} от {self.signing_date or 'не подписан'}"
     
     def get_actual_quotas(self):
-        """Возвращает актуальные квоты с учетом всех дополнительных соглашений"""
-        # Пока возвращаем просто базовые квоты
-        # Логика дополнительных соглашений требует доработки
-        return self.quotas.filter(is_active=True).select_related('education_program').prefetch_related('regions')
+        """Возвращает актуальные квоты с учетом дополнительных соглашений"""
+        # Если есть активные дополнительные соглашения, используем квоты из последнего
+        active_supplements = self.supplements.exclude(
+            status=Supplement.SupplementStatus.DRAFT
+        ).order_by('-signing_date', '-created_at')
+        
+        if active_supplements.exists():
+            # Используем квоты из последнего дополнительного соглашения
+            # Квоты создаются при импорте и деактивируются старые
+            return self.quotas.filter(is_active=True).select_related('education_program').prefetch_related('regions')
+        else:
+            # Возвращаем базовые квоты
+            return self.quotas.filter(is_active=True).select_related('education_program').prefetch_related('regions')
     
     def get_total_quota_places(self):
         """Возвращает общее количество мест по всем квотам"""

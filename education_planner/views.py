@@ -1277,66 +1277,7 @@ def download_quota_template(request):
     return response
 
 
-def compare_quotas(current_quotas, new_quotas):
-    """
-    Сравнивает текущие квоты договора с новыми из доп. соглашения
-    Возвращает список изменений
-    """
-    changes = []
-    
-    # Создаем словари для удобного сравнения
-    # Ключ: (program_id, region_name)
-    current_dict = {}
-    for quota in current_quotas:
-        for region in quota.regions.all():
-            key = (quota.education_program.id, region.name)
-            current_dict[key] = quota.quantity
-    
-    new_dict = {}
-    for quota_data in new_quotas:
-        program_id = quota_data['program_id']
-        for region_name in quota_data['regions']:
-            key = (program_id, region_name)
-            current_quantity = new_dict.get(key, 0)
-            new_dict[key] = current_quantity + quota_data['quantity']
-    
-    # Находим изменения
-    all_keys = set(current_dict.keys()) | set(new_dict.keys())
-    
-    for key in all_keys:
-        program_id, region_name = key
-        old_quantity = current_dict.get(key, 0)
-        new_quantity = new_dict.get(key, 0)
-        
-        if old_quantity == 0 and new_quantity > 0:
-            # Добавление новой квоты
-            changes.append({
-                'type': 'ADD',
-                'program_id': program_id,
-                'region': region_name,
-                'old_quantity': None,
-                'new_quantity': new_quantity
-            })
-        elif old_quantity > 0 and new_quantity == 0:
-            # Удаление квоты
-            changes.append({
-                'type': 'REMOVE',
-                'program_id': program_id,
-                'region': region_name,
-                'old_quantity': old_quantity,
-                'new_quantity': 0
-            })
-        elif old_quantity != new_quantity:
-            # Изменение количества
-            changes.append({
-                'type': 'MODIFY',
-                'program_id': program_id,
-                'region': region_name,
-                'old_quantity': old_quantity,
-                'new_quantity': new_quantity
-            })
-    
-    return changes
+
 
 
 @login_required
@@ -1470,19 +1411,13 @@ def analyze_supplement_excel(request):
                     'quantity': quantity
                 })
         
-        # Получаем текущие квоты договора
-        current_quotas = agreement.get_actual_quotas()
-        
-        # Сравниваем и находим изменения
-        changes = compare_quotas(current_quotas, new_quotas)
-        
         # Сохраняем данные в сессии
         request.session['supplement_file_data'] = {
             'agreement_id': agreement_id,
-            'new_quotas': new_quotas,
-            'changes': changes
+            'new_quotas': new_quotas
         }
         request.session['supplement_file_name'] = file.name
+        request.session['supplement_df_data'] = df.to_json()
         request.session.modified = True
         
         # Подготавливаем ответ
@@ -1490,16 +1425,9 @@ def analyze_supplement_excel(request):
             'success': True,
             'total_rows': len(df),
             'valid_quotas': len(new_quotas),
-            'changes_count': len(changes),
-            'changes_summary': {},
             'needs_user_input': len(unrecognized_regions) > 0,
             'unrecognized_regions': []
         }
-        
-        # Группируем изменения по типам
-        for change in changes:
-            change_type = change['type']
-            response_data['changes_summary'][change_type] = response_data['changes_summary'].get(change_type, 0) + 1
         
         # Добавляем неопознанные регионы с предложениями
         if unrecognized_regions:
@@ -1526,6 +1454,7 @@ def analyze_supplement_excel(request):
 def import_supplement_excel(request):
     """
     Выполняет импорт дополнительного соглашения из Excel
+    Заменяет все квоты договора на новые из файла
     """
     try:
         # Получаем данные из сессии
@@ -1546,12 +1475,19 @@ def import_supplement_excel(request):
             return JsonResponse({'success': False, 'message': 'Номер дополнительного соглашения обязателен'})
         
         agreement_id = file_data['agreement_id']
-        changes = file_data['changes']
         
         try:
             agreement = EduAgreement.objects.get(id=agreement_id)
         except EduAgreement.DoesNotExist:
             return JsonResponse({'success': False, 'message': 'Договор не найден'})
+        
+        # Читаем данные из сессии повторно
+        df_data = request.session.get('supplement_df_data')
+        if not df_data:
+            return JsonResponse({'success': False, 'message': 'Данные Excel файла не найдены'})
+        
+        df = pd.read_json(df_data)
+        created_quotas = []
         
         with transaction.atomic():
             # Создаем дополнительное соглашение
@@ -1562,34 +1498,91 @@ def import_supplement_excel(request):
                 status=Supplement.SupplementStatus.NEGOTIATION
             )
             
-            # Создаем изменения квот
-            created_changes = []
-            for change in changes:
+            # 1. Деактивируем все старые квоты
+            agreement.quotas.update(is_active=False)
+            
+            # 2. Создаем новые квоты из файла
+            for _, row in df.iterrows():
                 try:
-                    program = EducationProgram.objects.get(id=change['program_id'])
+                    program_name = clean_text_data(str(row['Программа обучения']))
+                    program_type = clean_text_data(str(row.get('Форма обучения', '')))
+                    duration_text = clean_text_data(str(row.get('Длительность', '')))
+                    regions_text = clean_text_data(str(row['Регионы реализации']))
                     
-                    # Применяем mapping регионов если есть
-                    region_name = change['region']
-                    if region_name in region_mappings:
-                        mapping = region_mappings[region_name]
-                        if mapping['action'] == 'map':
-                            region_name = mapping['target_region']
-                        elif mapping['action'] == 'skip':
+                    # Парсим количество
+                    try:
+                        quantity = int(float(str(row['Количество мест']).replace(' ', '')))
+                    except (ValueError, TypeError):
+                        continue
+                    
+                    if quantity <= 0:
+                        continue
+                    
+                    # Парсим длительность
+                    duration = None
+                    if duration_text:
+                        try:
+                            import re
+                            duration_match = re.search(r'(\d+)', duration_text)
+                            if duration_match:
+                                duration = int(duration_match.group(1))
+                        except (ValueError, TypeError):
+                            pass
+                    
+                    if not duration:
+                        continue
+                    
+                    # Находим программу
+                    programs = EducationProgram.objects.filter(name__icontains=program_name)
+                    
+                    if program_type:
+                        for pt_choice, pt_display in EducationProgram.ProgramType.choices:
+                            if program_type.lower() in pt_display.lower():
+                                programs = programs.filter(program_type=pt_choice)
+                                break
+                    
+                    if duration:
+                        programs = programs.filter(academic_hours=duration)
+                    
+                    if not programs.exists():
+                        continue
+                    
+                    program = programs.first()
+                    
+                    # Парсим регионы
+                    regions_names = [clean_text_data(name.strip()) for name in regions_text.split(',')]
+                    regions_names = [name for name in regions_names if name]
+                    
+                    valid_regions = []
+                    for region_name in regions_names:
+                        # Применяем mapping если есть
+                        if region_name in region_mappings:
+                            mapping = region_mappings[region_name]
+                            if mapping['action'] == 'map':
+                                region_name = mapping['target_region']
+                            elif mapping['action'] == 'skip':
+                                continue
+                        
+                        try:
+                            region = Region.objects.get(name=region_name)
+                            valid_regions.append(region)
+                        except Region.DoesNotExist:
                             continue
-                        # Для 'create' оставляем как есть
                     
-                    quota_change = QuotaChange.objects.create(
-                        supplement=supplement,
-                        change_type=change['type'],
+                    if not valid_regions:
+                        continue
+                    
+                    # Создаем новую квоту
+                    quota = Quota.objects.create(
+                        agreement=agreement,
                         education_program=program,
-                        region=region_name,
-                        old_quantity=change['old_quantity'],
-                        new_quantity=change['new_quantity']
+                        quantity=quantity,
+                        is_active=True
                     )
-                    created_changes.append(quota_change)
+                    quota.regions.set(valid_regions)
+                    created_quotas.append(quota)
                     
-                except EducationProgram.DoesNotExist:
-                    # Программа была удалена между анализом и импортом
+                except Exception as e:
                     continue
         
         # Очищаем сессию
@@ -1599,14 +1592,16 @@ def import_supplement_excel(request):
             del request.session['supplement_file_name']
         if 'supplement_region_mappings' in request.session:
             del request.session['supplement_region_mappings']
+        if 'supplement_df_data' in request.session:
+            del request.session['supplement_df_data']
         request.session.modified = True
         
         return JsonResponse({
             'success': True,
             'supplement_id': supplement.id,
             'supplement_number': supplement.number,
-            'changes_count': len(created_changes),
-            'message': f'Дополнительное соглашение №{supplement.number} успешно создано с {len(created_changes)} изменениями'
+            'quotas_count': len(created_quotas),
+            'message': f'Дополнительное соглашение №{supplement.number} успешно создано. Квоты договора заменены ({len(created_quotas)} новых квот)'
         })
         
     except Exception as e:

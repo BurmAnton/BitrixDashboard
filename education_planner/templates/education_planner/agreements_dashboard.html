@@ -2470,16 +2470,8 @@ function submitSupplementImportForm() {
                         <strong>Требуется настройка регионов</strong><br>
                         Найдено строк: ${data.total_rows}<br>
                         Валидных квот: ${data.valid_quotas}<br>
-                        Найдено изменений: ${data.changes_count}<br>
-                        Неопознанных регионов: ${data.unrecognized_regions.length}
-                    </div>
-                    <div class="mt-2">
-                        <h6>Обнаруженные изменения:</h6>
-                        <div class="d-flex gap-2">
-                            ${data.changes_summary.ADD ? `<span class="badge bg-success">Добавлений: ${data.changes_summary.ADD}</span>` : ''}
-                            ${data.changes_summary.MODIFY ? `<span class="badge bg-warning">Изменений: ${data.changes_summary.MODIFY}</span>` : ''}
-                            ${data.changes_summary.REMOVE ? `<span class="badge bg-danger">Удалений: ${data.changes_summary.REMOVE}</span>` : ''}
-                        </div>
+                        Неопознанных регионов: ${data.unrecognized_regions.length}<br>
+                        <strong>Все квоты договора будут заменены на новые из файла</strong>
                     </div>
                 `;
             } else {
@@ -2491,16 +2483,8 @@ function submitSupplementImportForm() {
                         <strong>Анализ завершен успешно!</strong><br>
                         Найдено строк: ${data.total_rows}<br>
                         Валидных квот: ${data.valid_quotas}<br>
-                        Найдено изменений: ${data.changes_count}<br>
-                        Все регионы распознаны, переходим к созданию допсоглашения...
-                    </div>
-                    <div class="mt-2">
-                        <h6>Обнаруженные изменения:</h6>
-                        <div class="d-flex gap-2">
-                            ${data.changes_summary.ADD ? `<span class="badge bg-success">Добавлений: ${data.changes_summary.ADD}</span>` : ''}
-                            ${data.changes_summary.MODIFY ? `<span class="badge bg-warning">Изменений: ${data.changes_summary.MODIFY}</span>` : ''}
-                            ${data.changes_summary.REMOVE ? `<span class="badge bg-danger">Удалений: ${data.changes_summary.REMOVE}</span>` : ''}
-                        </div>
+                        Все регионы распознаны, переходим к созданию допсоглашения...<br>
+                        <strong>Все квоты договора будут заменены на новые из файла</strong>
                     </div>
                 `;
                 
@@ -2683,7 +2667,7 @@ function proceedWithSupplementImport() {
                     <strong>Импорт завершен успешно!</strong><br>
                     ${data.message}<br>
                     <ul class="mb-0 mt-2">
-                        <li>Создано изменений: ${data.changes_count}</li>
+                        <li>Создано квот: ${data.quotas_count}</li>
                     </ul>
                 </div>
             `;
