@@ -1486,8 +1486,12 @@ def import_supplement_excel(request):
         if not df_data:
             return JsonResponse({'success': False, 'message': 'Данные Excel файла не найдены'})
         
-        df = pd.read_json(df_data)
+        # Используем StringIO для корректного чтения JSON
+        import io
+        df = pd.read_json(io.StringIO(df_data))
         created_quotas = []
+        
+
         
         with transaction.atomic():
             # Создаем дополнительное соглашение
@@ -1502,7 +1506,7 @@ def import_supplement_excel(request):
             agreement.quotas.update(is_active=False)
             
             # 2. Создаем новые квоты из файла
-            for _, row in df.iterrows():
+            for index, row in df.iterrows():
                 try:
                     program_name = clean_text_data(str(row['Программа обучения']))
                     program_type = clean_text_data(str(row.get('Форма обучения', '')))
@@ -1580,6 +1584,7 @@ def import_supplement_excel(request):
                     # Дата начала
                     if 'Дата начала' in row and pd.notna(row['Дата начала']):
                         try:
+                            from datetime import datetime
                             start_date_str = str(row['Дата начала']).strip()
                             if start_date_str and start_date_str != 'nan':
                                 # Пробуем разные форматы дат
@@ -1595,6 +1600,7 @@ def import_supplement_excel(request):
                     # Дата окончания
                     if 'Дата окончания' in row and pd.notna(row['Дата окончания']):
                         try:
+                            from datetime import datetime
                             end_date_str = str(row['Дата окончания']).strip()
                             if end_date_str and end_date_str != 'nan':
                                 # Пробуем разные форматы дат
