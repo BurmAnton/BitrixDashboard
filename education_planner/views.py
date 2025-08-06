@@ -1559,7 +1559,7 @@ def import_supplement_excel(request):
                 agreement=agreement,
                 number=supplement_number,
                 description=supplement_description or f'Импорт из файла {file_name}',
-                status=Supplement.SupplementStatus.DRAFT
+                status=Supplement.SupplementStatus.NEGOTIATION
             )
             
             # Создаем изменения квот
