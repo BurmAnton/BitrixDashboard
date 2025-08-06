@@ -111,6 +111,7 @@ def agreements_dashboard(request):
     context = {
         'page_obj': page_obj,
         'agreements': page_obj.object_list,
+        'all_agreements': agreements,  # Для статистики нужны все, не только на странице
         'programs': programs,
         'programs_grouped': json.dumps(programs_grouped, ensure_ascii=False),
         'unique_program_names': unique_program_names,
@@ -120,6 +121,7 @@ def agreements_dashboard(request):
         'selected_status': status,
         'operators': EduAgreement.FederalOperator.choices,
         'statuses': EduAgreement.AgreementStatus.choices,
+        'status_choices': EduAgreement.AgreementStatus.choices,
     }
     
     return render(request, 'education_planner/agreements_dashboard.html', context)
@@ -259,7 +261,8 @@ def manage_quota(request, agreement_id):
             quota = Quota.objects.create(
                 agreement=agreement,
                 education_program_id=data['program_id'],
-                quantity=data['quantity']
+                quantity=data['quantity'],
+                cost_per_quota=data.get('cost_per_quota', 0)
             )
             # Добавляем выбранные регионы
             region_ids = data.get('regions', [])
@@ -276,6 +279,7 @@ def manage_quota(request, agreement_id):
             # Обновление существующей квоты
             quota = get_object_or_404(Quota, pk=data['quota_id'], agreement=agreement)
             quota.quantity = data['quantity']
+            quota.cost_per_quota = data.get('cost_per_quota', quota.cost_per_quota)
             quota.save()
             
             return JsonResponse({

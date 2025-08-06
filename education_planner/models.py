@@ -163,6 +163,14 @@ class EduAgreement(models.Model):
     def get_total_quota_places(self):
         """Возвращает общее количество мест по всем квотам"""
         return sum(quota.quantity for quota in self.get_actual_quotas())
+    
+    def get_total_agreement_cost(self):
+        """Возвращает общую стоимость всех квот по договору"""
+        return sum(quota.total_cost for quota in self.get_actual_quotas())
+    
+    def get_formatted_total_cost(self):
+        """Возвращает отформатированную общую стоимость договора"""
+        return f"{self.get_total_agreement_cost():,.2f} ₽"
 
 
 class Quota(models.Model):
@@ -189,6 +197,13 @@ class Quota(models.Model):
     # Оставляем старое поле для совместимости, но делаем его необязательным
     region = models.CharField(_('Регион (устаревшее)'), max_length=255, blank=True, null=True)
     quantity = models.PositiveIntegerField(_('Количество квоты'), default=0)
+    cost_per_quota = models.DecimalField(
+        _('Стоимость за заявку'),
+        max_digits=10,
+        decimal_places=2,
+        default=0,
+        help_text=_('Стоимость обучения одного человека по данной квоте')
+    )
     is_active = models.BooleanField(_('Активна'), default=True)
     created_at = models.DateTimeField(_('Дата создания'), auto_now_add=True)
     updated_at = models.DateTimeField(_('Дата обновления'), auto_now=True)
@@ -208,6 +223,21 @@ class Quota(models.Model):
         if self.regions.exists():
             return ", ".join([r.name for r in self.regions.all()])
         return self.region or "Не указан"
+    
+    @property
+    def total_cost(self):
+        """Возвращает общую стоимость квоты (количество * стоимость за заявку)"""
+        return self.quantity * self.cost_per_quota
+    
+    @property
+    def formatted_cost_per_quota(self):
+        """Возвращает отформатированную стоимость за заявку"""
+        return f"{self.cost_per_quota:,.2f} ₽"
+    
+    @property
+    def formatted_total_cost(self):
+        """Возвращает отформатированную общую стоимость"""
+        return f"{self.total_cost:,.2f} ₽"
 
 
 class Supplement(models.Model):

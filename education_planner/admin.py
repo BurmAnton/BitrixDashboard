@@ -37,7 +37,7 @@ class RegionAdmin(admin.ModelAdmin):
 class QuotaInline(admin.TabularInline):
     model = Quota
     extra = 1
-    fields = ('education_program', 'regions', 'quantity', 'is_active')
+    fields = ('education_program', 'regions', 'quantity', 'cost_per_quota', 'is_active')
     readonly_fields = ('created_at', 'updated_at')
     filter_horizontal = ('regions',)
 
@@ -74,11 +74,27 @@ class EduAgreementAdmin(admin.ModelAdmin):
 
 @admin.register(Quota)
 class QuotaAdmin(admin.ModelAdmin):
-    list_display = ('agreement', 'education_program', 'regions_display', 'quantity', 'is_active', 'created_at')
+    list_display = ('agreement', 'education_program', 'regions_display', 'quantity', 'cost_per_quota', 'formatted_total_cost', 'is_active', 'created_at')
     list_filter = ('agreement', 'education_program', 'regions', 'is_active', 'created_at')
     search_fields = ('agreement__number', 'agreement__name', 'education_program__name', 'regions__name')
-    readonly_fields = ('created_at', 'updated_at')
+    readonly_fields = ('created_at', 'updated_at', 'formatted_total_cost')
     filter_horizontal = ('regions',)
+    fieldsets = (
+        ('Основная информация', {
+            'fields': ('agreement', 'education_program', 'regions', 'quantity', 'cost_per_quota')
+        }),
+        ('Статистика', {
+            'fields': ('formatted_total_cost',),
+            'classes': ('collapse',)
+        }),
+        ('Управление', {
+            'fields': ('is_active',)
+        }),
+        ('Системная информация', {
+            'fields': ('created_at', 'updated_at'),
+            'classes': ('collapse',)
+        }),
+    )
     
     def get_queryset(self, request):
         return super().get_queryset(request).select_related('agreement', 'education_program').prefetch_related('regions')

@@ -280,6 +280,80 @@
         </form>
     </div>
     
+    <!-- Статистика по договорам -->
+    <div class="card mb-4">
+        <div class="card-header bg-primary text-white">
+            <h5 class="mb-0"><i class="bi bi-bar-chart me-2"></i>Статистика по договорам и программам</h5>
+        </div>
+        <div class="card-body">
+            <div class="row">
+                <div class="col-lg-8">
+                    <h6 class="mb-3">Общая статистика</h6>
+                    <div class="table-responsive">
+                        <table class="table table-sm table-striped">
+                            <thead class="table-dark">
+                                <tr>
+                                    <th>Показатель</th>
+                                    <th class="text-center">Количество</th>
+                                    <th class="text-end">Сумма</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% with total_agreements=all_agreements.count %}
+                                {% with total_places=all_agreements|sum_total_places %}
+                                {% with total_cost=all_agreements|sum_total_cost %}
+                                <tr>
+                                    <td><strong>Всего договоров</strong></td>
+                                    <td class="text-center">
+                                        <span class="badge bg-primary">{{ total_agreements }}</span>
+                                    </td>
+                                    <td class="text-end">
+                                        <span class="badge bg-success">{{ total_cost|floatformat:2 }} ₽</span>
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <td><strong>Общее количество мест</strong></td>
+                                    <td class="text-center">
+                                        <span class="badge bg-info">{{ total_places }}</span>
+                                    </td>
+                                    <td class="text-end">—</td>
+                                </tr>
+                                {% if total_places > 0 %}
+                                <tr>
+                                    <td><strong>Средняя стоимость за место</strong></td>
+                                    <td class="text-center">—</td>
+                                    <td class="text-end">
+                                        <span class="badge bg-warning">{{ total_cost|div:total_places|floatformat:2 }} ₽</span>
+                                    </td>
+                                </tr>
+                                {% endif %}
+                                {% endwith %}
+                                {% endwith %}
+                                {% endwith %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                <div class="col-lg-4">
+                    <h6 class="mb-3">Статистика по статусам</h6>
+                    <div class="status-stats">
+                        {% regroup all_agreements by status as status_groups %}
+                        {% for status_group in status_groups %}
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <span class="status-badge status-{{ status_group.grouper|lower }}">
+                                {% for choice in status_choices %}
+                                    {% if choice.0 == status_group.grouper %}{{ choice.1 }}{% endif %}
+                                {% endfor %}
+                            </span>
+                            <span class="badge bg-secondary">{{ status_group.list|length }}</span>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
     <!-- Таблица договоров -->
     <div class="agreements-table">
         <table class="table table-hover mb-0">
@@ -376,11 +450,13 @@
                                         <table class="table table-sm table-striped mb-0 quotas-table">
                                             <thead class="table-dark">
                                                 <tr>
-                                                    <th width="35%">Программа обучения</th>
-                                                    <th width="15%">Длительность</th>
-                                                    <th width="15%">Форма обучения</th>
-                                                    <th width="25%">Регионы реализации</th>
+                                                    <th width="25%">Программа обучения</th>
+                                                    <th width="10%">Длительность</th>
+                                                    <th width="10%">Форма обучения</th>
+                                                    <th width="20%">Регионы реализации</th>
                                                     <th width="10%">Количество мест</th>
+                                                    <th width="12%">Стоимость за заявку</th>
+                                                    <th width="13%">Общая стоимость</th>
                                                 </tr>
                                             </thead>
                                             <tbody>
@@ -403,6 +479,12 @@
                                                     </td>
                                                     <td>
                                                         <span class="badge bg-success">{{ quota.quantity }} мест</span>
+                                                    </td>
+                                                    <td>
+                                                        <span class="badge bg-info">{{ quota.formatted_cost_per_quota }}</span>
+                                                    </td>
+                                                    <td>
+                                                        <span class="badge bg-primary">{{ quota.formatted_total_cost }}</span>
                                                     </td>
                                                 </tr>
                                                 {% endfor %}
@@ -594,16 +676,23 @@
                             </div>
                             <small class="form-text text-muted">Выберите один или несколько регионов (удерживайте Ctrl)</small>
                         </div>
-                        <div class="col-md-3">
+                        <div class="col-md-2">
                             <label class="form-label">
                                 <i class="bi bi-hash me-2"></i>Количество мест
                             </label>
                             <input type="number" name="quantity" class="form-control" 
-                                   placeholder="Введите количество" min="1" required>
+                                   placeholder="Кол-во" min="1" required>
                         </div>
-                        <div class="col-md-3 d-flex align-items-end">
+                        <div class="col-md-2">
+                            <label class="form-label">
+                                <i class="bi bi-currency-exchange me-2"></i>Стоимость за заявку
+                            </label>
+                            <input type="number" name="cost_per_quota" class="form-control" 
+                                   placeholder="₽" min="0" step="0.01" required>
+                        </div>
+                        <div class="col-md-2 d-flex align-items-end">
                             <button type="button" class="btn btn-success w-100" onclick="addQuota()">
-                                <i class="bi bi-plus-circle me-2"></i>Добавить квоту
+                                <i class="bi bi-plus-circle me-2"></i>Добавить
                             </button>
                         </div>
                     </form>
@@ -931,10 +1020,12 @@ function addQuota() {
     const programFormSelect = document.getElementById('programFormSelect');
     const regionsSelect = document.getElementById('regionsSelect');
     const quantityInput = document.querySelector('input[name="quantity"]');
+    const costInput = document.querySelector('input[name="cost_per_quota"]');
     
     const programId = programFormSelect.value;
     const selectedRegions = Array.from(regionsSelect.selectedOptions).map(option => option.value);
     const quantity = quantityInput.value;
+    const costPerQuota = costInput.value;
     
     // Валидация
     if (!programId) {
@@ -952,11 +1043,17 @@ function addQuota() {
         return;
     }
     
+    if (!costPerQuota || costPerQuota < 0) {
+        alert('Укажите стоимость за заявку (0 или больше)');
+        return;
+    }
+    
     const data = {
         action: 'create',
         program_id: programId,
         regions: selectedRegions,
-        quantity: parseInt(quantity)
+        quantity: parseInt(quantity),
+        cost_per_quota: parseFloat(costPerQuota)
     };
     
     // Показываем индикатор загрузки
