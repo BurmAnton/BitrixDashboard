@@ -178,6 +178,59 @@
     .quotas-table .badge {
         font-size: 12px;
     }
+    
+    /* Стили для поиска в селектах */
+    .search-select-container {
+        position: relative;
+    }
+    
+    .search-select-container input[type="text"] {
+        border-bottom-left-radius: 0;
+        border-bottom-right-radius: 0;
+        border-bottom: none;
+        background: #f8f9fa;
+        font-size: 14px;
+    }
+    
+    .search-select-container input[type="text"]:focus {
+        background: #fff;
+        box-shadow: 0 0 0 0.2rem rgba(102, 126, 234, 0.25);
+    }
+    
+    .search-select-container select {
+        border-top-left-radius: 0;
+        border-top-right-radius: 0;
+        border-top: 1px solid #dee2e6;
+    }
+    
+    .search-select-container select:focus {
+        box-shadow: 0 0 0 0.2rem rgba(102, 126, 234, 0.25);
+    }
+    
+    /* Скрытые опции в селекте */
+    .search-select-container select option[style*="display: none"] {
+        display: none !important;
+    }
+    
+    /* Улучшенное отображение множественного выбора */
+    .search-select-container select[multiple] {
+        background: white;
+        padding: 8px;
+    }
+    
+    .search-select-container select[multiple] option:checked {
+        background: #667eea;
+        color: white;
+    }
+    
+    .search-select-container select[multiple] option:hover {
+        background: #e3f2fd;
+    }
+    
+    /* Анимация для плавного появления результатов поиска */
+    .search-select-container select option {
+        transition: all 0.2s ease;
+    }
 </style>
 {% endblock %}
 
@@ -486,12 +539,17 @@
                                 <label class="form-label">
                                     <span class="step-number">1</span>Программа обучения
                                 </label>
-                                <select name="program_name" id="programNameSelect" class="form-select" required>
-                                    <option value="">Выберите программу...</option>
-                                    {% for program_name in unique_program_names %}
-                                        <option value="{{ program_name }}">{{ program_name }}</option>
-                                    {% endfor %}
-                                </select>
+                                <div class="search-select-container">
+                                    <input type="text" id="programSearchInput" class="form-control mb-2" 
+                                           placeholder="🔍 Поиск программы..." 
+                                           onkeyup="filterPrograms()">
+                                    <select name="program_name" id="programNameSelect" class="form-select" required size="5">
+                                        <option value="">Выберите программу...</option>
+                                        {% for program_name in unique_program_names %}
+                                            <option value="{{ program_name }}">{{ program_name }}</option>
+                                        {% endfor %}
+                                    </select>
+                                </div>
                             </div>
                         </div>
                         <div class="col-md-4">
@@ -524,11 +582,16 @@
                             <label class="form-label">
                                 <i class="bi bi-geo-alt me-2"></i>Регионы реализации
                             </label>
-                            <select name="regions" id="regionsSelect" class="form-select" multiple required style="height: 120px;">
-                                {% for region in regions %}
-                                    <option value="{{ region.id }}">{{ region.name }}</option>
-                                {% endfor %}
-                            </select>
+                            <div class="search-select-container">
+                                <input type="text" id="regionSearchInput" class="form-control mb-2" 
+                                       placeholder="🔍 Поиск региона..." 
+                                       onkeyup="filterRegions()">
+                                <select name="regions" id="regionsSelect" class="form-select" multiple required style="height: 120px;">
+                                    {% for region in regions %}
+                                        <option value="{{ region.id }}">{{ region.name }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
                             <small class="form-text text-muted">Выберите один или несколько регионов (удерживайте Ctrl)</small>
                         </div>
                         <div class="col-md-3">
@@ -1205,6 +1268,72 @@ function getCookie(name) {
         }
     }
     return cookieValue;
+}
+
+// Функция фильтрации программ обучения
+function filterPrograms() {
+    const searchInput = document.getElementById('programSearchInput');
+    const selectElement = document.getElementById('programNameSelect');
+    const searchText = searchInput.value.toLowerCase();
+    
+    // Получаем все опции
+    const options = selectElement.querySelectorAll('option');
+    
+    // Фильтруем опции
+    options.forEach(option => {
+        if (option.value === '') {
+            // Всегда показываем пустую опцию
+            option.style.display = '';
+            return;
+        }
+        
+        const optionText = option.textContent.toLowerCase();
+        if (optionText.includes(searchText)) {
+            option.style.display = '';
+        } else {
+            option.style.display = 'none';
+        }
+    });
+    
+    // Сбрасываем выбор если текущий элемент скрыт
+    const selectedOption = selectElement.options[selectElement.selectedIndex];
+    if (selectedOption && selectedOption.style.display === 'none') {
+        selectElement.selectedIndex = 0;
+        // Сбрасываем зависимые селекты
+        updateDurationOptions();
+    }
+}
+
+// Функция фильтрации регионов
+function filterRegions() {
+    const searchInput = document.getElementById('regionSearchInput');
+    const selectElement = document.getElementById('regionsSelect');
+    const searchText = searchInput.value.toLowerCase();
+    
+    // Получаем все опции
+    const options = selectElement.querySelectorAll('option');
+    
+    // Фильтруем опции
+    options.forEach(option => {
+        const optionText = option.textContent.toLowerCase();
+        if (optionText.includes(searchText)) {
+            option.style.display = '';
+        } else {
+            option.style.display = 'none';
+        }
+    });
+}
+
+// Функция для очистки поиска программ
+function clearProgramSearch() {
+    document.getElementById('programSearchInput').value = '';
+    filterPrograms();
+}
+
+// Функция для очистки поиска регионов
+function clearRegionSearch() {
+    document.getElementById('regionSearchInput').value = '';
+    filterRegions();
 }
 </script>
 {% endblock %}
