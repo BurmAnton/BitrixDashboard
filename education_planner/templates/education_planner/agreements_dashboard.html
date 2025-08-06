@@ -442,79 +442,6 @@
         </form>
     </div>
     
-    <!-- Статистика по договорам -->
-    <div class="card mb-4">
-        <div class="card-header bg-primary text-white">
-            <h5 class="mb-0"><i class="bi bi-bar-chart me-2"></i>Статистика по договорам и программам</h5>
-        </div>
-        <div class="card-body">
-            <div class="row">
-                <div class="col-lg-8">
-                    <h6 class="mb-3">Общая статистика</h6>
-                    <div class="table-responsive">
-                        <table class="table table-sm table-striped">
-                            <thead class="table-dark">
-                                <tr>
-                                    <th>Показатель</th>
-                                    <th class="text-center">Количество</th>
-                                    <th class="text-end">Сумма</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {% with total_agreements=all_agreements.count %}
-                                {% with total_places=all_agreements|sum_total_places %}
-                                {% with total_cost=all_agreements|sum_total_cost %}
-                                <tr>
-                                    <td><strong>Всего договоров</strong></td>
-                                    <td class="text-center">
-                                        <span class="badge bg-primary">{{ total_agreements }}</span>
-                                    </td>
-                                    <td class="text-end">
-                                        <span class="badge bg-success">{{ total_cost|floatformat:2 }} ₽</span>
-                                    </td>
-                                </tr>
-                                <tr>
-                                    <td><strong>Общее количество мест</strong></td>
-                                    <td class="text-center">
-                                        <span class="badge bg-info">{{ total_places }}</span>
-                                    </td>
-                                    <td class="text-end">—</td>
-                                </tr>
-                                {% if total_places > 0 %}
-                                <tr>
-                                    <td><strong>Средняя стоимость за место</strong></td>
-                                    <td class="text-center">—</td>
-                                    <td class="text-end">
-                                        <span class="badge bg-warning">{{ total_cost|div:total_places|floatformat:2 }} ₽</span>
-                                    </td>
-                                </tr>
-                                {% endif %}
-                                {% endwith %}
-                                {% endwith %}
-                                {% endwith %}
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-                <div class="col-lg-4">
-                    <h6 class="mb-3">Статистика по статусам</h6>
-                    <div class="status-stats">
-                        {% regroup all_agreements by status as status_groups %}
-                        {% for status_group in status_groups %}
-                        <div class="d-flex justify-content-between align-items-center mb-2">
-                            <span class="status-badge status-{{ status_group.grouper|lower }}">
-                                {% for choice in status_choices %}
-                                    {% if choice.0 == status_group.grouper %}{{ choice.1 }}{% endif %}
-                                {% endfor %}
-                            </span>
-                            <span class="badge bg-secondary">{{ status_group.list|length }}</span>
-                        </div>
-                        {% endfor %}
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
     
     <!-- Таблица договоров -->
     <div class="agreements-table">
@@ -527,18 +454,23 @@
                     <th>Оператор</th>
                     <th>Дата подписания</th>
                     <th>Статус</th>
+                    <th class="text-center">Количество квот</th>
+                    <th class="text-center">Средняя стоимость</th>
+                    <th class="text-end">Общая сумма</th>
                     <th>Допсоглашения</th>
                     <th>Действия</th>
                 </tr>
             </thead>
             <tbody>
                 {% for agreement in agreements %}
+                {% with agreement_places=agreement.get_total_quota_places %}
+                {% with agreement_cost=agreement.get_total_agreement_cost %}
                 <tr data-agreement-id="{{ agreement.id }}">
                     <td>
                         <button class="btn btn-sm btn-outline-secondary border-0" 
                                 onclick="toggleQuotas({{ agreement.id }})" 
                                 title="Показать/скрыть квоты">
-                            <i class="bi bi-chevron-right" id="chevron-{{ agreement.id }}"></i>
+                            <i class="bi bi-chevron-down" id="chevron-{{ agreement.id }}"></i>
                         </button>
                     </td>
                     <td>
@@ -554,7 +486,15 @@
                             {{ agreement.get_status_display }}
                         </span>
                     </td>
-
+                    <td class="text-center">{{ agreement_places }}</td>
+                    <td class="text-center">
+                        {% if agreement_places > 0 %}
+                            {{ agreement_cost|div:agreement_places|floatformat:2 }} ₽
+                        {% else %}
+                            —
+                        {% endif %}
+                    </td>
+                    <td class="text-end">{{ agreement_cost|floatformat:2 }} ₽</td>
                     <td>
                         {% for supplement in agreement.supplements.all %}
                             <div class="supplement-badge" onclick="showSupplementDetails({{ supplement.id }})">
@@ -598,9 +538,9 @@
                     </td>
                 </tr>
                 <!-- Раскрывающаяся строка с квотами -->
-                <tr id="quotas-row-{{ agreement.id }}" class="quotas-details-row" style="display: none;">
+                <tr id="quotas-row-{{ agreement.id }}" class="quotas-details-row">
                     <td></td>
-                    <td colspan="7">
+                    <td colspan="10">
                         <div class="quotas-detail-container p-3 bg-light border-top">
                             <h6 class="mb-3">
                                 <i class="bi bi-table me-2"></i>
@@ -693,9 +633,11 @@
                         </div>
                     </td>
                 </tr>
+                {% endwith %}
+                {% endwith %}
                 {% empty %}
                 <tr>
-                    <td colspan="8" class="text-center py-4 text-muted">
+                    <td colspan="11" class="text-center py-4 text-muted">
                         Договоры не найдены
                     </td>
                 </tr>
