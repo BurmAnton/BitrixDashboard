@@ -204,6 +204,18 @@ class Quota(models.Model):
         default=0,
         help_text=_('Стоимость обучения одного человека по данной квоте')
     )
+    start_date = models.DateField(
+        _('Дата начала обучения'),
+        null=True,
+        blank=True,
+        help_text=_('Планируемая дата начала обучения по данной квоте')
+    )
+    end_date = models.DateField(
+        _('Дата окончания обучения'),
+        null=True,
+        blank=True,
+        help_text=_('Планируемая дата окончания обучения по данной квоте')
+    )
     is_active = models.BooleanField(_('Активна'), default=True)
     created_at = models.DateTimeField(_('Дата создания'), auto_now_add=True)
     updated_at = models.DateTimeField(_('Дата обновления'), auto_now=True)
@@ -238,6 +250,31 @@ class Quota(models.Model):
     def formatted_total_cost(self):
         """Возвращает отформатированную общую стоимость"""
         return f"{self.total_cost:,.2f} ₽"
+    
+    @property
+    def formatted_start_date(self):
+        """Возвращает отформатированную дату начала"""
+        return self.start_date.strftime('%d.%m.%Y') if self.start_date else '—'
+    
+    @property
+    def formatted_end_date(self):
+        """Возвращает отформатированную дату окончания"""
+        return self.end_date.strftime('%d.%m.%Y') if self.end_date else '—'
+    
+    @property
+    def duration_days(self):
+        """Возвращает продолжительность обучения в днях"""
+        if self.start_date and self.end_date:
+            return (self.end_date - self.start_date).days + 1
+        return None
+    
+    def clean(self):
+        """Валидация модели"""
+        from django.core.exceptions import ValidationError
+        if self.start_date and self.end_date:
+            if self.start_date > self.end_date:
+                raise ValidationError(_('Дата начала не может быть позже даты окончания'))
+        super().clean()
 
 
 class Supplement(models.Model):

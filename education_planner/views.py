@@ -258,11 +258,29 @@ def manage_quota(request, agreement_id):
         
         if action == 'create':
             # Создание новой квоты
+            from datetime import datetime
+            
+            # Обработка дат
+            start_date = None
+            end_date = None
+            if data.get('start_date'):
+                try:
+                    start_date = datetime.strptime(data['start_date'], '%Y-%m-%d').date()
+                except ValueError:
+                    pass
+            if data.get('end_date'):
+                try:
+                    end_date = datetime.strptime(data['end_date'], '%Y-%m-%d').date()
+                except ValueError:
+                    pass
+            
             quota = Quota.objects.create(
                 agreement=agreement,
                 education_program_id=data['program_id'],
                 quantity=data['quantity'],
-                cost_per_quota=data.get('cost_per_quota', 0)
+                cost_per_quota=data.get('cost_per_quota', 0),
+                start_date=start_date,
+                end_date=end_date
             )
             # Добавляем выбранные регионы
             region_ids = data.get('regions', [])
@@ -277,9 +295,31 @@ def manage_quota(request, agreement_id):
             
         elif action == 'update':
             # Обновление существующей квоты
+            from datetime import datetime
+            
             quota = get_object_or_404(Quota, pk=data['quota_id'], agreement=agreement)
             quota.quantity = data['quantity']
             quota.cost_per_quota = data.get('cost_per_quota', quota.cost_per_quota)
+            
+            # Обработка дат
+            if 'start_date' in data:
+                if data['start_date']:
+                    try:
+                        quota.start_date = datetime.strptime(data['start_date'], '%Y-%m-%d').date()
+                    except ValueError:
+                        pass
+                else:
+                    quota.start_date = None
+                    
+            if 'end_date' in data:
+                if data['end_date']:
+                    try:
+                        quota.end_date = datetime.strptime(data['end_date'], '%Y-%m-%d').date()
+                    except ValueError:
+                        pass
+                else:
+                    quota.end_date = None
+            
             quota.save()
             
             # Обновляем регионы если они переданы
@@ -414,6 +454,8 @@ def quota_detail(request, quota_id):
                 'cost_per_quota': float(quota.cost_per_quota),
                 'region_ids': region_ids,
                 'agreement_id': quota.agreement.id,
+                'start_date': quota.start_date.strftime('%Y-%m-%d') if quota.start_date else '',
+                'end_date': quota.end_date.strftime('%Y-%m-%d') if quota.end_date else '',
                 'education_program': {
                     'id': quota.education_program.id,
                     'name': quota.education_program.name,

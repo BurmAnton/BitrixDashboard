@@ -37,7 +37,7 @@ class RegionAdmin(admin.ModelAdmin):
 class QuotaInline(admin.TabularInline):
     model = Quota
     extra = 1
-    fields = ('education_program', 'regions', 'quantity', 'cost_per_quota', 'is_active')
+    fields = ('education_program', 'regions', 'quantity', 'cost_per_quota', 'start_date', 'end_date', 'is_active')
     readonly_fields = ('created_at', 'updated_at')
     filter_horizontal = ('regions',)
 
@@ -74,17 +74,20 @@ class EduAgreementAdmin(admin.ModelAdmin):
 
 @admin.register(Quota)
 class QuotaAdmin(admin.ModelAdmin):
-    list_display = ('agreement', 'education_program', 'regions_display', 'quantity', 'cost_per_quota', 'formatted_total_cost', 'is_active', 'created_at')
-    list_filter = ('agreement', 'education_program', 'regions', 'is_active', 'created_at')
+    list_display = ('agreement', 'education_program', 'regions_display', 'quantity', 'cost_per_quota', 'formatted_start_date', 'formatted_end_date', 'is_active', 'created_at')
+    list_filter = ('agreement', 'education_program', 'regions', 'is_active', 'start_date', 'end_date', 'created_at')
     search_fields = ('agreement__number', 'agreement__name', 'education_program__name', 'regions__name')
-    readonly_fields = ('created_at', 'updated_at', 'formatted_total_cost')
+    readonly_fields = ('created_at', 'updated_at', 'formatted_total_cost', 'formatted_start_date', 'formatted_end_date', 'duration_days')
     filter_horizontal = ('regions',)
     fieldsets = (
         ('Основная информация', {
             'fields': ('agreement', 'education_program', 'regions', 'quantity', 'cost_per_quota')
         }),
+        ('Период обучения', {
+            'fields': ('start_date', 'end_date'),
+        }),
         ('Статистика', {
-            'fields': ('formatted_total_cost',),
+            'fields': ('formatted_total_cost', 'formatted_start_date', 'formatted_end_date', 'duration_days'),
             'classes': ('collapse',)
         }),
         ('Управление', {
