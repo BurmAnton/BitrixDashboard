@@ -21,6 +21,7 @@ urlpatterns = [
     path('quotas/analyze/', views.analyze_quotas_excel, name='analyze_quotas_excel'),
     path('quotas/regions/save/', views.save_region_mappings, name='save_region_mappings'),
     path('quotas/import/', views.import_quotas_excel, name='import_quotas_excel'),
+    path('quotas/import/direct/', views.import_quotas_excel_direct, name='import_quotas_excel_direct'),
     path('quotas/template/', views.download_quota_template, name='download_quota_template'),
     
     # Маршруты для допсоглашений

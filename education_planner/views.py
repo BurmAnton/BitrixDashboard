@@ -697,6 +697,7 @@ def analyze_quotas_excel(request):
         # Сохраняем данные файла в сессии для последующего импорта
         request.session['import_file_data'] = df.to_json()
         request.session['import_file_name'] = excel_file.name
+        request.session.modified = True  # Принудительно сохраняем сессию
         
         return JsonResponse({
             'success': True,
@@ -722,11 +723,246 @@ def save_region_mappings(request):
         
         # Сохраняем маппинг в сессии
         request.session['region_mappings'] = region_mappings
+        request.session.modified = True  # Принудительно сохраняем сессию
         
         return JsonResponse({'success': True, 'message': 'Настройки регионов сохранены'})
         
     except Exception as e:
         return JsonResponse({'success': False, 'message': f'Ошибка сохранения настроек: {str(e)}'})
+
+
+def process_excel_import(df, file_name, region_mappings={}, use_old_region_logic=False):
+    """Универсальная функция для обработки импорта Excel"""
+    from datetime import datetime
+    import pandas as pd
+    
+    # Проверяем необходимые колонки
+    required_columns = [
+        'договор_номер', 'программа_название', 'программа_тип', 'программа_часы', 
+        'программа_форма', 'регионы', 'количество', 'стоимость_за_заявку'
+    ]
+    
+    missing_columns = [col for col in required_columns if col not in df.columns]
+    if missing_columns:
+        return JsonResponse({
+            'success': False, 
+            'message': f'Отсутствуют обязательные колонки: {", ".join(missing_columns)}'
+        })
+    
+    # Статистика
+    created_count = 0
+    error_count = 0
+    errors = []
+    
+    with transaction.atomic():
+        for index, row in df.iterrows():
+            try:
+                agreement_number = clean_text_data(row['договор_номер'])
+                program_name = clean_text_data(row['программа_название'])
+                program_type = clean_text_data(row['программа_тип'])
+                program_form = clean_text_data(row['программа_форма'])
+                regions_text = clean_text_data(row['регионы'])
+                
+                if not all([agreement_number, program_name, regions_text]):
+                    errors.append(f'Строка {index + 2}: Отсутствуют обязательные данные')
+                    error_count += 1
+                    continue
+
+                # Ищем договор
+                agreement = EduAgreement.objects.filter(number=agreement_number).first()
+                if not agreement:
+                    errors.append(f'Строка {index + 2}: Договор {agreement_number} не найден')
+                    error_count += 1
+                    continue
+
+                # Ищем или создаем программу
+                program = EducationProgram.objects.filter(
+                    name__icontains=program_name,
+                    academic_hours=int(row['программа_часы'])
+                ).first()
+                
+                if not program:
+                    # Создаем программу автоматически
+                    try:
+                        # Определяем тип программы
+                        program_type_choices = {
+                            'дпо пк': EducationProgram.ProgramType.QUALIFICATION_UPGRADE,
+                            'повышение квалификации': EducationProgram.ProgramType.QUALIFICATION_UPGRADE,
+                            'профессиональная переподготовка': EducationProgram.ProgramType.PROFESSIONAL_RETRAINING,
+                            'программы профессионального обучения': EducationProgram.ProgramType.PROFESSIONAL_TRAINING
+                        }
+                        
+                        program_type_key = program_type.lower()
+                        program_type_value = program_type_choices.get(program_type_key, EducationProgram.ProgramType.QUALIFICATION_UPGRADE)
+                        
+                        # Определяем форму обучения
+                        study_form_choices = {
+                            'очная': EducationProgram.StudyForm.FULL_TIME,
+                            'заочная': EducationProgram.StudyForm.PART_TIME,
+                            'очно-заочная': EducationProgram.StudyForm.MIXED
+                        }
+                        
+                        study_form_key = program_form.lower()
+                        study_form_value = study_form_choices.get(study_form_key, EducationProgram.StudyForm.FULL_TIME)
+                        
+                        program = EducationProgram.objects.create(
+                            name=program_name,
+                            program_type=program_type_value,
+                            academic_hours=int(row['программа_часы']),
+                            study_form=study_form_value,
+                            description=f'Автоматически создана при импорте квот'
+                        )
+                        
+                    except Exception as e:
+                        errors.append(f'Строка {index + 2}: Ошибка создания программы "{program_name}" - {str(e)}')
+                        error_count += 1
+                        continue
+
+                # Парсим регионы
+                regions_names = [clean_text_data(name) for name in regions_text.split(',') if clean_text_data(name)]
+                regions = []
+                
+                for region_name in regions_names:
+                    if use_old_region_logic:
+                        # Старая логика с автоматическим созданием
+                        region, message = find_or_create_region(region_name)
+                        if region:
+                            regions.append(region)
+                        else:
+                            errors.append(f'Строка {index + 2}: {message}')
+                    else:
+                        # Новая логика с пользовательскими выборами
+                        region, match_type = find_region_without_creating(region_name)
+                        
+                        if region:
+                            regions.append(region)
+                        else:
+                            # Если не найден, ищем в пользовательских выборах
+                            if region_name in region_mappings:
+                                mapping_info = region_mappings[region_name]
+                                
+                                if mapping_info['action'] == 'map':
+                                    # Пользователь выбрал существующий регион
+                                    mapped_region = Region.objects.filter(id=mapping_info['region_id']).first()
+                                    if mapped_region:
+                                        regions.append(mapped_region)
+                                    else:
+                                        errors.append(f'Строка {index + 2}: Выбранный регион (ID: {mapping_info["region_id"]}) не найден')
+                                        
+                                elif mapping_info['action'] == 'create':
+                                    # Пользователь выбрал создать новый регион
+                                    new_region_name = mapping_info['new_name']
+                                    
+                                    # Проверяем, не создан ли уже этот регион
+                                    existing_region = Region.objects.filter(name=new_region_name).first()
+                                    if existing_region:
+                                        regions.append(existing_region)
+                                    else:
+                                        try:
+                                            new_region = Region.objects.create(
+                                                name=new_region_name,
+                                                code=new_region_name[:10].upper().replace(' ', '_').replace('-', '_'),
+                                                is_active=True
+                                            )
+                                            regions.append(new_region)
+                                        except Exception as e:
+                                            errors.append(f'Строка {index + 2}: Ошибка создания региона "{new_region_name}": {str(e)}')
+                                            
+                                elif mapping_info['action'] == 'skip':
+                                    # Пользователь выбрал пропустить этот регион
+                                    continue
+                            else:
+                                # Регион не найден и нет пользовательского выбора
+                                errors.append(f'Строка {index + 2}: Регион "{region_name}" не найден и не настроен')
+                
+                if not regions:
+                    error_count += 1
+                    continue
+
+                # Обрабатываем даты
+                start_date = None
+                end_date = None
+                
+                if 'дата_начала' in df.columns and pd.notna(row['дата_начала']):
+                    try:
+                        start_date = datetime.strptime(str(row['дата_начала']), '%d.%m.%Y').date()
+                    except:
+                        pass
+                
+                if 'дата_окончания' in df.columns and pd.notna(row['дата_окончания']):
+                    try:
+                        end_date = datetime.strptime(str(row['дата_окончания']), '%d.%m.%Y').date()
+                    except:
+                        pass
+
+                # Создаем квоту
+                quota = Quota.objects.create(
+                    agreement=agreement,
+                    education_program=program,
+                    quantity=int(row['количество']),
+                    cost_per_quota=float(row['стоимость_за_заявку']),
+                    start_date=start_date,
+                    end_date=end_date
+                )
+                
+                # Устанавливаем регионы
+                quota.regions.set(regions)
+                
+                created_count += 1
+                
+            except Exception as e:
+                errors.append(f'Строка {index + 2}: Ошибка импорта - {str(e)}')
+                error_count += 1
+
+    # Возвращаем результат
+    return JsonResponse({
+        'success': True,
+        'created_count': created_count,
+        'error_count': error_count,
+        'errors': errors[:10]  # Ограничиваем количество ошибок для отображения
+    })
+
+
+@login_required
+@require_http_methods(["POST"])
+def import_quotas_excel_direct(request):
+    """Прямой импорт квот из Excel файла БЕЗ интерактивного анализа (для совместимости)"""
+    from django.core.files.storage import default_storage
+    from django.core.files.base import ContentFile
+    import pandas as pd
+    from datetime import datetime
+    import os
+    
+    if not request.FILES.get('excel_file'):
+        return JsonResponse({'success': False, 'message': 'Файл не выбран'})
+    
+    excel_file = request.FILES['excel_file']
+    
+    # Проверяем расширение файла
+    if not excel_file.name.endswith(('.xlsx', '.xls')):
+        return JsonResponse({'success': False, 'message': 'Поддерживаются только файлы Excel (.xlsx, .xls)'})
+    
+    try:
+        # Сохраняем временный файл
+        file_name = f'temp_direct_import_{timezone.now().timestamp()}_{excel_file.name}'
+        file_path = default_storage.save(file_name, ContentFile(excel_file.read()))
+        full_path = default_storage.path(file_path)
+        
+        # Читаем Excel файл
+        df = pd.read_excel(full_path)
+        
+        # Удаляем временный файл
+        if default_storage.exists(file_path):
+            default_storage.delete(file_path)
+        
+        # Выполняем импорт с автоматическим созданием регионов (старая логика)
+        return process_excel_import(df, excel_file.name, region_mappings={}, use_old_region_logic=True)
+        
+    except Exception as e:
+        # Удаляем временный файл в случае ошибки
+        if 'file_path' in locals() and default_storage.exists(file_path):
+            default_storage.delete(file_path)
+        return JsonResponse({'success': False, 'message': f'Ошибка импорта файла: {str(e)}'})
 
 
 @login_required
@@ -742,11 +978,31 @@ def import_quotas_excel(request):
         import_file_data = request.session.get('import_file_data')
         region_mappings = request.session.get('region_mappings', {})
         
+        # Отладочная информация
+        session_keys = list(request.session.keys())
+        print(f"DEBUG: Ключи сессии: {session_keys}")
+        print(f"DEBUG: Есть import_file_data: {import_file_data is not None}")
+        print(f"DEBUG: Размер region_mappings: {len(region_mappings)}")
+        
         if not import_file_data:
-            return JsonResponse({'success': False, 'message': 'Данные файла не найдены. Повторите анализ файла.'})
+            return JsonResponse({
+                'success': False, 
+                'message': f'Данные файла не найдены. Ключи сессии: {session_keys}. Повторите анализ файла.'
+            })
         
         # Восстанавливаем DataFrame из JSON
         df = pd.read_json(import_file_data)
+        file_name = request.session.get('import_file_name', 'excel_file.xlsx')
+        
+        # Очищаем сессию
+        del request.session['import_file_data']
+        if 'region_mappings' in request.session:
+            del request.session['region_mappings']
+        if 'import_file_name' in request.session:
+            del request.session['import_file_name']
+        
+        # Выполняем импорт с пользовательскими настройками
+        return process_excel_import(df, file_name, region_mappings, use_old_region_logic=False)
         
         # Проверяем необходимые колонки
         required_columns = [

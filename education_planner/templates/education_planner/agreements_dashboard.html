@@ -2001,8 +2001,8 @@ function submitImportForm() {
     // Создаем FormData
     const formData = new FormData(form);
     
-    // Отправляем файл на анализ
-    fetch('{% url "education_planner:analyze_quotas_excel" %}', {
+    // ВРЕМЕННО: Отправляем файл на прямой импорт для тестирования
+    fetch('{% url "education_planner:import_quotas_excel" %}', {
         method: 'POST',
         body: formData,
         headers: {
@@ -2012,30 +2012,37 @@ function submitImportForm() {
     .then(response => response.json())
     .then(data => {
         progressDiv.classList.add('d-none');
+        resultsDiv.classList.remove('d-none');
         
         if (data.success) {
-            if (data.needs_user_input) {
-                // Есть неопознанные регионы - показываем модал настройки
-                showRegionMappingModal(data.unrecognized_regions);
-                
-                resultsDiv.innerHTML = `
-                    <div class="alert alert-warning">
-                        <i class="bi bi-exclamation-triangle me-2"></i>
-                        <strong>Требуется настройка регионов</strong><br>
-                        Найдено строк: ${data.total_rows}<br>
-                        Неопознанных регионов: ${data.unrecognized_regions.length}
-                    </div>
-                `;
-            } else {
-                // Нет неопознанных регионов - можем сразу импортировать
-                proceedWithImport();
-            }
+            resultsDiv.innerHTML = `
+                <div class="alert alert-success">
+                    <i class="bi bi-check-circle me-2"></i>
+                    <strong>Импорт завершен успешно!</strong>
+                    <ul class="mb-0 mt-2">
+                        <li>Создано квот: ${data.created_count}</li>
+                        ${data.error_count > 0 ? `<li>Ошибок: ${data.error_count}</li>` : ''}
+                    </ul>
+                    ${data.errors && data.errors.length > 0 ? `
+                        <div class="mt-2">
+                            <strong>Детали ошибок:</strong>
+                            <ul class="mb-0">
+                                ${data.errors.map(error => `<li>${error}</li>`).join('')}
+                            </ul>
+                        </div>
+                    ` : ''}
+                </div>
+            `;
+            
+            // Перезагружаем страницу через 3 секунды
+            setTimeout(() => {
+                location.reload();
+            }, 3000);
         } else {
-            resultsDiv.classList.remove('d-none');
             resultsDiv.innerHTML = `
                 <div class="alert alert-danger">
                     <i class="bi bi-exclamation-triangle me-2"></i>
-                    <strong>Ошибка анализа файла:</strong> ${data.message}
+                    <strong>Ошибка импорта:</strong> ${data.message}
                 </div>
             `;
         }
