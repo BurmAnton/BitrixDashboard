@@ -1368,7 +1368,7 @@ def analyze_supplement_excel(request):
             return JsonResponse({'success': False, 'message': f'Ошибка чтения файла: {str(e)}'})
         
         # Проверяем наличие необходимых колонок
-        required_columns = ['Программа обучения', 'Форма обучения', 'Регионы реализации', 'Количество мест']
+        required_columns = ['Программа обучения', 'Форма обучения', 'Длительность', 'Регионы реализации', 'Количество мест']
         missing_columns = [col for col in required_columns if col not in df.columns]
         
         if missing_columns:
@@ -1382,11 +1382,12 @@ def analyze_supplement_excel(request):
         unrecognized_regions = set()
         
         for index, row in df.iterrows():
-            if pd.isna(row['Программа обучения']) or pd.isna(row['Количество мест']):
+            if pd.isna(row['Программа обучения']) or pd.isna(row['Количество мест']) or pd.isna(row['Длительность']):
                 continue
             
             program_name = clean_text_data(str(row['Программа обучения']))
             program_type = clean_text_data(str(row.get('Форма обучения', '')))
+            duration_text = clean_text_data(str(row.get('Длительность', '')))
             regions_text = clean_text_data(str(row['Регионы реализации']))
             
             try:
@@ -1394,25 +1395,52 @@ def analyze_supplement_excel(request):
             except (ValueError, TypeError):
                 continue
             
+            # Парсим длительность (академические часы)
+            duration = None
+            if duration_text:
+                try:
+                    # Извлекаем число из строки (например, "72 ч." -> 72)
+                    import re
+                    duration_match = re.search(r'(\d+)', duration_text)
+                    if duration_match:
+                        duration = int(duration_match.group(1))
+                except (ValueError, TypeError):
+                    pass
+            
             if quantity <= 0:
                 continue
+            
+            # Валидация длительности
+            if not duration:
+                continue  # Пропускаем строки без корректной длительности
             
             # Ищем программу
             program = None
             programs = EducationProgram.objects.filter(name__icontains=program_name)
             
+            # Фильтруем по типу программы
             if program_type:
                 for pt_choice, pt_display in EducationProgram.ProgramType.choices:
                     if program_type.lower() in pt_display.lower():
                         programs = programs.filter(program_type=pt_choice)
                         break
             
+            # Фильтруем по длительности
+            if duration:
+                programs = programs.filter(academic_hours=duration)
+            
             if programs.exists():
                 program = programs.first()
             else:
+                error_parts = [program_name]
+                if program_type:
+                    error_parts.append(f"тип: {program_type}")
+                if duration:
+                    error_parts.append(f"длительность: {duration} ч.")
+                
                 return JsonResponse({
                     'success': False,
-                    'message': f'Программа не найдена: {program_name} ({program_type})'
+                    'message': f'Программа не найдена: {" | ".join(error_parts)}'
                 })
             
             # Парсим регионы
@@ -1621,6 +1649,10 @@ def download_supplement_template(request):
                 'Очно-заочная',
                 'Заочная'
             ],
+            'Длительность': [
+                '72 ч.',
+                '250 ч.'
+            ],
             'Регионы реализации': [
                 'Республика Татарстан, Пермский край',
                 'Московская область'
@@ -1638,6 +1670,7 @@ def download_supplement_template(request):
             'Поле': [
                 'Программа обучения',
                 'Форма обучения', 
+                'Длительность',
                 'Регионы реализации',
                 'Количество мест',
                 'Дата начала',
@@ -1647,6 +1680,7 @@ def download_supplement_template(request):
             'Описание': [
                 'Название программы обучения (должна существовать в системе)',
                 'Тип программы: Повышение квалификации, Профессиональная переподготовка, Курсы',
+                'Длительность в академических часах (например: "72 ч." или просто "72")',
                 'Список регионов через запятую. Регионы должны быть в системе.',
                 'Целое число больше 0',
                 'Дата в формате ДД.ММ.ГГГГ',
@@ -1654,6 +1688,7 @@ def download_supplement_template(request):
                 'Стоимость в рублях (число)'
             ],
             'Обязательность': [
+                'Обязательно',
                 'Обязательно',
                 'Обязательно',
                 'Обязательно', 
