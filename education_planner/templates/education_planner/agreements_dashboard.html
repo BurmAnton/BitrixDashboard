@@ -2002,7 +2002,7 @@ function submitImportForm() {
     const formData = new FormData(form);
     
     // ВРЕМЕННО: Отправляем файл на прямой импорт для тестирования
-    fetch('{% url "education_planner:import_quotas_excel" %}', {
+    fetch('{% url "education_planner:import_quotas_excel_direct" %}', {
         method: 'POST',
         body: formData,
         headers: {
