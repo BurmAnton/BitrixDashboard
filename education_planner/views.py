@@ -14,8 +14,95 @@ from .models import (
 )
 import json
 import pandas as pd
+import re
 
 # Create your views here.
+
+def clean_text_data(text):
+    """Очистка текстовых данных от лишних символов"""
+    if not text or pd.isna(text):
+        return ""
+    
+    text = str(text).strip()
+    # Убираем переводы строк и табуляции
+    text = re.sub(r'[\n\r\t]+', ' ', text)
+    # Убираем множественные пробелы
+    text = re.sub(r'\s+', ' ', text)
+    # Убираем пробелы в начале и конце
+    text = text.strip()
+    
+    return text
+
+
+def find_or_create_region(region_name_input):
+    """Поиск региона по названию или создание псевдонима"""
+    region_name = clean_text_data(region_name_input)
+    
+    if not region_name:
+        return None, f'Пустое название региона'
+    
+    # Сначала точный поиск
+    region = Region.objects.filter(name__iexact=region_name).first()
+    if region:
+        return region, None
+    
+    # Поиск по частичному совпадению
+    region = Region.objects.filter(name__icontains=region_name).first()
+    if region:
+        return region, None
+    
+    # Поиск в обратную сторону (может регион содержит введенное название)
+    region = Region.objects.filter(name__icontains=region_name.split()[0] if region_name.split() else region_name).first()
+    if region:
+        return region, None
+    
+    # Если не найден, пытаемся определить по ключевым словам
+    region_mapping = {
+        'москва': 'Москва',
+        'московская': 'Московская область',
+        'спб': 'Санкт-Петербург',
+        'санкт-петербург': 'Санкт-Петербург',
+        'ленинградская': 'Ленинградская область',
+        'екатеринбург': 'Свердловская область',
+        'новосибирск': 'Новосибирская область',
+        'казань': 'Республика Татарстан',
+        'нижний новгород': 'Нижегородская область',
+        'челябинск': 'Челябинская область',
+        'омск': 'Омская область',
+        'самара': 'Самарская область',
+        'ростов': 'Ростовская область',
+        'уфа': 'Республика Башкортостан',
+        'красноярск': 'Красноярский край',
+        'воронеж': 'Воронежская область',
+        'пермь': 'Пермский край',
+        'волгоград': 'Волгоградская область',
+    }
+    
+    region_lower = region_name.lower()
+    for key, standard_name in region_mapping.items():
+        if key in region_lower:
+            # Ищем стандартное название
+            region = Region.objects.filter(name__icontains=standard_name).first()
+            if region:
+                return region, None
+            # Если стандартного тоже нет, создаем новый
+            region = Region.objects.create(
+                name=standard_name,
+                code=standard_name[:10].upper().replace(' ', '_'),
+                is_active=True
+            )
+            return region, f'Создан регион "{standard_name}" на основе "{region_name}"'
+    
+    # Если ничего не подошло, создаем новый регион
+    try:
+        region = Region.objects.create(
+            name=region_name,
+            code=region_name[:10].upper().replace(' ', '_').replace('-', '_'),
+            is_active=True
+        )
+        return region, f'Создан новый регион "{region_name}"'
+    except Exception as e:
+        return None, f'Ошибка создания региона "{region_name}": {str(e)}'
 
 @login_required
 def program_list(request):
@@ -501,7 +588,7 @@ def import_quotas_excel(request):
         
         # Проверяем необходимые колонки
         required_columns = [
-            'договор_номер', 'программа_название', 'программа_часы', 
+            'договор_номер', 'программа_название', 'программа_тип', 'программа_часы', 
             'программа_форма', 'регионы', 'количество', 'стоимость_за_заявку'
         ]
         
@@ -520,40 +607,86 @@ def import_quotas_excel(request):
         with transaction.atomic():
             for index, row in df.iterrows():
                 try:
+                    # Очищаем текстовые данные
+                    agreement_number = clean_text_data(row['договор_номер'])
+                    program_name = clean_text_data(row['программа_название'])
+                    program_type = clean_text_data(row['программа_тип'])
+                    program_form = clean_text_data(row['программа_форма'])
+                    regions_text = clean_text_data(row['регионы'])
+                    
                     # Ищем договор
                     agreement = EduAgreement.objects.filter(
-                        number=str(row['договор_номер']).strip()
+                        number=agreement_number
                     ).first()
                     
                     if not agreement:
-                        errors.append(f'Строка {index + 2}: Договор {row["договор_номер"]} не найден')
+                        errors.append(f'Строка {index + 2}: Договор {agreement_number} не найден')
                         error_count += 1
                         continue
 
-                    # Ищем программу обучения
+                    # Ищем или создаем программу обучения
                     program = EducationProgram.objects.filter(
-                        name__icontains=str(row['программа_название']).strip(),
+                        name__icontains=program_name,
                         academic_hours=int(row['программа_часы'])
                     ).first()
                     
                     if not program:
-                        errors.append(f'Строка {index + 2}: Программа "{row["программа_название"]}" ({row["программа_часы"]} ч.) не найдена')
-                        error_count += 1
-                        continue
+                        # Создаем программу автоматически
+                        try:
+                            # Определяем тип программы
+                            program_type_choices = {
+                                'повышение квалификации': EducationProgram.ProgramType.QUALIFICATION_UPGRADE,
+                                'профессиональная переподготовка': EducationProgram.ProgramType.PROFESSIONAL_RETRAINING,
+                                'программы профессионального обучения': EducationProgram.ProgramType.PROFESSIONAL_TRAINING
+                            }
+                            
+                            program_type_key = program_type.lower()
+                            program_type_value = program_type_choices.get(program_type_key, EducationProgram.ProgramType.QUALIFICATION_UPGRADE)
+                            
+                            # Определяем форму обучения
+                            study_form_choices = {
+                                'очная': EducationProgram.StudyForm.FULL_TIME,
+                                'заочная': EducationProgram.StudyForm.PART_TIME,
+                                'очно-заочная': EducationProgram.StudyForm.MIXED
+                            }
+                            
+                            study_form_key = program_form.lower()
+                            study_form_value = study_form_choices.get(study_form_key, EducationProgram.StudyForm.FULL_TIME)
+                            
+                            program = EducationProgram.objects.create(
+                                name=program_name,
+                                program_type=program_type_value,
+                                academic_hours=int(row['программа_часы']),
+                                study_form=study_form_value,
+                                description=f'Автоматически создана при импорте квот'
+                            )
+                            
+                        except Exception as e:
+                            errors.append(f'Строка {index + 2}: Ошибка создания программы "{program_name}" - {str(e)}')
+                            error_count += 1
+                            continue
 
-                    # Парсим регионы
-                    regions_names = [name.strip() for name in str(row['регионы']).split(',')]
+                    # Парсим регионы с автоматическим созданием
+                    regions_names = [clean_text_data(name) for name in regions_text.split(',') if clean_text_data(name)]
                     regions = []
+                    region_messages = []
+                    
                     for region_name in regions_names:
-                        region = Region.objects.filter(name__icontains=region_name).first()
+                        region, message = find_or_create_region(region_name)
                         if region:
                             regions.append(region)
+                            if message:
+                                region_messages.append(f'Строка {index + 2}: {message}')
                         else:
-                            errors.append(f'Строка {index + 2}: Регион "{region_name}" не найден')
+                            errors.append(f'Строка {index + 2}: {message}')
                     
                     if not regions:
                         error_count += 1
                         continue
+                    
+                    # Добавляем информационные сообщения о созданных регионах
+                    if region_messages:
+                        errors.extend(region_messages)
 
                     # Обрабатываем даты
                     start_date = None
@@ -636,6 +769,7 @@ def download_quota_template(request):
     sample_data = {
         'договор_номер': ['ДОГ-001', 'ДОГ-002'],
         'программа_название': ['Основы искусственного интеллекта', 'Специалист по борьбе с беспилотными летательными аппаратами'],
+        'программа_тип': ['Повышение квалификации', 'Профессиональная переподготовка'],
         'программа_часы': [144, 72],
         'программа_форма': ['Очная', 'Заочная'],
         'регионы': ['Москва, Московская область', 'Санкт-Петербург'],
@@ -656,22 +790,23 @@ def download_quota_template(request):
         # Инструкции на отдельном листе
         instructions = pd.DataFrame({
             'Колонка': [
-                'договор_номер', 'программа_название', 'программа_часы', 'программа_форма',
+                'договор_номер', 'программа_название', 'программа_тип', 'программа_часы', 'программа_форма',
                 'регионы', 'количество', 'стоимость_за_заявку', 'дата_начала', 'дата_окончания'
             ],
             'Описание': [
                 'Номер договора (должен существовать в системе)',
-                'Название программы обучения (должна существовать в системе)',
+                'Название программы обучения (создается автоматически если не существует)',
+                'Тип программы: Повышение квалификации, Профессиональная переподготовка, Программы профессионального обучения',
                 'Количество академических часов программы',
                 'Форма обучения (Очная/Заочная/Очно-заочная)',
-                'Регионы через запятую (должны существовать в системе)',
+                'Регионы через запятую (добавляются как псевдонимы если не найдены)',
                 'Количество мест по квоте (целое число)',
                 'Стоимость обучения одного человека (число с точкой)',
                 'Дата начала обучения в формате ДД.ММ.ГГГГ (необязательно)',
                 'Дата окончания обучения в формате ДД.ММ.ГГГГ (необязательно)'
             ],
             'Обязательность': [
-                'Обязательно', 'Обязательно', 'Обязательно', 'Обязательно',
+                'Обязательно', 'Обязательно', 'Обязательно', 'Обязательно', 'Обязательно',
                 'Обязательно', 'Обязательно', 'Обязательно', 'Необязательно', 'Необязательно'
             ]
         })

@@ -5,10 +5,54 @@ from education_planner.models import EduAgreement, Quota, EducationProgram, Regi
 import pandas as pd
 from datetime import datetime
 import os
+import re
 
 
 class Command(BaseCommand):
     help = 'Импорт квот из Excel файла'
+    
+    def clean_text_data(self, text):
+        """Очистка текстовых данных от лишних символов"""
+        if not text or pd.isna(text):
+            return ""
+        
+        text = str(text).strip()
+        # Убираем переводы строк и табуляции
+        text = re.sub(r'[\n\r\t]+', ' ', text)
+        # Убираем множественные пробелы
+        text = re.sub(r'\s+', ' ', text)
+        # Убираем пробелы в начале и конце
+        text = text.strip()
+        
+        return text
+    
+    def find_or_create_region(self, region_name_input):
+        """Поиск региона по названию или создание псевдонима"""
+        region_name = self.clean_text_data(region_name_input)
+        
+        if not region_name:
+            return None, f'Пустое название региона'
+        
+        # Сначала точный поиск
+        region = Region.objects.filter(name__iexact=region_name).first()
+        if region:
+            return region, None
+        
+        # Поиск по частичному совпадению
+        region = Region.objects.filter(name__icontains=region_name).first()
+        if region:
+            return region, None
+        
+        # Если не найден, создаем новый регион
+        try:
+            region = Region.objects.create(
+                name=region_name,
+                code=region_name[:10].upper().replace(' ', '_').replace('-', '_'),
+                is_active=True
+            )
+            return region, f'Создан новый регион "{region_name}"'
+        except Exception as e:
+            return None, f'Ошибка создания региона "{region_name}": {str(e)}'
 
     def add_arguments(self, parser):
         parser.add_argument(
@@ -35,7 +79,7 @@ class Command(BaseCommand):
             
             # Проверяем необходимые колонки
             required_columns = [
-                'договор_номер', 'программа_название', 'программа_часы', 
+                'договор_номер', 'программа_название', 'программа_тип', 'программа_часы', 
                 'программа_форма', 'регионы', 'количество', 'стоимость_за_заявку'
             ]
             optional_columns = ['дата_начала', 'дата_окончания']
@@ -54,39 +98,89 @@ class Command(BaseCommand):
             with transaction.atomic():
                 for index, row in df.iterrows():
                     try:
+                        # Очищаем текстовые данные
+                        agreement_number = self.clean_text_data(row['договор_номер'])
+                        program_name = self.clean_text_data(row['программа_название'])
+                        program_type = self.clean_text_data(row['программа_тип'])
+                        program_form = self.clean_text_data(row['программа_форма'])
+                        regions_text = self.clean_text_data(row['регионы'])
+                        
                         # Ищем договор
                         agreement = EduAgreement.objects.filter(
-                            number=str(row['договор_номер']).strip()
+                            number=agreement_number
                         ).first()
                         
                         if not agreement:
-                            error_msg = f'Строка {index + 2}: Договор {row["договор_номер"]} не найден'
+                            error_msg = f'Строка {index + 2}: Договор {agreement_number} не найден'
                             errors.append(error_msg)
                             error_count += 1
                             continue
 
-                        # Ищем программу обучения
+                        # Ищем или создаем программу обучения
                         program = EducationProgram.objects.filter(
-                            name__icontains=str(row['программа_название']).strip(),
+                            name__icontains=program_name,
                             academic_hours=int(row['программа_часы'])
                         ).first()
                         
                         if not program:
-                            error_msg = f'Строка {index + 2}: Программа "{row["программа_название"]}" ({row["программа_часы"]} ч.) не найдена'
-                            errors.append(error_msg)
-                            error_count += 1
-                            continue
+                            # Создаем программу автоматически
+                            try:
+                                # Определяем тип программы
+                                program_type_choices = {
+                                    'повышение квалификации': EducationProgram.ProgramType.QUALIFICATION_UPGRADE,
+                                    'профессиональная переподготовка': EducationProgram.ProgramType.PROFESSIONAL_RETRAINING,
+                                    'программы профессионального обучения': EducationProgram.ProgramType.PROFESSIONAL_TRAINING
+                                }
+                                
+                                program_type_key = program_type.lower()
+                                program_type_value = program_type_choices.get(program_type_key, EducationProgram.ProgramType.QUALIFICATION_UPGRADE)
+                                
+                                # Определяем форму обучения
+                                study_form_choices = {
+                                    'очная': EducationProgram.StudyForm.FULL_TIME,
+                                    'заочная': EducationProgram.StudyForm.PART_TIME,
+                                    'очно-заочная': EducationProgram.StudyForm.MIXED
+                                }
+                                
+                                study_form_key = program_form.lower()
+                                study_form_value = study_form_choices.get(study_form_key, EducationProgram.StudyForm.FULL_TIME)
+                                
+                                program = EducationProgram.objects.create(
+                                    name=program_name,
+                                    program_type=program_type_value,
+                                    academic_hours=int(row['программа_часы']),
+                                    study_form=study_form_value,
+                                    description=f'Автоматически создана при импорте квот'
+                                )
+                                
+                                self.stdout.write(
+                                    self.style.SUCCESS(
+                                        f'Строка {index + 2}: Создана программа "{program_name}"'
+                                    )
+                                )
+                                
+                            except Exception as e:
+                                error_msg = f'Строка {index + 2}: Ошибка создания программы "{program_name}" - {str(e)}'
+                                errors.append(error_msg)
+                                error_count += 1
+                                continue
 
-                        # Парсим регионы
-                        regions_names = [name.strip() for name in str(row['регионы']).split(',')]
+                        # Парсим регионы с автоматическим созданием
+                        regions_names = [self.clean_text_data(name) for name in regions_text.split(',') if self.clean_text_data(name)]
                         regions = []
+                        region_messages = []
+                        
                         for region_name in regions_names:
-                            region = Region.objects.filter(name__icontains=region_name).first()
+                            region, message = self.find_or_create_region(region_name)
                             if region:
                                 regions.append(region)
+                                if message:
+                                    region_messages.append(f'Строка {index + 2}: {message}')
+                                    self.stdout.write(
+                                        self.style.WARNING(f'Строка {index + 2}: {message}')
+                                    )
                             else:
-                                error_msg = f'Строка {index + 2}: Регион "{region_name}" не найден'
-                                errors.append(error_msg)
+                                errors.append(f'Строка {index + 2}: {message}')
                         
                         if not regions:
                             error_count += 1
