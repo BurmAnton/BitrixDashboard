@@ -1,0 +1,2683 @@
+{% extends 'base.html' %}
+{% load form_extras %}
+{% load static %}
+
+{% block title %}Управление договорами на обучение{% endblock %}
+
+{% block extra_css %}
+
+<style>
+    .container {
+        max-width: 90% !important; 
+    }
+    .agreements-container {
+        padding: 20px;
+    }
+    
+    .filters-section {
+        background: #f8f9fa;
+        padding: 20px;
+        border-radius: 8px;
+        margin-bottom: 20px;
+    }
+    
+    .agreements-table {
+        background: white;
+        border-radius: 8px;
+        overflow: hidden;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    
+    .table-actions {
+        display: flex;
+        gap: 10px;
+    }
+    
+    .quota-badge {
+        display: inline-block;
+        padding: 4px 8px;
+        background: #e3f2fd;
+        border-radius: 4px;
+        font-size: 0.85rem;
+        margin: 2px;
+    }
+    
+    .supplement-badge {
+        display: inline-block;
+        padding: 4px 8px;
+        background: #fff3e0;
+        border-radius: 4px;
+        font-size: 0.85rem;
+        margin: 2px;
+        cursor: pointer;
+    }
+    
+    .supplement-badge:hover {
+        background: #ffe0b2;
+    }
+    
+    .status-badge {
+        padding: 4px 12px;
+        border-radius: 4px;
+        font-size: 0.85rem;
+        font-weight: 500;
+    }
+    
+    .status-negotiation { background: #e3f2fd; color: #1976d2; }
+    .status-signing { background: #fff3e0; color: #f57c00; }
+    .status-signed { background: #e8f5e9; color: #388e3c; }
+    .status-completed { background: #f3e5f5; color: #7b1fa2; }
+    
+    .modal-header {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+    }
+    
+    .quota-item {
+        padding: 10px;
+        border: 1px solid #e0e0e0;
+        border-radius: 4px;
+        margin-bottom: 10px;
+        background: #fafafa;
+    }
+    
+    .quota-controls {
+        display: flex;
+        gap: 10px;
+        align-items: center;
+        margin-top: 10px;
+    }
+    
+    .changes-list {
+        max-height: 400px;
+        overflow-y: auto;
+    }
+    
+    .change-item {
+        padding: 10px;
+        border-left: 3px solid #667eea;
+        margin-bottom: 10px;
+        background: #f8f9fa;
+    }
+    
+    .change-type-add { border-color: #4caf50; }
+    .change-type-remove { border-color: #f44336; }
+    .change-type-modify { border-color: #ff9800; }
+    
+    /* Кастомные стили для улучшенных селектов */
+    .form-select[multiple] {
+        min-height: 120px;
+        max-height: 200px;
+        overflow-y: auto;
+    }
+    
+    .program-selection-group {
+        border: 1px solid #e0e0e0;
+        border-radius: 8px;
+        padding: 15px;
+        margin-bottom: 15px;
+        background-color: #f8f9fa;
+    }
+    
+    .selection-step {
+        margin-bottom: 15px;
+    }
+    
+    .selection-step:last-child {
+        margin-bottom: 0;
+    }
+    
+    .step-number {
+        display: inline-block;
+        width: 25px;
+        height: 25px;
+        background-color: #0d6efd;
+        color: white;
+        border-radius: 50%;
+        text-align: center;
+        line-height: 25px;
+        font-size: 12px;
+        font-weight: bold;
+        margin-right: 8px;
+    }
+    
+    .quota-form-section {
+        border: 1px solid #e0e0e0;
+        border-radius: 8px;
+        padding: 20px;
+        background-color: white;
+        margin-top: 20px;
+    }
+    
+    /* Стили для раскрывающихся квот */
+    .quotas-details-row {
+        background-color: #f8f9fa;
+    }
+    
+    .quotas-detail-container {
+        border-left: 4px solid #0d6efd;
+        border-radius: 0 8px 8px 0;
+    }
+    
+    .btn-outline-secondary.border-0:hover {
+        background-color: rgba(13, 110, 253, 0.1);
+    }
+    
+    .chevron-rotated {
+        transform: rotate(90deg);
+        transition: transform 0.3s ease;
+    }
+    
+    .bi-chevron-right {
+        transition: transform 0.3s ease;
+    }
+    
+    /* Единый стиль текста в таблице квот */
+    .quotas-table td {
+        font-size: 14px !important;
+        vertical-align: middle;
+        line-height: 1.4;
+    }
+    
+    .quotas-table .badge {
+        font-size: 12px;
+    }
+    
+    /* Стили для поиска в селектах */
+    .search-select-container {
+        position: relative;
+    }
+    
+    .search-select-container input[type="text"] {
+        border-bottom-left-radius: 0;
+        border-bottom-right-radius: 0;
+        border-bottom: none;
+        background: #f8f9fa;
+        font-size: 14px;
+    }
+    
+    .search-select-container input[type="text"]:focus {
+        background: #fff;
+        box-shadow: 0 0 0 0.2rem rgba(102, 126, 234, 0.25);
+    }
+    
+    .search-select-container select {
+        border-top-left-radius: 0;
+        border-top-right-radius: 0;
+        border-top: 1px solid #dee2e6;
+    }
+    
+    .search-select-container select:focus {
+        box-shadow: 0 0 0 0.2rem rgba(102, 126, 234, 0.25);
+    }
+    
+    /* Скрытые опции в селекте */
+    .search-select-container select option[style*="display: none"] {
+        display: none !important;
+    }
+    
+    /* Улучшенное отображение множественного выбора */
+    .search-select-container select[multiple] {
+        background: white;
+        padding: 8px;
+    }
+    
+    .search-select-container select[multiple] option:checked {
+        background: #667eea;
+        color: white;
+    }
+    
+    .search-select-container select[multiple] option:hover {
+        background: #e3f2fd;
+    }
+    
+    /* Анимация для плавного появления результатов поиска */
+    .search-select-container select option {
+        transition: all 0.2s ease;
+    }
+    
+    /* Стили для таблицы квот */
+    .quotas-table {
+        font-size: 1rem;
+        width: 100%;
+        table-layout: auto;
+    }
+    
+    .quotas-table th {
+        background-color: #343a40 !important;
+        color: white !important;
+        font-weight: 600;
+        font-size: 0.95rem;
+        padding: 8px 6px;
+        white-space: nowrap;
+        text-align: center;
+        vertical-align: middle;
+    }
+    
+    .quotas-table td {
+        padding: 8px 6px;
+        vertical-align: middle;
+        font-size: 1rem;
+        text-align: center;
+    }
+    
+    .quotas-table td:first-child {
+        text-align: left;
+    }
+    
+    /* Увеличиваем размер текста в колонке с программой */
+    .quotas-table td:first-child strong {
+        font-size: 1rem;
+        line-height: 1.2;
+    }
+    
+    .quotas-table td:first-child small {
+        font-size: 0.9rem;
+    }
+    
+    .quotas-detail-container {
+        border-radius: 8px;
+        margin: 5px 0;
+    }
+    
+    .table-responsive {
+        border-radius: 6px;
+        overflow-x: auto;
+        overflow-y: visible;
+        max-width: 100%;
+    }
+    
+    /* Адаптивные стили для мобильных устройств */
+    @media (max-width: 768px) {
+        .quotas-table {
+            font-size: 0.75rem;
+        }
+        
+        .quotas-table th,
+        .quotas-table td {
+            padding: 4px 3px;
+        }
+        
+        .quotas-table th {
+            font-size: 0.7rem;
+        }
+    }
+    
+    /* Стили для кнопок действий в таблице */
+    .quotas-table .btn-group-sm .btn {
+        padding: 2px 6px;
+        font-size: 0.75rem;
+    }
+    
+    /* Стили для бейджей в таблице */
+    .quotas-table .badge {
+        font-size: 0.9rem;
+        padding: 6px 8px;
+        white-space: nowrap;
+        display: inline-block;
+    }
+    
+    /* Стили для отображения регионов с новой строки */
+    .quotas-table .regions-cell {
+        white-space: pre-line;
+        line-height: 1.4;
+        font-size: 0.95rem;
+    }
+    
+    /* Улучшение отображения на маленьких экранах */
+    @media (max-width: 992px) {
+        .quotas-table th:first-child,
+        .quotas-table td:first-child {
+            min-width: 250px !important;
+        }
+        
+        .quotas-table th:nth-child(2),
+        .quotas-table td:nth-child(2) {
+            min-width: 150px !important;
+        }
+        
+        .quotas-table .badge {
+            font-size: 0.65rem;
+            padding: 2px 4px;
+        }
+        
+        .quotas-table th,
+        .quotas-table td {
+            padding: 4px 2px;
+        }
+        
+        .quotas-table .regions-cell {
+            font-size: 0.7rem;
+        }
+    }
+    
+    /* Фиксированные ширины для стабильного отображения */
+    .quotas-table thead th:nth-child(1) { width: 300px; }  /* Программа + длительность + форма */
+    .quotas-table thead th:nth-child(2) { width: 200px; }  /* Регионы */
+    .quotas-table thead th:nth-child(3) { width: 80px; }   /* Количество мест */
+    .quotas-table thead th:nth-child(4) { width: 100px; }  /* Стоимость за заявку */
+    .quotas-table thead th:nth-child(5) { width: 120px; }  /* Общая стоимость */
+    .quotas-table thead th:nth-child(6) { width: 140px; }  /* Период обучения */
+    .quotas-table thead th:nth-child(7) { width: 80px; }   /* Действия */
+    
+    /* Стили для ячейки с периодом обучения */
+    .quotas-table .period-cell {
+        font-size: 1rem !important;
+        line-height: 1.3;
+        white-space: nowrap;
+        text-align: center;
+        vertical-align: middle;
+    }
+    
+    .quotas-table .period-cell .fw-bold {
+        font-size: 1.05rem;
+        color: #0d6efd;
+    }
+    
+    .quotas-table .period-cell .text-muted {
+        font-size: 0.95rem;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="agreements-container">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1>Управление договорами на обучение</h1>
+        <div class="btn-group" role="group">
+            <button class="btn btn-primary" onclick="openCreateAgreementModal()">
+                <i class="bi bi-plus-circle"></i> Новый договор
+            </button>
+            <div class="btn-group" role="group">
+                <button type="button" class="btn btn-success dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false">
+                    <i class="bi bi-file-earmark-excel"></i> Импорт квот
+                </button>
+                <ul class="dropdown-menu">
+                    <li><a class="dropdown-item" href="{% url 'education_planner:download_quota_template' %}">
+                        <i class="bi bi-download me-2"></i>Скачать шаблон Excel
+                    </a></li>
+                    <li><hr class="dropdown-divider"></li>
+                    <li><a class="dropdown-item" href="#" onclick="openImportQuotasModal()">
+                        <i class="bi bi-upload me-2"></i>Загрузить Excel файл
+                    </a></li>
+                </ul>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Фильтры -->
+    <div class="filters-section">
+        <form method="get" class="row g-3">
+            <div class="col-md-3">
+                <label class="form-label">Поиск</label>
+                <input type="text" name="search" class="form-control" 
+                       placeholder="Номер или название" value="{{ search_query }}">
+            </div>
+            <div class="col-md-3">
+                <label class="form-label">Федеральный оператор</label>
+                <select name="operator" class="form-select">
+                    <option value="">Все операторы</option>
+                    {% for value, label in operators %}
+                        <option value="{{ value }}" {% if value == selected_operator %}selected{% endif %}>
+                            {{ label }}
+                        </option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-3">
+                <label class="form-label">Статус</label>
+                <select name="status" class="form-select">
+                    <option value="">Все статусы</option>
+                    {% for value, label in statuses %}
+                        <option value="{{ value }}" {% if value == selected_status %}selected{% endif %}>
+                            {{ label }}
+                        </option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-3 d-flex align-items-end">
+                <button type="submit" class="btn btn-primary me-2">Применить</button>
+                <a href="{% url 'education_planner:agreements_dashboard' %}" class="btn btn-secondary">Сбросить</a>
+            </div>
+        </form>
+    </div>
+    
+    
+    <!-- Таблица договоров -->
+    <div class="agreements-table">
+        <table class="table table-hover mb-0">
+            <thead class="table-light">
+                <tr>
+                    <th width="5%"></th>
+                    <th>№ договора</th>
+                    <th>Название</th>
+                    <th>Оператор</th>
+                    <th>Дата подписания</th>
+                    <th>Статус</th>
+                    <th class="text-center">Количество квот</th>
+                    <th class="text-center">Средняя стоимость</th>
+                    <th class="text-end">Общая сумма</th>
+                    <th>Допсоглашения</th>
+                    <th>Действия</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for agreement in agreements %}
+                {% with agreement_places=agreement.get_total_quota_places %}
+                {% with agreement_cost=agreement.get_total_agreement_cost %}
+                <tr data-agreement-id="{{ agreement.id }}">
+                    <td>
+                        <button class="btn btn-sm btn-outline-secondary border-0" 
+                                onclick="toggleQuotas({{ agreement.id }})" 
+                                title="Показать/скрыть квоты">
+                            <i class="bi bi-chevron-down" id="chevron-{{ agreement.id }}"></i>
+                        </button>
+                    </td>
+                    <td>
+                        <a href="{% url 'education_planner:agreement_detail' agreement.id %}">
+                            {{ agreement.number }}
+                        </a>
+                    </td>
+                    <td>{{ agreement.name|truncatechars:50 }}</td>
+                    <td>{{ agreement.get_federal_operator_display }}</td>
+                    <td>{{ agreement.signing_date|date:"d.m.Y"|default:"—" }}</td>
+                    <td>
+                        <span class="status-badge status-{{ agreement.status|lower }}">
+                            {{ agreement.get_status_display }}
+                        </span>
+                    </td>
+                    <td class="text-center">{{ agreement_places }}</td>
+                    <td class="text-center">
+                        {% if agreement_places > 0 %}
+                            {{ agreement_cost|div:agreement_places|floatformat:2 }} ₽
+                        {% else %}
+                            —
+                        {% endif %}
+                    </td>
+                    <td class="text-end">{{ agreement_cost|floatformat:2 }} ₽</td>
+                    <td>
+                        {% for supplement in agreement.supplements.all %}
+                            <div class="supplement-badge" onclick="showSupplementDetails({{ supplement.id }})">
+                                №{{ supplement.number }} 
+                                {% if supplement.signing_date %}
+                                    от {{ supplement.signing_date|date:"d.m.Y" }}
+                                {% endif %}
+                            </div>
+                        {% empty %}
+                            <span class="text-muted">—</span>
+                        {% endfor %}
+                    </td>
+                    <td>
+                        <div class="table-actions">
+                            <button class="btn btn-sm btn-outline-primary" 
+                                    onclick="editAgreement({{ agreement.id }})"
+                                    title="Редактировать">
+                                <i class="bi bi-pencil"></i>
+                            </button>
+                            <button class="btn btn-sm btn-outline-success" 
+                                    onclick="manageQuotas({{ agreement.id }})"
+                                    title="Управление квотами">
+                                <i class="bi bi-list-ul"></i>
+                            </button>
+                            <button class="btn btn-sm btn-outline-warning" 
+                                    onclick="createSupplement({{ agreement.id }})"
+                                    title="Добавить допсоглашение">
+                                <i class="bi bi-file-earmark-plus"></i>
+                            </button>
+                            <button class="btn btn-sm btn-outline-info" 
+                                    onclick="openImportSupplementModal({{ agreement.id }})"
+                                    title="Импорт допсоглашения из Excel">
+                                <i class="bi bi-file-earmark-excel"></i>
+                            </button>
+                            <button class="btn btn-sm btn-outline-danger" 
+                                    onclick="deleteAgreement({{ agreement.id }})"
+                                    title="Удалить">
+                                <i class="bi bi-trash"></i>
+                            </button>
+                        </div>
+                    </td>
+                </tr>
+                <!-- Раскрывающаяся строка с квотами -->
+                <tr id="quotas-row-{{ agreement.id }}" class="quotas-details-row">
+                    <td></td>
+                    <td colspan="10">
+                        <div class="quotas-detail-container p-3 bg-light border-top">
+                            <h6 class="mb-3">
+                                <i class="bi bi-table me-2"></i>
+                                Актуальные квоты по договору
+                                {% with actual_quotas=agreement.get_actual_quotas %}
+                                    <span class="badge bg-primary ms-2">
+                                        {{ actual_quotas|length }} программ, {{ agreement.get_total_quota_places }} мест
+                                    </span>
+                                {% endwith %}
+                            </h6>
+                            {% with actual_quotas=agreement.get_actual_quotas %}
+                                {% if actual_quotas %}
+                                    <div class="table-responsive">
+                                        <table class="table table-sm table-striped mb-0 quotas-table">
+                                            <thead class="table-dark">
+                                                <tr>
+                                                    <th style="min-width: 300px;">Программа обучения</th>
+                                                    <th style="min-width: 200px;">Регионы реализации</th>
+                                                    <th style="min-width: 80px;">Количество мест</th>
+                                                    <th style="min-width: 100px;">Стоимость за заявку</th>
+                                                    <th style="min-width: 120px;">Общая стоимость</th>
+                                                    <th style="min-width: 140px;">Период обучения</th>
+                                                    <th style="min-width: 80px;">Действия</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {% for quota in actual_quotas %}
+                                                <tr>
+                                                    <td class="text-start">
+                                                        <div class="d-flex flex-column">
+                                                            <strong>{{ quota.education_program.name }}</strong>
+                                                            <small class="text-muted">
+                                                                {{ quota.education_program.get_program_type_display }} • 
+                                                                {{ quota.education_program.academic_hours }} ч. • 
+                                                                {{ quota.education_program.get_study_form_display }}
+                                                            </small>
+                                                        </div>
+                                                    </td>
+                                                    <td class="text-start regions-cell">
+                                                        {{ quota.regions_display }}
+                                                    </td>
+                                                    <td>
+                                                        <span class="badge bg-success">{{ quota.quantity }} мест</span>
+                                                    </td>
+                                                    <td>
+                                                        <span class="badge bg-info">{{ quota.formatted_cost_per_quota }}</span>
+                                                    </td>
+                                                    <td>
+                                                        <span class="badge bg-primary">{{ quota.formatted_total_cost }}</span>
+                                                    </td>
+                                                    <td class="period-cell">
+                                                        <div class="d-flex flex-column">
+                                                            {% if quota.formatted_start_date %}
+                                                                <span class="fw-bold">{{ quota.formatted_start_date }}</span>
+                                                            {% endif %}
+                                                            {% if quota.formatted_end_date %}
+                                                                <span class="text-muted">{{ quota.formatted_end_date }}</span>
+                                                            {% endif %}
+                                                            {% if not quota.formatted_start_date and not quota.formatted_end_date %}
+                                                                <span class="text-muted">—</span>
+                                                            {% endif %}
+                                                        </div>
+                                                    </td>
+                                                    <td>
+                                                        <div class="btn-group btn-group-sm" role="group">
+                                                            <button type="button" class="btn btn-outline-primary btn-sm" 
+                                                                    onclick="editQuota({{ quota.id }})" 
+                                                                    title="Редактировать квоту">
+                                                                <i class="bi bi-pencil"></i>
+                                                            </button>
+                                                            <button type="button" class="btn btn-outline-danger btn-sm" 
+                                                                    onclick="deleteQuota({{ quota.id }}, {{ agreement.id }})" 
+                                                                    title="Удалить квоту">
+                                                                <i class="bi bi-trash"></i>
+                                                            </button>
+                                                        </div>
+                                                    </td>
+                                                </tr>
+                                                {% endfor %}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                {% else %}
+                                    <div class="alert alert-info mb-0">
+                                        <i class="bi bi-info-circle me-2"></i>
+                                        По данному договору квоты не установлены
+                                    </div>
+                                {% endif %}
+                            {% endwith %}
+                        </div>
+                    </td>
+                </tr>
+                {% endwith %}
+                {% endwith %}
+                {% empty %}
+                <tr>
+                    <td colspan="11" class="text-center py-4 text-muted">
+                        Договоры не найдены
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    
+    <!-- Пагинация -->
+    {% if page_obj.has_other_pages %}
+    <nav class="mt-4">
+        <ul class="pagination justify-content-center">
+            {% if page_obj.has_previous %}
+                <li class="page-item">
+                    <a class="page-link" href="?page={{ page_obj.previous_page_number }}">Предыдущая</a>
+                </li>
+            {% endif %}
+            
+            {% for num in page_obj.paginator.page_range %}
+                {% if page_obj.number == num %}
+                    <li class="page-item active"><span class="page-link">{{ num }}</span></li>
+                {% elif num > page_obj.number|add:'-3' and num < page_obj.number|add:'3' %}
+                    <li class="page-item"><a class="page-link" href="?page={{ num }}">{{ num }}</a></li>
+                {% endif %}
+            {% endfor %}
+            
+            {% if page_obj.has_next %}
+                <li class="page-item">
+                    <a class="page-link" href="?page={{ page_obj.next_page_number }}">Следующая</a>
+                </li>
+            {% endif %}
+        </ul>
+    </nav>
+    {% endif %}
+</div>
+
+<!-- Модальное окно создания договора -->
+<div class="modal fade" id="createAgreementModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Новый договор на обучение</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="createAgreementForm">
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label class="form-label">Федеральный оператор</label>
+                            <select name="federal_operator" class="form-select" required>
+                                {% for value, label in operators %}
+                                    <option value="{{ value }}">{{ label }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Номер договора</label>
+                            <input type="text" name="number" class="form-control" required>
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label">Название договора</label>
+                            <input type="text" name="name" class="form-control" required>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Дата подписания</label>
+                            <input type="date" name="signing_date" class="form-control">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Статус</label>
+                            <select name="status" class="form-select">
+                                {% for value, label in statuses %}
+                                    <option value="{{ value }}">{{ label }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label">Ссылка на документ</label>
+                            <input type="url" name="document_link" class="form-control">
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label">Примечания</label>
+                            <textarea name="notes" class="form-control" rows="3"></textarea>
+                        </div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
+                <button type="button" class="btn btn-primary" onclick="saveNewAgreement()">Создать</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Модальное окно управления квотами -->
+<div class="modal fade" id="quotasModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-xl">
+        <div class="modal-content">
+            <div class="modal-header bg-primary text-white">
+                <h5 class="modal-title">Управление квотами</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Закрыть"></button>
+            </div>
+            <div class="modal-body">
+                <div id="quotasList"></div>
+                <hr>
+                <h6><i class="bi bi-plus-circle me-2"></i>Добавить новую квоту</h6>
+                
+                <!-- Выбор программы -->
+                <div class="program-selection-group">
+                    <h6 class="mb-3"><i class="bi bi-mortarboard me-2"></i>Выбор программы обучения</h6>
+                    
+                    <div class="row g-3">
+                        <div class="col-md-4">
+                            <div class="selection-step">
+                                <label class="form-label">
+                                    <span class="step-number">1</span>Программа обучения
+                                </label>
+                                <div class="search-select-container">
+                                    <input type="text" id="programSearchInput" class="form-control mb-2" 
+                                           placeholder="🔍 Поиск программы..." 
+                                           onkeyup="filterPrograms()">
+                                    <select name="program_name" id="programNameSelect" class="form-select" required size="5">
+                                        <option value="">Выберите программу...</option>
+                                        {% for program_name in unique_program_names %}
+                                            <option value="{{ program_name }}">{{ program_name }}</option>
+                                        {% endfor %}
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="selection-step">
+                                <label class="form-label">
+                                    <span class="step-number">2</span>Длительность
+                                </label>
+                                <select name="program_duration" id="programDurationSelect" class="form-select" required>
+                                    <option value="">Сначала выберите программу</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="selection-step">
+                                <label class="form-label">
+                                    <span class="step-number">3</span>Форма обучения
+                                </label>
+                                <select name="program_id" id="programFormSelect" class="form-select" required>
+                                    <option value="">Выберите форму</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Форма добавления квоты -->
+                <div class="quota-form-section">
+                    <form id="addQuotaForm">
+                        <!-- Первая строка: Регионы -->
+                        <div class="row g-3 mb-3">
+                            <div class="col-12">
+                                <label class="form-label">
+                                    <i class="bi bi-geo-alt me-2"></i>Регионы реализации
+                                </label>
+                                <div class="search-select-container">
+                                    <input type="text" id="regionSearchInput" class="form-control mb-2" 
+                                           placeholder="🔍 Поиск региона..." 
+                                           onkeyup="filterRegions()">
+                                    <select name="regions" id="regionsSelect" class="form-select" multiple required style="height: 80px;">
+                                        {% for region in regions %}
+                                            <option value="{{ region.id }}">{{ region.name }}</option>
+                                        {% endfor %}
+                                    </select>
+                                </div>
+                                <small class="form-text text-muted">Выберите один или несколько регионов (удерживайте Ctrl)</small>
+                            </div>
+                        </div>
+                        
+                        <!-- Вторая строка: Все остальные поля горизонтально -->
+                        <div class="row g-3 align-items-end">
+                            <div class="col-md-2">
+                                <label class="form-label">
+                                    <i class="bi bi-hash me-2"></i>Количество мест
+                                </label>
+                                <input type="number" name="quantity" class="form-control" 
+                                       placeholder="Кол-во" min="1" required>
+                            </div>
+                            <div class="col-md-2">
+                                <label class="form-label">
+                                    <i class="bi bi-currency-exchange me-2"></i>Стоимость за заявку
+                                </label>
+                                <input type="number" name="cost_per_quota" class="form-control" 
+                                       placeholder="₽" min="0" step="0.01" required>
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label">
+                                    <i class="bi bi-calendar-event me-2"></i>Дата начала обучения
+                                </label>
+                                <input type="date" name="start_date" class="form-control">
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label">
+                                    <i class="bi bi-calendar-check me-2"></i>Дата окончания обучения
+                                </label>
+                                <input type="date" name="end_date" class="form-control">
+                            </div>
+                            <div class="col-md-2">
+                                <button type="button" class="btn btn-success w-100" onclick="addQuota()">
+                                    <i class="bi bi-plus-circle me-2"></i>Добавить квоту
+                                </button>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Закрыть</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Модальное окно создания допсоглашения -->
+<div class="modal fade" id="supplementModal" tabindex="-1">
+    <div class="modal-dialog modal-xl">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Новое дополнительное соглашение</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="supplementForm">
+                    <div class="row g-3 mb-4">
+                        <div class="col-md-4">
+                            <label class="form-label">Номер допсоглашения</label>
+                            <input type="text" name="number" class="form-control" required>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">Дата подписания</label>
+                            <input type="date" name="signing_date" class="form-control">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">Статус</label>
+                            <select name="status" class="form-select">
+                                <option value="DRAFT">Черновик</option>
+                                <option value="NEGOTIATION">На согласовании</option>
+                                <option value="SIGNING">На подписании</option>
+                                <option value="SIGNED">Подписан</option>
+                            </select>
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label">Описание изменений</label>
+                            <textarea name="description" class="form-control" rows="3" required></textarea>
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label">Ссылка на документ</label>
+                            <input type="url" name="document_link" class="form-control">
+                        </div>
+                    </div>
+                    
+                    <h6>Изменения квот</h6>
+                    <div id="quotaChanges"></div>
+                    <button type="button" class="btn btn-sm btn-outline-primary" onclick="addQuotaChange()">
+                        <i class="bi bi-plus"></i> Добавить изменение
+                    </button>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
+                <button type="button" class="btn btn-primary" onclick="saveSupplement()">Сохранить</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Модальное окно деталей допсоглашения -->
+<div class="modal fade" id="supplementDetailsModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Детали дополнительного соглашения</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div id="supplementDetailsContent"></div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Закрыть</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Модальное окно редактирования договора -->
+<div class="modal fade" id="editAgreementModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Редактирование договора</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="editAgreementForm">
+                    <input type="hidden" id="editAgreementId" name="agreement_id">
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label class="form-label">Федеральный оператор</label>
+                            <select name="federal_operator" id="editFederalOperator" class="form-select" required>
+                                {% for value, label in operators %}
+                                    <option value="{{ value }}">{{ label }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Номер договора</label>
+                            <input type="text" name="number" id="editNumber" class="form-control" required>
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label">Название договора</label>
+                            <input type="text" name="name" id="editName" class="form-control" required>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Дата подписания</label>
+                            <input type="date" name="signing_date" id="editSigningDate" class="form-control">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Статус</label>
+                            <select name="status" id="editStatus" class="form-select">
+                                {% for value, label in statuses %}
+                                    <option value="{{ value }}">{{ label }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label">Ссылка на документ</label>
+                            <input type="url" name="document_link" id="editDocumentLink" class="form-control">
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label">Примечания</label>
+                            <textarea name="notes" id="editNotes" class="form-control" rows="3"></textarea>
+                        </div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
+                <button type="button" class="btn btn-primary" onclick="saveEditedAgreement()">Сохранить изменения</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Модальное окно редактирования квоты -->
+<div class="modal fade" id="editQuotaModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header bg-warning text-dark">
+                <h5 class="modal-title">
+                    <i class="bi bi-pencil-square me-2"></i>Редактирование квоты
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Закрыть"></button>
+            </div>
+            <div class="modal-body">
+                <form id="editQuotaForm">
+                    <input type="hidden" id="editQuotaId" name="quota_id">
+                    
+                    <!-- Программа обучения (только для информации) -->
+                    <div class="row g-3 mb-3">
+                        <div class="col-12">
+                            <label class="form-label">
+                                <i class="bi bi-mortarboard me-2"></i>Программа обучения
+                            </label>
+                            <select id="editQuotaProgram" class="form-select" readonly>
+                                <option value="">Программа будет загружена...</option>
+                            </select>
+                            <small class="text-muted">Программу обучения нельзя изменить при редактировании</small>
+                        </div>
+                    </div>
+                    
+                    <!-- Регионы (отдельная строка) -->
+                    <div class="row g-3 mb-3">
+                        <div class="col-12">
+                            <label class="form-label">
+                                <i class="bi bi-geo-alt me-2"></i>Регионы реализации
+                            </label>
+                            <div class="search-select-container">
+                                <input type="text" id="editRegionSearchInput" class="form-control mb-2" 
+                                       placeholder="🔍 Поиск региона..." 
+                                       onkeyup="filterEditRegions()">
+                                <select id="editQuotaRegions" class="form-select" multiple required style="height: 80px;">
+                                    {% for region in regions %}
+                                        <option value="{{ region.id }}">{{ region.name }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <small class="form-text text-muted">Выберите один или несколько регионов (удерживайте Ctrl)</small>
+                        </div>
+                    </div>
+                    
+                    <!-- Количество, стоимость и даты в одну строку -->
+                    <div class="row g-3">
+                        <div class="col-md-3">
+                            <label class="form-label">
+                                <i class="bi bi-hash me-2"></i>Количество мест
+                            </label>
+                            <input type="number" id="editQuotaQuantity" name="quantity" class="form-control" 
+                                   placeholder="Кол-во" min="1" required>
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label">
+                                <i class="bi bi-currency-exchange me-2"></i>Стоимость за заявку
+                            </label>
+                            <input type="number" id="editQuotaCost" name="cost_per_quota" class="form-control" 
+                                   placeholder="₽" min="0" step="0.01" required>
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label">
+                                <i class="bi bi-calendar-event me-2"></i>Дата начала обучения
+                            </label>
+                            <input type="date" id="editQuotaStartDate" name="start_date" class="form-control">
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label">
+                                <i class="bi bi-calendar-check me-2"></i>Дата окончания обучения
+                            </label>
+                            <input type="date" id="editQuotaEndDate" name="end_date" class="form-control">
+                        </div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
+                <button type="button" class="btn btn-warning" onclick="saveEditedQuota()">
+                    <i class="bi bi-check-circle me-2"></i>Сохранить изменения
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Модальное окно импорта квот -->
+<div class="modal fade" id="importQuotasModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-success text-white">
+                <h5 class="modal-title">
+                    <i class="bi bi-file-earmark-excel me-2"></i>Импорт квот из Excel
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Закрыть"></button>
+            </div>
+            <div class="modal-body">
+                <div class="alert alert-info">
+                    <i class="bi bi-info-circle me-2"></i>
+                    <strong>Инструкция:</strong>
+                    <ol class="mb-0 mt-2">
+                        <li>Сначала <a href="{% url 'education_planner:download_quota_template' %}" class="alert-link">скачайте шаблон Excel</a></li>
+                        <li>Заполните данные в соответствии с инструкциями на листе "Инструкция"</li>
+                        <li>Загрузите заполненный файл ниже</li>
+                    </ol>
+                </div>
+                
+                <form id="importQuotasForm" enctype="multipart/form-data">
+                    {% csrf_token %}
+                    <div class="mb-3">
+                        <label for="excelFile" class="form-label">
+                            <i class="bi bi-file-earmark-excel me-2"></i>Выберите Excel файл
+                        </label>
+                        <input type="file" class="form-control" id="excelFile" name="excel_file" 
+                               accept=".xlsx,.xls" required>
+                        <div class="form-text">Поддерживаются файлы .xlsx и .xls</div>
+                    </div>
+                </form>
+                
+                <!-- Индикатор загрузки -->
+                <div id="importProgress" class="d-none">
+                    <div class="d-flex align-items-center">
+                        <div class="spinner-border spinner-border-sm text-success me-2" role="status">
+                            <span class="visually-hidden">Загрузка...</span>
+                        </div>
+                        <span>Обработка файла...</span>
+                    </div>
+                    <div class="progress mt-2">
+                        <div class="progress-bar progress-bar-striped progress-bar-animated bg-success" 
+                             role="progressbar" style="width: 100%"></div>
+                    </div>
+                </div>
+                
+                <!-- Результаты импорта -->
+                <div id="importResults" class="d-none mt-3"></div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
+                <button type="button" class="btn btn-success" onclick="submitImportForm()">
+                    <i class="bi bi-upload me-2"></i>Импортировать
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Region Mapping Modal -->
+<div class="modal fade" id="regionMappingModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="bi bi-geo-alt-fill me-2"></i>Настройка регионов
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="alert alert-info">
+                    <i class="bi bi-info-circle me-2"></i>
+                    <strong>Найдены неопознанные регионы в вашем файле.</strong><br>
+                    Пожалуйста, для каждого региона выберите действие:
+                </div>
+                
+                <div id="regionMappingList">
+                    <!-- Здесь будут динамически добавляться элементы -->
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
+                <button type="button" class="btn btn-success" onclick="saveRegionMappings()">
+                    <i class="bi bi-check-circle me-2"></i>Сохранить и продолжить импорт
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Import Supplement Modal -->
+<div class="modal fade" id="importSupplementModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="bi bi-file-earmark-excel me-2"></i>Импорт дополнительного соглашения
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="alert alert-info">
+                    <h6><i class="bi bi-info-circle me-2"></i>Инструкция:</h6>
+                    <ol class="mb-0">
+                        <li>Скачайте шаблон Excel</li>
+                        <li>Заполните данные в соответствии с инструкциями на листе "Инструкция"</li>
+                        <li>Загрузите заполненный файл ниже</li>
+                        <li>Система автоматически определит изменения по сравнению с текущими квотами</li>
+                    </ol>
+                </div>
+                
+                <form id="importSupplementForm" enctype="multipart/form-data">
+                    {% csrf_token %}
+                    <input type="hidden" id="supplementAgreementId" name="agreement_id" value="">
+                    
+                    <div class="row">
+                        <div class="col-md-6">
+                            <label class="form-label">Номер дополнительного соглашения</label>
+                            <input type="text" class="form-control" id="supplementNumber" name="supplement_number" required>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Excel файл с квотами</label>
+                            <input type="file" class="form-control" id="supplementExcelFile" name="file" accept=".xlsx,.xls" required>
+                            <div class="form-text">Поддерживаются файлы .xlsx и .xls</div>
+                        </div>
+                    </div>
+                    
+                    <div class="mt-3">
+                        <label class="form-label">Описание изменений (необязательно)</label>
+                        <textarea class="form-control" id="supplementDescription" name="supplement_description" rows="3" placeholder="Краткое описание изменений в дополнительном соглашении"></textarea>
+                    </div>
+                    
+                    <div class="mt-3 d-flex gap-2">
+                        <a href="{% url 'education_planner:download_supplement_template' %}" class="btn btn-outline-secondary">
+                            <i class="bi bi-download me-2"></i>Скачать шаблон Excel
+                        </a>
+                    </div>
+                </form>
+                
+                <!-- Индикатор загрузки -->
+                <div id="supplementImportProgress" class="d-none mt-3">
+                    <div class="d-flex align-items-center">
+                        <div class="spinner-border spinner-border-sm me-2" role="status"></div>
+                        <span>Анализ файла и определение изменений...</span>
+                    </div>
+                </div>
+                
+                <!-- Результаты анализа -->
+                <div id="supplementImportResults" class="d-none mt-3"></div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
+                <button type="button" class="btn btn-success" onclick="submitSupplementImportForm()">
+                    <i class="bi bi-upload me-2"></i>Анализировать и импортировать
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Supplement Region Mapping Modal -->
+<div class="modal fade" id="supplementRegionMappingModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="bi bi-geo-alt-fill me-2"></i>Настройка регионов для дополнительного соглашения
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="alert alert-warning">
+                    <i class="bi bi-exclamation-triangle me-2"></i>
+                    Обнаружены неопознанные регионы. Выберите действие для каждого региона:
+                </div>
+                
+                <div id="supplementRegionMappingContainer">
+                    <!-- Динамически заполняется JavaScript -->
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
+                <button type="button" class="btn btn-primary" onclick="saveSupplementRegionMappings()">
+                    <i class="bi bi-check-lg me-2"></i>Применить настройки
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+
+<script>
+let currentAgreementId = null;
+let currentQuotas = [];
+
+// Данные о программах для каскадных списков
+const programsData = {{ programs_grouped|safe }};
+
+// Простая функция для добавления поиска в селекте
+function addSearchToSelect(selectElement) {
+    // Добавляем поиск только если это мультиселект
+    if (selectElement.multiple) {
+        selectElement.style.height = '120px';
+    }
+}
+
+// Функции для каскадных списков программ
+function updateProgramVariants() {
+    const programNameSelect = document.getElementById('programNameSelect');
+    const durationSelect = document.getElementById('programDurationSelect');
+    const formSelect = document.getElementById('programFormSelect');
+    
+    const programName = programNameSelect.value;
+    
+    // Очищаем зависимые списки
+    durationSelect.innerHTML = '<option value="">Выберите длительность</option>';
+    formSelect.innerHTML = '<option value="">Выберите форму</option>';
+    
+    if (!programName || !programsData[programName]) {
+        return;
+    }
+    
+    // Получаем уникальные длительности для выбранной программы
+    const durations = [...new Set(programsData[programName].map(p => p.duration))].sort((a, b) => a - b);
+    
+    durations.forEach(duration => {
+        const option = document.createElement('option');
+        option.value = duration;
+        option.textContent = `${duration} академ. часов`;
+        durationSelect.appendChild(option);
+    });
+    
+    // Автоматически выбираем первую длительность
+    if (durations.length > 0) {
+        durationSelect.value = durations[0];
+        updateProgramForms(); // Обновляем формы обучения
+    }
+}
+
+function updateProgramForms() {
+    const programNameSelect = document.getElementById('programNameSelect');
+    const durationSelect = document.getElementById('programDurationSelect');
+    const formSelect = document.getElementById('programFormSelect');
+    
+    const programName = programNameSelect.value;
+    const duration = durationSelect.value;
+    
+    // Очищаем список форм
+    formSelect.innerHTML = '<option value="">Выберите форму обучения</option>';
+    
+    if (!programName || !duration || !programsData[programName]) {
+        return;
+    }
+    
+    // Фильтруем программы по названию и длительности
+    const filteredPrograms = programsData[programName].filter(p => p.duration == duration);
+    
+    filteredPrograms.forEach(program => {
+        const option = document.createElement('option');
+        option.value = program.id;
+        option.textContent = `${program.form} (${program.type})`;
+        formSelect.appendChild(option);
+    });
+    
+    // Автоматически выбираем первую форму обучения
+    if (filteredPrograms.length > 0) {
+        formSelect.value = filteredPrograms[0].id;
+    }
+}
+
+// Функция для раскрытия/скрытия квот
+function toggleQuotas(agreementId) {
+    const quotasRow = document.getElementById(`quotas-row-${agreementId}`);
+    const chevron = document.getElementById(`chevron-${agreementId}`);
+    
+    if (quotasRow.style.display === 'none' || quotasRow.style.display === '') {
+        quotasRow.style.display = 'table-row';
+        chevron.classList.add('chevron-rotated');
+    } else {
+        quotasRow.style.display = 'none';
+        chevron.classList.remove('chevron-rotated');
+    }
+}
+
+// Добавляем обработчики событий
+document.addEventListener('DOMContentLoaded', function() {
+    // Обработчики для каскадных селектов
+    const programNameSelect = document.getElementById('programNameSelect');
+    const durationSelect = document.getElementById('programDurationSelect');
+    
+    if (programNameSelect) {
+        programNameSelect.addEventListener('change', updateProgramVariants);
+    }
+    
+    if (durationSelect) {
+        durationSelect.addEventListener('change', updateProgramForms);
+    }
+});
+
+// Создание нового договора
+function openCreateAgreementModal() {
+    document.getElementById('createAgreementForm').reset();
+    new bootstrap.Modal(document.getElementById('createAgreementModal')).show();
+}
+
+function saveNewAgreement() {
+    const form = document.getElementById('createAgreementForm');
+    const formData = new FormData(form);
+    const data = Object.fromEntries(formData);
+    
+    fetch('{% url "education_planner:create_agreement" %}', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': getCookie('csrftoken')
+        },
+        body: JSON.stringify(data)
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            alert(data.message);
+            location.reload();
+        } else {
+            alert('Ошибка: ' + data.message);
+        }
+    });
+}
+
+// Управление квотами
+function manageQuotas(agreementId) {
+    currentAgreementId = agreementId;
+    loadQuotas(agreementId);
+    
+    const modal = new bootstrap.Modal(document.getElementById('quotasModal'));
+    modal.show();
+    
+    // После открытия модального окна инициализируем обработчики
+    document.getElementById('quotasModal').addEventListener('shown.bs.modal', function () {
+        // Настраиваем каскадные селекты
+        const programNameSelect = document.getElementById('programNameSelect');
+        const durationSelect = document.getElementById('programDurationSelect');
+        
+        if (programNameSelect) {
+            programNameSelect.addEventListener('change', updateProgramVariants);
+        }
+        
+        if (durationSelect) {
+            durationSelect.addEventListener('change', updateProgramForms);
+        }
+        
+        // Настраиваем мультиселект для регионов
+        const regionsSelect = document.getElementById('regionsSelect');
+        if (regionsSelect) {
+            addSearchToSelect(regionsSelect);
+        }
+    });
+}
+
+function loadQuotas(agreementId) {
+    // Здесь должна быть загрузка квот через AJAX
+    // Для примера используем данные из таблицы
+    const row = document.querySelector(`tr[data-agreement-id="${agreementId}"]`);
+    const quotasHtml = row.querySelector('td:nth-child(6)').innerHTML;
+    document.getElementById('quotasList').innerHTML = quotasHtml;
+}
+
+function addQuota() {
+    // Получаем выбранные значения через обычные селекты
+    const programFormSelect = document.getElementById('programFormSelect');
+    const regionsSelect = document.getElementById('regionsSelect');
+    const quantityInput = document.querySelector('input[name="quantity"]');
+    const costInput = document.querySelector('input[name="cost_per_quota"]');
+    const startDateInput = document.querySelector('input[name="start_date"]');
+    const endDateInput = document.querySelector('input[name="end_date"]');
+    
+    const programId = programFormSelect.value;
+    const selectedRegions = Array.from(regionsSelect.selectedOptions).map(option => option.value);
+    const quantity = quantityInput.value;
+    const costPerQuota = costInput.value;
+    const startDate = startDateInput.value;
+    const endDate = endDateInput.value;
+    
+    // Валидация
+    if (!programId) {
+        alert('Выберите программу обучения');
+        return;
+    }
+    
+    if (!selectedRegions || selectedRegions.length === 0) {
+        alert('Выберите хотя бы один регион');
+        return;
+    }
+    
+    if (!quantity || quantity <= 0) {
+        alert('Укажите количество мест больше 0');
+        return;
+    }
+    
+    if (!costPerQuota || costPerQuota < 0) {
+        alert('Укажите стоимость за заявку (0 или больше)');
+        return;
+    }
+    
+    // Валидация дат
+    if (startDate && endDate && new Date(startDate) > new Date(endDate)) {
+        alert('Дата начала не может быть позже даты окончания');
+        return;
+    }
+    
+    const data = {
+        action: 'create',
+        program_id: programId,
+        regions: selectedRegions,
+        quantity: parseInt(quantity),
+        cost_per_quota: parseFloat(costPerQuota),
+        start_date: startDate || null,
+        end_date: endDate || null
+    };
+    
+    // Показываем индикатор загрузки
+    const button = document.querySelector('#quotasModal .btn-success');
+    const originalText = button.innerHTML;
+    button.innerHTML = '<i class="bi bi-hourglass-split me-2"></i>Добавление...';
+    button.disabled = true;
+    
+    fetch(`/education/agreements/${currentAgreementId}/quotas/`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': getCookie('csrftoken')
+        },
+        body: JSON.stringify(data)
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            // Показываем уведомление об успехе
+            showNotification('success', 'Квота успешно добавлена');
+            
+            // Очищаем форму
+            document.getElementById('addQuotaForm').reset();
+            
+            // Перезагружаем список квот
+            setTimeout(() => location.reload(), 1000);
+        } else {
+            showNotification('error', 'Ошибка: ' + data.message);
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        showNotification('error', 'Произошла ошибка при добавлении квоты');
+    })
+    .finally(() => {
+        // Восстанавливаем кнопку
+        button.innerHTML = originalText;
+        button.disabled = false;
+    });
+}
+
+// Функция для показа уведомлений
+function showNotification(type, message) {
+    const alertClass = type === 'success' ? 'alert-success' : 'alert-danger';
+    const icon = type === 'success' ? 'bi-check-circle' : 'bi-exclamation-triangle';
+    
+    const notification = document.createElement('div');
+    notification.className = `alert ${alertClass} alert-dismissible fade show position-fixed`;
+    notification.style.cssText = 'top: 20px; right: 20px; z-index: 9999; min-width: 300px;';
+    notification.innerHTML = `
+        <i class="bi ${icon} me-2"></i>
+        ${message}
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    `;
+    
+    document.body.appendChild(notification);
+    
+    // Автоматически скрываем через 5 секунд
+    setTimeout(() => {
+        notification.style.opacity = '0';
+        setTimeout(() => {
+            if (notification.parentNode) {
+                notification.parentNode.removeChild(notification);
+            }
+        }, 300);
+    }, 5000);
+}
+
+// Создание допсоглашения
+function createSupplement(agreementId) {
+    currentAgreementId = agreementId;
+    document.getElementById('supplementForm').reset();
+    document.getElementById('quotaChanges').innerHTML = '';
+    addQuotaChange(); // Добавляем первое изменение по умолчанию
+    new bootstrap.Modal(document.getElementById('supplementModal')).show();
+}
+
+function addQuotaChange() {
+    const changeId = Date.now();
+    const html = `
+        <div class="quota-change-item border rounded p-3 mb-3" data-change-id="${changeId}">
+            <div class="row g-3">
+                <div class="col-md-3">
+                    <select name="change_type_${changeId}" class="form-select" required>
+                        <option value="ADD">Добавление</option>
+                        <option value="REMOVE">Удаление</option>
+                        <option value="MODIFY">Изменение</option>
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <select name="program_id_${changeId}" class="form-select program-select" required>
+                        <option value="">Программа</option>
+                        {% for program in programs %}
+                            <option value="{{ program.id }}">{{ program.name }} ({{ program.academic_hours }}ч, {{ program.get_study_form_display }})</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <input type="text" name="region_${changeId}" class="form-control" 
+                           placeholder="Регион" required>
+                </div>
+                <div class="col-md-2">
+                    <input type="number" name="new_quantity_${changeId}" class="form-control" 
+                           placeholder="Новое кол-во" min="0" required>
+                </div>
+                <div class="col-md-2">
+                    <button type="button" class="btn btn-danger btn-sm" 
+                            onclick="removeQuotaChange(${changeId})">
+                        <i class="bi bi-trash"></i>
+                    </button>
+                </div>
+                <div class="col-12">
+                    <input type="text" name="comment_${changeId}" class="form-control" 
+                           placeholder="Комментарий">
+                </div>
+            </div>
+        </div>
+    `;
+    document.getElementById('quotaChanges').insertAdjacentHTML('beforeend', html);
+}
+
+function removeQuotaChange(changeId) {
+    document.querySelector(`.quota-change-item[data-change-id="${changeId}"]`).remove();
+}
+
+function saveSupplement() {
+    const form = document.getElementById('supplementForm');
+    const formData = new FormData(form);
+    const baseData = {
+        number: formData.get('number'),
+        signing_date: formData.get('signing_date'),
+        status: formData.get('status'),
+        description: formData.get('description'),
+        document_link: formData.get('document_link'),
+        quota_changes: []
+    };
+    
+    // Собираем изменения квот
+    document.querySelectorAll('.quota-change-item').forEach(item => {
+        const changeId = item.dataset.changeId;
+        baseData.quota_changes.push({
+            change_type: formData.get(`change_type_${changeId}`),
+            program_id: formData.get(`program_id_${changeId}`),
+            region: formData.get(`region_${changeId}`),
+            new_quantity: formData.get(`new_quantity_${changeId}`),
+            comment: formData.get(`comment_${changeId}`)
+        });
+    });
+    
+    fetch(`/education/agreements/${currentAgreementId}/supplements/create/`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': getCookie('csrftoken')
+        },
+        body: JSON.stringify(baseData)
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            alert(data.message);
+            location.reload();
+        } else {
+            alert('Ошибка: ' + data.message);
+        }
+    });
+}
+
+// Показать детали допсоглашения
+function showSupplementDetails(supplementId) {
+    fetch(`/education/supplements/${supplementId}/`, {
+        headers: {
+            'X-Requested-With': 'XMLHttpRequest'
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        let html = `
+            <div class="mb-3">
+                <strong>Номер:</strong> ${data.number}<br>
+                <strong>Дата подписания:</strong> ${data.signing_date}<br>
+                <strong>Статус:</strong> ${data.status}<br>
+                <strong>Описание:</strong> ${data.description}
+            </div>
+            <h6>Изменения квот:</h6>
+            <div class="changes-list">
+        `;
+        
+        data.changes.forEach(change => {
+            let changeClass = 'change-item';
+            if (change.type === 'Добавление') changeClass += ' change-type-add';
+            else if (change.type === 'Удаление') changeClass += ' change-type-remove';
+            else if (change.type === 'Изменение') changeClass += ' change-type-modify';
+            
+            html += `
+                <div class="${changeClass}">
+                    <strong>${change.type}:</strong> ${change.program}<br>
+                    <strong>Регион:</strong> ${change.region}<br>
+                    <strong>Количество:</strong> ${change.new_quantity}
+                    ${change.old_quantity ? `(было: ${change.old_quantity})` : ''}<br>
+                    ${change.comment ? `<em>${change.comment}</em>` : ''}
+                </div>
+            `;
+        });
+        
+        html += '</div>';
+        
+        document.getElementById('supplementDetailsContent').innerHTML = html;
+        new bootstrap.Modal(document.getElementById('supplementDetailsModal')).show();
+    });
+}
+
+// Редактирование договора
+function editAgreement(agreementId) {
+    // Устанавливаем ID договора в форму
+    document.getElementById('editAgreementId').value = agreementId;
+    
+    // Загружаем полные данные договора через AJAX
+    fetch(`{% url 'education_planner:agreement_detail' 0 %}`.replace('0', agreementId), {
+        headers: {
+            'X-Requested-With': 'XMLHttpRequest'
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        // Заполняем все поля формы данными из API
+        document.getElementById('editNumber').value = data.number;
+        document.getElementById('editName').value = data.name;
+        document.getElementById('editFederalOperator').value = data.federal_operator;
+        document.getElementById('editStatus').value = data.status;
+        document.getElementById('editSigningDate').value = data.signing_date;
+        document.getElementById('editDocumentLink').value = data.document_link || '';
+        document.getElementById('editNotes').value = data.notes || '';
+        
+        // Показываем модальное окно
+        new bootstrap.Modal(document.getElementById('editAgreementModal')).show();
+    })
+    .catch(error => {
+        console.error('Error loading agreement details:', error);
+        alert('Ошибка при загрузке данных договора');
+    });
+}
+
+function saveEditedAgreement() {
+    const form = document.getElementById('editAgreementForm');
+    const formData = new FormData(form);
+    const data = Object.fromEntries(formData);
+    const agreementId = data.agreement_id;
+    
+    delete data.agreement_id; // Удаляем ID из данных
+    
+    fetch(`{% url 'education_planner:agreement_detail' 0 %}`.replace('0', agreementId), {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-Requested-With': 'XMLHttpRequest',
+            'X-CSRFToken': getCookie('csrftoken')
+        },
+        body: JSON.stringify(data)
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            alert(data.message);
+            location.reload();
+        } else {
+            alert('Ошибка: ' + data.message);
+        }
+    })
+    .catch(error => {
+        console.error('Error saving agreement:', error);
+        alert('Ошибка при сохранении договора');
+    });
+}
+
+// Удаление договора
+function deleteAgreement(agreementId) {
+    if (!confirm('Вы уверены, что хотите удалить этот договор?')) return;
+    
+    fetch(`/education/agreements/${agreementId}/delete/`, {
+        method: 'DELETE',
+        headers: {
+            'X-CSRFToken': getCookie('csrftoken')
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            alert(data.message);
+            location.reload();
+        } else {
+            alert('Ошибка: ' + data.message);
+        }
+    });
+}
+
+// Вспомогательная функция для получения CSRF токена
+function getCookie(name) {
+    let cookieValue = null;
+    if (document.cookie && document.cookie !== '') {
+        const cookies = document.cookie.split(';');
+        for (let i = 0; i < cookies.length; i++) {
+            const cookie = cookies[i].trim();
+            if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                break;
+            }
+        }
+    }
+    return cookieValue;
+}
+
+// Функция фильтрации программ обучения
+function filterPrograms() {
+    const searchInput = document.getElementById('programSearchInput');
+    const selectElement = document.getElementById('programNameSelect');
+    const searchText = searchInput.value.toLowerCase();
+    
+    // Получаем все опции
+    const options = selectElement.querySelectorAll('option');
+    
+    // Фильтруем опции
+    options.forEach(option => {
+        if (option.value === '') {
+            // Всегда показываем пустую опцию
+            option.style.display = '';
+            return;
+        }
+        
+        const optionText = option.textContent.toLowerCase();
+        if (optionText.includes(searchText)) {
+            option.style.display = '';
+        } else {
+            option.style.display = 'none';
+        }
+    });
+    
+    // Сбрасываем выбор если текущий элемент скрыт
+    const selectedOption = selectElement.options[selectElement.selectedIndex];
+    if (selectedOption && selectedOption.style.display === 'none') {
+        selectElement.selectedIndex = 0;
+        // Сбрасываем зависимые селекты
+        updateDurationOptions();
+    }
+}
+
+// Функция фильтрации регионов
+function filterRegions() {
+    const searchInput = document.getElementById('regionSearchInput');
+    const selectElement = document.getElementById('regionsSelect');
+    const searchText = searchInput.value.toLowerCase();
+    
+    // Получаем все опции
+    const options = selectElement.querySelectorAll('option');
+    
+    // Фильтруем опции
+    options.forEach(option => {
+        const optionText = option.textContent.toLowerCase();
+        if (optionText.includes(searchText)) {
+            option.style.display = '';
+        } else {
+            option.style.display = 'none';
+        }
+    });
+}
+
+// Функция для очистки поиска программ
+function clearProgramSearch() {
+    document.getElementById('programSearchInput').value = '';
+    filterPrograms();
+}
+
+// Функция для очистки поиска регионов
+function clearRegionSearch() {
+    document.getElementById('regionSearchInput').value = '';
+    filterRegions();
+}
+
+// Функции для редактирования квот
+function editQuota(quotaId) {
+    // Загружаем данные квоты через AJAX
+    fetch(`/education/quotas/${quotaId}/detail/`, {
+        headers: {
+            'X-Requested-With': 'XMLHttpRequest'
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            // Сохраняем ID договора для использования при сохранении
+            currentAgreementId = data.quota.agreement_id;
+            
+            // Заполняем форму редактирования
+            document.getElementById('editQuotaId').value = quotaId;
+            document.getElementById('editQuotaProgram').innerHTML = `<option value="${data.quota.education_program.id}">${data.quota.education_program.name}</option>`;
+            document.getElementById('editQuotaQuantity').value = data.quota.quantity;
+            document.getElementById('editQuotaCost').value = data.quota.cost_per_quota;
+            document.getElementById('editQuotaStartDate').value = data.quota.start_date || '';
+            document.getElementById('editQuotaEndDate').value = data.quota.end_date || '';
+            
+            // Устанавливаем выбранные регионы
+            const regionsSelect = document.getElementById('editQuotaRegions');
+            Array.from(regionsSelect.options).forEach(option => {
+                option.selected = data.quota.region_ids.includes(parseInt(option.value));
+            });
+            
+            // Показываем модальное окно
+            new bootstrap.Modal(document.getElementById('editQuotaModal')).show();
+        } else {
+            alert('Ошибка при загрузке данных квоты: ' + data.message);
+        }
+    })
+    .catch(error => {
+        console.error('Error loading quota details:', error);
+        alert('Произошла ошибка при загрузке данных квоты');
+    });
+}
+
+function saveEditedQuota() {
+    const quotaId = document.getElementById('editQuotaId').value;
+    const quantity = document.getElementById('editQuotaQuantity').value;
+    const costPerQuota = document.getElementById('editQuotaCost').value;
+    const startDate = document.getElementById('editQuotaStartDate').value;
+    const endDate = document.getElementById('editQuotaEndDate').value;
+    const regionsSelect = document.getElementById('editQuotaRegions');
+    const selectedRegions = Array.from(regionsSelect.selectedOptions).map(option => option.value);
+    
+    // Валидация
+    if (!quantity || quantity <= 0) {
+        alert('Укажите количество мест больше 0');
+        return;
+    }
+    
+    if (!costPerQuota || costPerQuota < 0) {
+        alert('Укажите стоимость за заявку (0 или больше)');
+        return;
+    }
+    
+    if (!selectedRegions || selectedRegions.length === 0) {
+        alert('Выберите хотя бы один регион');
+        return;
+    }
+    
+    // Валидация дат
+    if (startDate && endDate && new Date(startDate) > new Date(endDate)) {
+        alert('Дата начала не может быть позже даты окончания');
+        return;
+    }
+    
+    const data = {
+        action: 'update',
+        quota_id: quotaId,
+        quantity: parseInt(quantity),
+        cost_per_quota: parseFloat(costPerQuota),
+        regions: selectedRegions,
+        start_date: startDate || null,
+        end_date: endDate || null
+    };
+    
+    // Показываем индикатор загрузки
+    const button = document.querySelector('#editQuotaModal .btn-warning');
+    const originalText = button.innerHTML;
+    button.innerHTML = '<i class="bi bi-hourglass-split me-2"></i>Сохранение...';
+    button.disabled = true;
+    
+    fetch(`/education/agreements/${currentAgreementId}/quotas/`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': getCookie('csrftoken')
+        },
+        body: JSON.stringify(data)
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showNotification('success', 'Квота успешно обновлена');
+            
+            // Закрываем модальное окно
+            bootstrap.Modal.getInstance(document.getElementById('editQuotaModal')).hide();
+            
+            // Перезагружаем страницу
+            setTimeout(() => location.reload(), 1000);
+        } else {
+            showNotification('error', 'Ошибка: ' + data.message);
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        showNotification('error', 'Произошла ошибка при обновлении квоты');
+    })
+    .finally(() => {
+        // Восстанавливаем кнопку
+        button.innerHTML = originalText;
+        button.disabled = false;
+    });
+}
+
+function deleteQuota(quotaId, agreementId) {
+    if (!confirm('Вы уверены, что хотите удалить эту квоту?')) return;
+    
+    const data = {
+        action: 'delete',
+        quota_id: quotaId
+    };
+    
+    fetch(`/education/agreements/${agreementId}/quotas/`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': getCookie('csrftoken')
+        },
+        body: JSON.stringify(data)
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showNotification('success', 'Квота успешно удалена');
+            setTimeout(() => location.reload(), 1000);
+        } else {
+            showNotification('error', 'Ошибка: ' + data.message);
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        showNotification('error', 'Произошла ошибка при удалении квоты');
+    });
+}
+
+// Функция фильтрации регионов в модальном окне редактирования
+function filterEditRegions() {
+    const searchInput = document.getElementById('editRegionSearchInput');
+    const selectElement = document.getElementById('editQuotaRegions');
+    const searchText = searchInput.value.toLowerCase();
+    
+    // Получаем все опции
+    const options = selectElement.querySelectorAll('option');
+    
+    // Фильтруем опции
+    options.forEach(option => {
+        const optionText = option.textContent.toLowerCase();
+        if (optionText.includes(searchText)) {
+            option.style.display = '';
+        } else {
+            option.style.display = 'none';
+        }
+    });
+}
+
+// Функции для импорта квот
+function openImportQuotasModal() {
+    // Сбрасываем форму и результаты
+    document.getElementById('importQuotasForm').reset();
+    document.getElementById('importProgress').classList.add('d-none');
+    document.getElementById('importResults').classList.add('d-none');
+    
+    // Показываем модальное окно
+    new bootstrap.Modal(document.getElementById('importQuotasModal')).show();
+}
+
+function submitImportForm() {
+    const form = document.getElementById('importQuotasForm');
+    const fileInput = document.getElementById('excelFile');
+    const progressDiv = document.getElementById('importProgress');
+    const resultsDiv = document.getElementById('importResults');
+    const submitBtn = document.querySelector('#importQuotasModal .btn-success');
+    
+    // Валидация
+    if (!fileInput.files.length) {
+        alert('Выберите файл для импорта');
+        return;
+    }
+    
+    // Показываем индикатор загрузки
+    progressDiv.classList.remove('d-none');
+    resultsDiv.classList.add('d-none');
+    submitBtn.disabled = true;
+    submitBtn.innerHTML = '<i class="bi bi-hourglass-split me-2"></i>Анализ файла и проверка регионов...';
+    
+    // Создаем FormData
+    const formData = new FormData(form);
+    
+    // Отправляем файл на анализ с интерактивным выбором регионов
+    fetch('{% url "education_planner:analyze_quotas_excel" %}', {
+        method: 'POST',
+        body: formData,
+        headers: {
+            'X-CSRFToken': getCookie('csrftoken')
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        progressDiv.classList.add('d-none');
+        
+        if (data.success) {
+            if (data.needs_user_input) {
+                // Есть неопознанные регионы - показываем модал настройки
+                showRegionMappingModal(data.unrecognized_regions);
+                
+                resultsDiv.classList.remove('d-none');
+                resultsDiv.innerHTML = `
+                    <div class="alert alert-warning">
+                        <i class="bi bi-exclamation-triangle me-2"></i>
+                        <strong>Требуется настройка регионов</strong><br>
+                        Найдено строк: ${data.total_rows}<br>
+                        Неопознанных регионов: ${data.unrecognized_regions.length}
+                    </div>
+                `;
+            } else {
+                // Нет неопознанных регионов - показываем успех анализа и переходим к импорту
+                resultsDiv.classList.remove('d-none');
+                resultsDiv.innerHTML = `
+                    <div class="alert alert-success">
+                        <i class="bi bi-check-circle me-2"></i>
+                        <strong>Анализ завершен успешно!</strong><br>
+                        Найдено строк: ${data.total_rows}<br>
+                        Все регионы распознаны, переходим к импорту...
+                    </div>
+                `;
+                
+                // Небольшая задержка для отображения сообщения, затем импорт
+                setTimeout(() => {
+                    proceedWithImport();
+                }, 1000);
+            }
+        } else {
+            resultsDiv.classList.remove('d-none');
+            resultsDiv.innerHTML = `
+                <div class="alert alert-danger">
+                    <i class="bi bi-exclamation-triangle me-2"></i>
+                    <strong>Ошибка анализа файла:</strong> ${data.message}
+                </div>
+            `;
+        }
+    })
+    .catch(error => {
+        progressDiv.classList.add('d-none');
+        resultsDiv.classList.remove('d-none');
+        resultsDiv.innerHTML = `
+            <div class="alert alert-danger">
+                <i class="bi bi-exclamation-triangle me-2"></i>
+                <strong>Произошла ошибка:</strong><br>
+                ${error.message || 'Неизвестная ошибка'}
+            </div>
+        `;
+        console.error('Import error:', error);
+    })
+    .finally(() => {
+        submitBtn.disabled = false;
+        submitBtn.innerHTML = '<i class="bi bi-upload me-2"></i>Импортировать';
+    });
+}
+
+// Функция для отображения модального окна настройки регионов
+function showRegionMappingModal(unrecognizedRegions) {
+    const regionMappingList = document.getElementById('regionMappingList');
+    regionMappingList.innerHTML = '';
+    
+    unrecognizedRegions.forEach((regionInfo, index) => {
+        const regionDiv = document.createElement('div');
+        regionDiv.className = 'border rounded p-3 mb-3';
+        regionDiv.innerHTML = `
+            <div class="row">
+                <div class="col-md-4">
+                    <strong>Найден в файле:</strong><br>
+                    <span class="badge bg-warning text-dark">${regionInfo.original}</span>
+                </div>
+                <div class="col-md-8">
+                    <label class="form-label"><strong>Выберите действие:</strong></label>
+                    <div class="mb-2">
+                        <input type="radio" class="form-check-input" 
+                               name="action_${index}" id="map_${index}" value="map" checked>
+                        <label class="form-check-label ms-2" for="map_${index}">
+                            Сопоставить с существующим регионом
+                        </label>
+                    </div>
+                    <div class="mb-2">
+                        <select class="form-select" id="region_select_${index}" 
+                                ${regionInfo.suggestions.length === 0 ? 'disabled' : ''}>
+                            <option value="">Выберите регион</option>
+                            ${regionInfo.suggestions.map(s => 
+                                `<option value="${s.id}">${s.name}</option>`
+                            ).join('')}
+                        </select>
+                    </div>
+                    <div class="mb-2">
+                        <input type="radio" class="form-check-input" 
+                               name="action_${index}" id="create_${index}" value="create">
+                        <label class="form-check-label ms-2" for="create_${index}">
+                            Создать новый регион
+                        </label>
+                    </div>
+                    <div class="mb-2">
+                        <input type="text" class="form-control" id="new_region_name_${index}" 
+                               placeholder="Название нового региона" disabled>
+                    </div>
+                    <div>
+                        <input type="radio" class="form-check-input" 
+                               name="action_${index}" id="skip_${index}" value="skip">
+                        <label class="form-check-label ms-2" for="skip_${index}">
+                            Пропустить этот регион
+                        </label>
+                    </div>
+                </div>
+            </div>
+        `;
+        
+        regionMappingList.appendChild(regionDiv);
+        
+        // Добавляем обработчики событий
+        const mapRadio = document.getElementById(`map_${index}`);
+        const createRadio = document.getElementById(`create_${index}`);
+        const skipRadio = document.getElementById(`skip_${index}`);
+        const regionSelect = document.getElementById(`region_select_${index}`);
+        const newRegionName = document.getElementById(`new_region_name_${index}`);
+        
+        mapRadio.addEventListener('change', () => {
+            regionSelect.disabled = false;
+            newRegionName.disabled = true;
+        });
+        
+        createRadio.addEventListener('change', () => {
+            regionSelect.disabled = true;
+            newRegionName.disabled = false;
+            newRegionName.value = regionInfo.original;
+        });
+        
+        skipRadio.addEventListener('change', () => {
+            regionSelect.disabled = true;
+            newRegionName.disabled = true;
+        });
+    });
+    
+    // Закрываем модал импорта и показываем модал настройки
+    bootstrap.Modal.getInstance(document.getElementById('importQuotasModal')).hide();
+    new bootstrap.Modal(document.getElementById('regionMappingModal')).show();
+}
+
+// Функция для сохранения настроек регионов
+function saveRegionMappings() {
+    const regionMappingList = document.getElementById('regionMappingList');
+    const regionDivs = regionMappingList.querySelectorAll('.border.rounded');
+    const regionMappings = {};
+    let hasErrors = false;
+    
+    regionDivs.forEach((regionDiv, index) => {
+        const originalName = regionDiv.querySelector('.badge').textContent;
+        const actionRadios = regionDiv.querySelectorAll(`input[name="action_${index}"]`);
+        const selectedAction = Array.from(actionRadios).find(r => r.checked)?.value;
+        
+        if (selectedAction === 'map') {
+            const regionSelect = document.getElementById(`region_select_${index}`);
+            if (!regionSelect.value) {
+                alert(`Выберите регион для сопоставления: ${originalName}`);
+                hasErrors = true;
+                return;
+            }
+            regionMappings[originalName] = {
+                action: 'map',
+                region_id: parseInt(regionSelect.value)
+            };
+        } else if (selectedAction === 'create') {
+            const newRegionName = document.getElementById(`new_region_name_${index}`).value.trim();
+            if (!newRegionName) {
+                alert(`Укажите название нового региона для: ${originalName}`);
+                hasErrors = true;
+                return;
+            }
+            regionMappings[originalName] = {
+                action: 'create',
+                new_name: newRegionName
+            };
+        } else if (selectedAction === 'skip') {
+            regionMappings[originalName] = {
+                action: 'skip'
+            };
+        }
+    });
+    
+    if (hasErrors) return;
+    
+    // Сохраняем настройки на сервере
+    fetch('{% url "education_planner:save_region_mappings" %}', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': getCookie('csrftoken')
+        },
+        body: JSON.stringify({
+            region_mappings: regionMappings
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            // Закрываем модал настройки и продолжаем импорт
+            bootstrap.Modal.getInstance(document.getElementById('regionMappingModal')).hide();
+            proceedWithImport();
+        } else {
+            alert('Ошибка сохранения настроек: ' + data.message);
+        }
+    })
+    .catch(error => {
+        console.error('Ошибка:', error);
+        alert('Ошибка сохранения настроек');
+    });
+}
+
+// Функция для финального импорта
+function proceedWithImport() {
+    const progressDiv = document.getElementById('importProgress');
+    const resultsDiv = document.getElementById('importResults');
+    
+    progressDiv.classList.remove('d-none');
+    resultsDiv.classList.add('d-none');
+    
+    // Выполняем финальный импорт
+    fetch('{% url "education_planner:import_quotas_excel" %}', {
+        method: 'POST',
+        headers: {
+            'X-CSRFToken': getCookie('csrftoken')
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        progressDiv.classList.add('d-none');
+        resultsDiv.classList.remove('d-none');
+        
+        if (data.success) {
+            resultsDiv.innerHTML = `
+                <div class="alert alert-success">
+                    <i class="bi bi-check-circle me-2"></i>
+                    <strong>Импорт завершен успешно!</strong>
+                    <ul class="mb-0 mt-2">
+                        <li>Создано квот: ${data.created_count}</li>
+                        ${data.error_count > 0 ? `<li>Ошибок: ${data.error_count}</li>` : ''}
+                    </ul>
+                    ${data.errors && data.errors.length > 0 ? `
+                        <div class="mt-2">
+                            <strong>Детали ошибок:</strong>
+                            <ul class="mb-0">
+                                ${data.errors.map(error => `<li>${error}</li>`).join('')}
+                            </ul>
+                        </div>
+                    ` : ''}
+                </div>
+            `;
+            
+            // Перезагружаем страницу через 3 секунды
+            setTimeout(() => {
+                location.reload();
+            }, 3000);
+        } else {
+            resultsDiv.innerHTML = `
+                <div class="alert alert-danger">
+                    <i class="bi bi-exclamation-triangle me-2"></i>
+                    <strong>Ошибка импорта:</strong> ${data.message}
+                </div>
+            `;
+        }
+    })
+    .catch(error => {
+        console.error('Ошибка:', error);
+        progressDiv.classList.add('d-none');
+        resultsDiv.classList.remove('d-none');
+        resultsDiv.innerHTML = `
+            <div class="alert alert-danger">
+                <i class="bi bi-exclamation-triangle me-2"></i>
+                <strong>Ошибка импорта:</strong> ${error.message}
+            </div>
+        `;
+    });
+}
+
+// ========== ФУНКЦИИ ДЛЯ ИМПОРТА ДОПОЛНИТЕЛЬНЫХ СОГЛАШЕНИЙ ==========
+
+function openImportSupplementModal(agreementId) {
+    const modal = new bootstrap.Modal(document.getElementById('importSupplementModal'));
+    document.getElementById('supplementAgreementId').value = agreementId;
+    
+    // Очищаем форму
+    document.getElementById('importSupplementForm').reset();
+    document.getElementById('supplementAgreementId').value = agreementId;
+    document.getElementById('supplementImportProgress').classList.add('d-none');
+    document.getElementById('supplementImportResults').classList.add('d-none');
+    
+    // Сбрасываем кнопку
+    const submitBtn = document.querySelector('#importSupplementModal .btn-success');
+    submitBtn.disabled = false;
+    submitBtn.innerHTML = '<i class="bi bi-upload me-2"></i>Анализировать и импортировать';
+    
+    modal.show();
+}
+
+function submitSupplementImportForm() {
+    const form = document.getElementById('importSupplementForm');
+    const fileInput = document.getElementById('supplementExcelFile');
+    const numberInput = document.getElementById('supplementNumber');
+    const progressDiv = document.getElementById('supplementImportProgress');
+    const resultsDiv = document.getElementById('supplementImportResults');
+    const submitBtn = document.querySelector('#importSupplementModal .btn-success');
+    
+    // Валидация
+    if (!fileInput.files.length) {
+        alert('Выберите файл для импорта');
+        return;
+    }
+    
+    if (!numberInput.value.trim()) {
+        alert('Укажите номер дополнительного соглашения');
+        return;
+    }
+    
+    // Показываем индикатор загрузки
+    progressDiv.classList.remove('d-none');
+    resultsDiv.classList.add('d-none');
+    submitBtn.disabled = true;
+    submitBtn.innerHTML = '<i class="bi bi-hourglass-split me-2"></i>Анализ файла и поиск изменений...';
+    
+    // Создаем FormData
+    const formData = new FormData(form);
+    
+    // Отправляем файл на анализ
+    fetch('{% url "education_planner:analyze_supplement_excel" %}', {
+        method: 'POST',
+        body: formData,
+        headers: {
+            'X-CSRFToken': getCookie('csrftoken')
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        progressDiv.classList.add('d-none');
+        
+        if (data.success) {
+            if (data.needs_user_input) {
+                // Есть неопознанные регионы - показываем модал настройки
+                showSupplementRegionMappingModal(data.unrecognized_regions);
+                
+                resultsDiv.classList.remove('d-none');
+                resultsDiv.innerHTML = `
+                    <div class="alert alert-warning">
+                        <i class="bi bi-exclamation-triangle me-2"></i>
+                        <strong>Требуется настройка регионов</strong><br>
+                        Найдено строк: ${data.total_rows}<br>
+                        Валидных квот: ${data.valid_quotas}<br>
+                        Неопознанных регионов: ${data.unrecognized_regions.length}<br>
+                        <strong>Все квоты договора будут заменены на новые из файла</strong>
+                    </div>
+                `;
+            } else {
+                // Нет неопознанных регионов - показываем результаты анализа и переходим к импорту
+                resultsDiv.classList.remove('d-none');
+                resultsDiv.innerHTML = `
+                    <div class="alert alert-success">
+                        <i class="bi bi-check-circle me-2"></i>
+                        <strong>Анализ завершен успешно!</strong><br>
+                        Найдено строк: ${data.total_rows}<br>
+                        Валидных квот: ${data.valid_quotas}<br>
+                        Все регионы распознаны, переходим к созданию допсоглашения...<br>
+                        <strong>Все квоты договора будут заменены на новые из файла</strong>
+                    </div>
+                `;
+                
+                // Небольшая задержка для отображения сообщения, затем импорт
+                setTimeout(() => {
+                    proceedWithSupplementImport();
+                }, 2000);
+            }
+        } else {
+            resultsDiv.classList.remove('d-none');
+            resultsDiv.innerHTML = `
+                <div class="alert alert-danger">
+                    <i class="bi bi-exclamation-triangle me-2"></i>
+                    <strong>Ошибка анализа файла:</strong> ${data.message}
+                </div>
+            `;
+        }
+        
+        // Восстанавливаем кнопку
+        submitBtn.disabled = false;
+        submitBtn.innerHTML = '<i class="bi bi-upload me-2"></i>Анализировать и импортировать';
+    })
+    .catch(error => {
+        progressDiv.classList.add('d-none');
+        resultsDiv.classList.remove('d-none');
+        resultsDiv.innerHTML = `
+            <div class="alert alert-danger">
+                <i class="bi bi-exclamation-triangle me-2"></i>
+                <strong>Ошибка анализа:</strong> ${error.message}
+            </div>
+        `;
+        
+        submitBtn.disabled = false;
+        submitBtn.innerHTML = '<i class="bi bi-upload me-2"></i>Анализировать и импортировать';
+    });
+}
+
+function showSupplementRegionMappingModal(unrecognizedRegions) {
+    const modal = new bootstrap.Modal(document.getElementById('supplementRegionMappingModal'));
+    const container = document.getElementById('supplementRegionMappingContainer');
+    
+    container.innerHTML = '';
+    
+    unrecognizedRegions.forEach(regionData => {
+        const regionDiv = document.createElement('div');
+        regionDiv.className = 'mb-3 p-3 border rounded';
+        regionDiv.innerHTML = `
+            <h6 class="mb-2">Регион: <strong>${regionData.name}</strong></h6>
+            <div class="row">
+                <div class="col-md-4">
+                    <div class="form-check">
+                        <input class="form-check-input" type="radio" name="region_${regionData.name}" 
+                               id="map_${regionData.name}" value="map" checked>
+                        <label class="form-check-label" for="map_${regionData.name}">
+                            Сопоставить с существующим
+                        </label>
+                    </div>
+                </div>
+                <div class="col-md-5">
+                    <select class="form-select form-select-sm" id="mapping_${regionData.name}">
+                        <option value="">Выберите регион</option>
+                        ${regionData.suggestions.map(s => `<option value="${s}">${s}</option>`).join('')}
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <div class="form-check">
+                        <input class="form-check-input" type="radio" name="region_${regionData.name}" 
+                               id="create_${regionData.name}" value="create">
+                        <label class="form-check-label" for="create_${regionData.name}">
+                            Создать новый
+                        </label>
+                    </div>
+                    <div class="form-check">
+                        <input class="form-check-input" type="radio" name="region_${regionData.name}" 
+                               id="skip_${regionData.name}" value="skip">
+                        <label class="form-check-label" for="skip_${regionData.name}">
+                            Пропустить
+                        </label>
+                    </div>
+                </div>
+            </div>
+        `;
+        container.appendChild(regionDiv);
+    });
+    
+    modal.show();
+}
+
+function saveSupplementRegionMappings() {
+    const container = document.getElementById('supplementRegionMappingContainer');
+    const mappings = {};
+    
+    container.querySelectorAll('[id^="map_"], [id^="create_"], [id^="skip_"]').forEach(input => {
+        if (input.checked) {
+            const regionName = input.name.replace('region_', '');
+            const action = input.value;
+            
+            mappings[regionName] = {
+                action: action,
+                target_region: action === 'map' ? 
+                    document.getElementById(`mapping_${regionName}`).value : 
+                    null
+            };
+        }
+    });
+    
+    // Проверяем что все регионы настроены
+    const hasEmptyMappings = Object.values(mappings).some(m => 
+        m.action === 'map' && !m.target_region
+    );
+    
+    if (hasEmptyMappings) {
+        alert('Выберите целевой регион для всех сопоставлений');
+        return;
+    }
+    
+    // Сохраняем mappings
+    fetch('{% url "education_planner:save_supplement_region_mappings" %}', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': getCookie('csrftoken')
+        },
+        body: JSON.stringify({
+            mappings: mappings
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            // Скрываем модал настройки регионов
+            const modal = bootstrap.Modal.getInstance(document.getElementById('supplementRegionMappingModal'));
+            modal.hide();
+            
+            // Переходим к импорту
+            setTimeout(() => {
+                proceedWithSupplementImport();
+            }, 500);
+        } else {
+            alert('Ошибка сохранения настроек: ' + data.message);
+        }
+    })
+    .catch(error => {
+        alert('Ошибка сохранения настроек: ' + error.message);
+    });
+}
+
+function proceedWithSupplementImport() {
+    const progressDiv = document.getElementById('supplementImportProgress');
+    const resultsDiv = document.getElementById('supplementImportResults');
+    const submitBtn = document.querySelector('#importSupplementModal .btn-success');
+    
+    // Показываем индикатор импорта
+    progressDiv.classList.remove('d-none');
+    progressDiv.querySelector('span').textContent = 'Создание дополнительного соглашения...';
+    submitBtn.disabled = true;
+    submitBtn.innerHTML = '<i class="bi bi-hourglass-split me-2"></i>Создание допсоглашения...';
+    
+    // Получаем данные формы
+    const form = document.getElementById('importSupplementForm');
+    const formData = new FormData(form);
+    
+    // Выполняем финальный импорт
+    fetch('{% url "education_planner:import_supplement_excel" %}', {
+        method: 'POST',
+        body: formData,
+        headers: {
+            'X-CSRFToken': getCookie('csrftoken')
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        progressDiv.classList.add('d-none');
+        resultsDiv.classList.remove('d-none');
+        
+        if (data.success) {
+            resultsDiv.innerHTML = `
+                <div class="alert alert-success">
+                    <i class="bi bi-check-circle me-2"></i>
+                    <strong>Импорт завершен успешно!</strong><br>
+                    ${data.message}<br>
+                    <ul class="mb-0 mt-2">
+                        <li>Создано квот: ${data.quotas_count}</li>
+                    </ul>
+                </div>
+            `;
+            
+            // Перезагружаем страницу через 3 секунды
+            setTimeout(() => {
+                location.reload();
+            }, 3000);
+        } else {
+            resultsDiv.innerHTML = `
+                <div class="alert alert-danger">
+                    <i class="bi bi-exclamation-triangle me-2"></i>
+                    <strong>Ошибка импорта:</strong> ${data.message}
+                </div>
+            `;
+        }
+        
+        // Восстанавливаем кнопку
+        submitBtn.disabled = false;
+        submitBtn.innerHTML = '<i class="bi bi-upload me-2"></i>Анализировать и импортировать';
+    })
+    .catch(error => {
+        progressDiv.classList.add('d-none');
+        resultsDiv.classList.remove('d-none');
+        resultsDiv.innerHTML = `
+            <div class="alert alert-danger">
+                <i class="bi bi-exclamation-triangle me-2"></i>
+                <strong>Ошибка импорта:</strong> ${error.message}
+            </div>
+        `;
+        
+        submitBtn.disabled = false;
+        submitBtn.innerHTML = '<i class="bi bi-upload me-2"></i>Анализировать и импортировать';
+    });
+}
+
+</script>
+{% endblock %}
