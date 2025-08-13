@@ -72,6 +72,15 @@ class ExcelImportForm(forms.Form):
                 raise forms.ValidationError('Загрузите корректный файл Excel (.xlsx или .xls)')
         return excel_file 
 
+api = Bitrix24API()
+class LeadImportForm(forms.Form):
+    excel_file = forms.FileField(label='Выберите Excel файл с лидами')
+    training = forms.ChoiceField(
+        label='Направление обучения',
+        choices=api.get_deal_field_list('UF_CRM_1741091080288'),
+        widget=forms.Select(attrs={'class': 'form-control'})
+    )
+    
 
 # ------------------------------------------------------------------
 # Форма для проверки стадии сделки по статусам Атлас/РР

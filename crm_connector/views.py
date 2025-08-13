@@ -4,6 +4,7 @@ from django.conf import settings
 from django.urls import reverse
 from django.utils import timezone
 
+import openpyxl
 from .tasks import sync_leads, sync_deals, sync_contacts, sync_pipelines_task
 from .bitrix24_api import Bitrix24API
 from django.views.decorators.csrf import csrf_protect
@@ -13,6 +14,7 @@ from django.contrib import messages
 import logging
 import pandas as pd
 from .forms import ExcelImportForm
+from .forms import LeadImportForm
 from datetime import datetime, timedelta
 
 logger = logging.getLogger(__name__)
@@ -788,6 +790,132 @@ def import_atlas_applications(request):
     }
     
     return render(request, 'crm_connector/import_atlas_applications.html', context)
+
+def import_not_atlas(request):
+    if request.method == 'POST':
+        form = LeadImportForm(request.POST, request.FILES)
+        if form.is_valid():
+            excel_file = form.cleaned_data['excel_file']
+            edcuationdirection = form.cleaned_data['training']
+
+            try:
+                wb = openpyxl.load_workbook(excel_file)
+                ws = wb.active
+            except Exception as e:
+                messages.error(request, f'Ошибка при открытии файла: {e}')
+                return render(request, 'crm_connector/import_lids.html', {'form': form})
+
+            missing_company_rows = []
+            missing_name_rows = []
+            missing_phone_rows = []
+
+            for row in ws.iter_rows(min_row=2, values_only=True):
+                ExcelPhone = row[3]
+                contact_name = row[2]
+                contact_phone = row[3]
+                contact_email = row[4]
+                CompanyStringList = str(row[1]).split() # Тут убрать лишние пробелы надо
+                company_name = ' '.join(CompanyStringList)   # Поэтому эти две строки существуют
+                # Проверка обязательных полей
+                if not row[1] and row[0] != None:
+                    missing_company_rows.append(int(row[0])) # Собираем номера полей, где нет компании
+                    continue
+                if contact_name is None and row[0] != None:
+                    missing_name_rows.append(int(row[0])) # Собираем номера полей, где нет ФИО
+                    continue
+                if not row[3] and row[0] != None:
+                    missing_phone_rows.append(int(row[0])) # Собираем номера полей, где нет телефона
+                    continue
+                # Проверка эмейла на вшивость
+                pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
+                if re.match(pattern, str(row[4])):
+                    contact_email = row[4]
+                else:
+                    contact_email = ''
+                # Проверка телефона на вшивость
+                if isinstance(ExcelPhone, float):
+                    if ExcelPhone.is_integer():
+                        ExcelPhone = str(int(ExcelPhone))
+                    else:
+                        ExcelPhone = str(ExcelPhone)
+                else:
+                    ExcelPhone = str(ExcelPhone).strip()
+                ExcelPhone = re.sub(r'\D','',ExcelPhone)
+                if ExcelPhone.startswith('7'):
+                    ExcelPhone = '8' + ExcelPhone[1:]
+                
+                # Создаем лид с status=0 и текущим временем создания
+                api = Bitrix24API()
+                contact_data = {
+                    'NAME': contact_name.split()[0] if contact_name and len(contact_name.split()) > 0 else '',
+                    'LAST_NAME': ' '.join(contact_name.split()[1:]) if contact_name and len(contact_name.split()) > 1 else '',
+                    'TYPE_ID': 'CURATOR',  # Тип контакта по умолчанию "куратор"
+                    'PHONE': [{'VALUE': contact_phone, 'VALUE_TYPE': 'WORK'}] if contact_phone else [],
+                    'EMAIL': [{'VALUE': contact_email, 'VALUE_TYPE': 'WORK'}] if contact_email else []
+                }
+
+                # Проверяем, существует ли контакт
+                existing_contact = None
+                if contact_email:
+                    existing_contacts = api.find_contact_by_email(contact_email)
+                    if existing_contacts:
+                        existing_contact = existing_contacts
+
+                if not existing_contact and contact_phone:
+                    existing_contacts = api.find_contact_by_phone(contact_phone)
+                    if existing_contacts:
+                        existing_contact = existing_contacts
+
+                contact_id = None
+                if existing_contact:
+                    contact_id = existing_contact['ID']
+                    # Обновляем существующий контакт
+                    api.update_contact(contact_id, contact_data)
+                else:
+                    # Создаем новый контакт
+                    contact_result = api.add_contact(contact_data)
+                    contact_id = contact_result
+
+                # 2. Создаем или находим компанию
+                company_data = {
+                    'TITLE': company_name,
+                    'OPENED': 'Y',
+                    }
+                            
+                        # Проверяем, существует ли компания
+                existing_companies = api.find_company_by_name(company_name)
+                company_id = None
+                            
+                if existing_companies:
+                    company_id = existing_companies['ID']
+                                # Обновляем существующую компанию
+                    api.update_company(company_id, company_data)
+                else:
+                                # Создаем новую компанию
+                    company_result = api.add_company(company_data)
+                    company_id = company_result
+
+                lead_data = {
+                        'TITLE': company_name,
+                        'CATEGORY_ID': '11',
+                        'COMPANY_ID': company_id,
+                        'CONTACT_ID': contact_id,
+                        # Указание направления обучения
+                        'UF_CRM_1741091080288': edcuationdirection
+                    }
+                api.add_deal(lead_data)
+            messages.success(request, 'Сделки успешно импортированы')
+            if missing_company_rows:
+                messages.warning(request, f'Пропущены строки из-за неуказанной компании: {",".join(map(str, missing_company_rows))}')
+            if missing_name_rows:
+                messages.warning(request, f'Пропущены строки из-за неуказанного ФИО: {",".join(map(str, missing_name_rows))}')
+            if missing_phone_rows:
+                messages.warning(request, f'Пропущены строки из-за неуказанного телефона: {",".join(map(str, missing_phone_rows))}')
+            
+    else:
+        form = LeadImportForm()
+
+    return render(request, 'crm_connector/import_lids.html', {'form': form})
 
 from django.views.generic import ListView
 from django.contrib.auth.mixins import LoginRequiredMixin
