@@ -1,7 +1,7 @@
 from django.contrib import admin
 from .models import (
     ProfActivity, EducationProgram, ProgramSection,
-    EduAgreement, Quota, Supplement, QuotaChange, Region
+    EduAgreement, Quota, Supplement, QuotaChange, Region, ROIV, AlternativeQuota
 )
 
 @admin.register(ProfActivity)
@@ -145,3 +145,22 @@ class QuotaChangeAdmin(admin.ModelAdmin):
     
     def get_queryset(self, request):
         return super().get_queryset(request).select_related('supplement', 'supplement__agreement', 'education_program')
+
+
+@admin.register(ROIV)
+class ROIVAdmin(admin.ModelAdmin):
+    list_display = ('name', 'region', 'is_active', 'created_at')
+    list_filter = ('is_active', 'created_at')
+    search_fields = ('name', 'region__name')
+    readonly_fields = ('created_at', 'updated_at')
+
+
+@admin.register(AlternativeQuota)
+class AlternativeQuotaAdmin(admin.ModelAdmin):
+    list_display = ('quota', 'region', 'start_date', 'end_date', 'quantity', 'created_at')
+    list_filter = ('region', 'created_at')
+    search_fields = ('quota__education_program__name', 'region__name')
+    readonly_fields = ('created_at', 'updated_at')
+    
+    def get_queryset(self, request):
+        return super().get_queryset(request).select_related('quota__education_program', 'region')

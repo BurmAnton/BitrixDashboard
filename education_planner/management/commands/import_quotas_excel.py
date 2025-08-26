@@ -86,7 +86,10 @@ class Command(BaseCommand):
             
             missing_columns = [col for col in required_columns if col not in df.columns]
             if missing_columns:
-                raise CommandError(f'Отсутствуют обязательные колонки: {", ".join(missing_columns)}')
+                # Импортируем функцию из views
+                from education_planner.views import get_missing_columns_message
+                error_message = get_missing_columns_message(missing_columns, is_supplement=False)
+                raise CommandError(error_message)
 
             self.stdout.write(f'Найдено {len(df)} строк для импорта')
             
@@ -127,19 +130,21 @@ class Command(BaseCommand):
                             try:
                                 # Определяем тип программы
                                 program_type_choices = {
-                                    'повышение квалификации': EducationProgram.ProgramType.QUALIFICATION_UPGRADE,
-                                    'профессиональная переподготовка': EducationProgram.ProgramType.PROFESSIONAL_RETRAINING,
-                                    'программы профессионального обучения': EducationProgram.ProgramType.PROFESSIONAL_TRAINING
+                                    'повышение квалификации': EducationProgram.ProgramType.ADVANCED,
+                                    'профессиональная переподготовка': EducationProgram.ProgramType.PROFESSIONAL_RE,
+                                    'программы профессионального обучения': EducationProgram.ProgramType.PROFESSIONAL,
+                                    'профессиональное обучение': EducationProgram.ProgramType.PROFESSIONAL
                                 }
                                 
                                 program_type_key = program_type.lower()
-                                program_type_value = program_type_choices.get(program_type_key, EducationProgram.ProgramType.QUALIFICATION_UPGRADE)
+                                program_type_value = program_type_choices.get(program_type_key, EducationProgram.ProgramType.ADVANCED)
                                 
                                 # Определяем форму обучения
                                 study_form_choices = {
                                     'очная': EducationProgram.StudyForm.FULL_TIME,
-                                    'заочная': EducationProgram.StudyForm.PART_TIME,
-                                    'очно-заочная': EducationProgram.StudyForm.MIXED
+                                    'заочная': EducationProgram.StudyForm.DISTANCE,
+                                    'очно-заочная': EducationProgram.StudyForm.PART_TIME,
+                                    'дистанционная': EducationProgram.StudyForm.DISTANCE
                                 }
                                 
                                 study_form_key = program_form.lower()
@@ -165,24 +170,27 @@ class Command(BaseCommand):
                                 error_count += 1
                                 continue
 
-                        # Парсим регионы с автоматическим созданием
-                        regions_names = [self.clean_text_data(name) for name in regions_text.split(',') if self.clean_text_data(name)]
+                        # Парсим регионы с автоматическим созданием (для ВНИИ регионы не обязательны)
                         regions = []
                         region_messages = []
                         
-                        for region_name in regions_names:
-                            region, message = self.find_or_create_region(region_name)
-                            if region:
-                                regions.append(region)
-                                if message:
-                                    region_messages.append(f'Строка {index + 2}: {message}')
-                                    self.stdout.write(
-                                        self.style.WARNING(f'Строка {index + 2}: {message}')
-                                    )
-                            else:
-                                errors.append(f'Строка {index + 2}: {message}')
+                        if agreement.federal_operator != 'VNII' and regions_text:
+                            regions_names = [self.clean_text_data(name) for name in regions_text.split(',') if self.clean_text_data(name)]
+                            
+                            for region_name in regions_names:
+                                region, message = self.find_or_create_region(region_name)
+                                if region:
+                                    regions.append(region)
+                                    if message:
+                                        region_messages.append(f'Строка {index + 2}: {message}')
+                                        self.stdout.write(
+                                            self.style.WARNING(f'Строка {index + 2}: {message}')
+                                        )
+                                else:
+                                    errors.append(f'Строка {index + 2}: {message}')
                         
-                        if not regions:
+                        # Для ВНИИ регионы не обязательны
+                        if not regions and agreement.federal_operator != 'VNII':
                             error_count += 1
                             continue
 

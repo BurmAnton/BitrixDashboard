@@ -12,6 +12,7 @@ urlpatterns = [
     path('agreements/<int:pk>/', views.agreement_detail, name='agreement_detail'),
     path('agreements/create/', views.create_agreement, name='create_agreement'),
     path('agreements/<int:pk>/delete/', views.delete_agreement, name='delete_agreement'),
+    path('agreements/<int:pk>/supplement-quotas/', views.get_supplement_quotas, name='get_supplement_quotas'),
     
     # Маршруты для управления квотами
     path('agreements/<int:agreement_id>/quotas/', views.manage_quota, name='manage_quota'),
@@ -24,13 +25,21 @@ urlpatterns = [
     path('quotas/import/direct/', views.import_quotas_excel_direct, name='import_quotas_excel_direct'),
     path('quotas/template/', views.download_quota_template, name='download_quota_template'),
     
-    # Маршруты для допсоглашений
+    # # Маршруты для допсоглашений
     path('agreements/<int:agreement_id>/supplements/create/', views.create_supplement, name='create_supplement'),
     path('supplements/<int:pk>/', views.supplement_detail, name='supplement_detail'),
+    path('supplements/<int:pk>/edit/', views.edit_supplement, name='edit_supplement'),
     
     # Маршруты для импорта допсоглашений
     path('supplements/analyze/', views.analyze_supplement_excel, name='analyze_supplement_excel'),
     path('supplements/regions/save/', views.save_supplement_region_mappings, name='save_supplement_region_mappings'),
     path('supplements/import/', views.import_supplement_excel, name='import_supplement_excel'),
     path('supplements/template/', views.download_supplement_template, name='download_supplement_template'),
+    
+    # Сводный дашборд квот
+    path('quota-summary/', views.quota_summary_dashboard, name='quota_summary_dashboard'),
+    path('manage-roiv/', views.manage_roiv, name='manage_roiv'),
+    path('manage-alternative-quota/', views.manage_alternative_quota, name='manage_alternative_quota'),
+    path('manage-demand/', views.manage_demand, name='manage_demand'),
+    path('distribute-quota/', views.distribute_quota, name='distribute_quota'),
 ] 
