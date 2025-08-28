@@ -17,4 +17,5 @@ urlpatterns = [
     path('crm/atlas-dashboard/', views.atlas_dashboard, name='crm_atlas_dashboard'),
     path('history/<str:model>/<int:pk>/', ObjectHistoryView.as_view(), name='object_history'),
     path('import-not-atlas/', views.import_not_atlas, name="import_not_atlas")
+    path('lead-dashboard', views.lead_dashboard, name="lead-dashboard")
 ]

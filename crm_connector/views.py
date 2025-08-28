@@ -10,6 +10,8 @@ from .bitrix24_api import Bitrix24API
 from django.views.decorators.csrf import csrf_protect
 from .models import Lead, Deal, Contact, Pipeline, Stage, AtlasApplication, StageRule
 from django.db.models import Count, Sum, F, ExpressionWrapper, Avg, DurationField
+from .models import Lead, Deal, Contact, Pipeline, Stage, AtlasApplication, StageRule, Company
+from django.db.models import Count, Sum, F, ExpressionWrapper, Avg, DurationField, Q
 from django.contrib import messages
 import logging
 import pandas as pd
@@ -976,6 +978,127 @@ class ObjectHistoryView(LoginRequiredMixin, ListView):
         context['fields'] = fields
         
         return context
+
+def lead_dashboard(request):
+    # Список нужных кодов стейджей
+    needed_stage_codes = [
+        'NEW',
+        'UC_OHS476',
+        'PREPARATION',
+        'EXECUTING',
+        'UC_6HMXDA',
+        'UC_82NA5G',
+        'UC_WCW6RM',
+        'WON',
+        'LOSE',
+    ]
+    query = Q()
+    for code in needed_stage_codes:
+        query |= Q(bitrix_id__icontains=code)
+    # Загружаем стадии с такими кодами
+    stages = Stage.objects.filter(query).order_by('bitrix_id')
+    stage_id_to_code = {stage.bitrix_id: stage.name for stage in stages}
+    stage_code_to_name = {
+        'NEW': '1. Необработанная заявка',
+        'UC_OHS476': '2. Направлена инструкция по РвР',
+        'PREPARATION': '3. Подал заявки на РвР',
+        'EXECUTING': '4. Заявка на обучение одобрена',
+        'UC_6HMXDA': '5. Заключен 3-сторонний договор',
+        'UC_82NA5G': '6. Заключен договор на обучение',
+        'UC_WCW6RM': '7. Приступил к обучению',
+        'WON': '8. Прошел итоговую аттестацию',
+        'LOSE': '9. Отказ',
+    }
+    
+    for stage in stages:
+        query |= Q(stage__bitrix_id__icontains=stage.bitrix_id)
+    # Получаем сделки с требуемыми стейджами
+    deals = Deal.objects.filter(query).select_related('company', 'stage')
+
+    # Формируем словарь: {программа: {регион: {компания: {stage_code: count, ..., 'total': count}}}}
+    data = {}
+    program_totals = {}
+    region_totals = {}
+    total = {code:0 for code in needed_stage_codes}
+    headcompanies = {}
+
+    # Заполняем словарь родительских компаний
+    for deal in deals:
+        head = deal.company.head
+        try:
+            int(head)
+            Company.objects.get(bitrix_id = head).title
+        except:
+            head = ''
+        if head:
+            try:
+                headcompanies[head] = Company.objects.get(bitrix_id = deal.company.head).title
+            except Exception as e:
+                logger.error(f"Не удалось найти родительскую компаниню: {e}")
+
+    for deal in deals:
+        prog = deal.get_program_display() if hasattr(deal, 'get_program_display') else deal.program
+        region = deal.get_region_display() if hasattr(deal, 'get_region_display') else deal.region
+        headid = deal.company.head
+        try:
+            int(headid)
+        except:
+            headid = ''
+        if prog and region != '':
+            company_name = deal.company.title if deal.company else 'Без компании'
+            stage_code = deal.stage.bitrix_id
+            for code in needed_stage_codes:
+                if code in stage_code:
+                    stage_code = code
+            
+            data.setdefault(prog, {})
+            data[prog].setdefault(region, {})
+            if headid:
+                data[prog][region].setdefault(headcompanies[headid], {code: 0 for code in needed_stage_codes})
+                data[prog][region][headcompanies[headid]].setdefault('total', 0)
+                data[prog][region][headcompanies[headid]].setdefault('child', {})
+                data[prog][region][headcompanies[headid]]['total'] +=1
+                data[prog][region][headcompanies[headid]][stage_code] +=1
+                data[prog][region][headcompanies[headid]]['child'].setdefault(company_name, {code:0 for code in needed_stage_codes})
+                data[prog][region][headcompanies[headid]]['child'][company_name].setdefault('total', 0)
+                data[prog][region][headcompanies[headid]]['child'][company_name][stage_code] += 1
+                data[prog][region][headcompanies[headid]]['child'][company_name]['total'] += 1
+            else:
+                data[prog][region].setdefault(company_name, {code:0 for code in needed_stage_codes})
+                data[prog][region][company_name].setdefault('total',0)
+                data[prog][region][company_name][stage_code] += 1
+                data[prog][region][company_name]['total'] += 1
+
+
+
+            # Подсчёт общего количества сделок по программе
+            program_totals.setdefault(prog, {code: 0 for code in needed_stage_codes})
+            program_totals[prog].setdefault('total', 0)
+            program_totals[prog][stage_code] += 1
+            program_totals[prog]['total'] += 1
+
+            # Подсчёт общего количества сделок по региону
+            # Можно считать отдельно по (программа, регион) для точности:
+            region_totals.setdefault(prog, {})
+            region_totals[prog].setdefault(region, {code: 0 for code in needed_stage_codes})
+            region_totals[prog][region].setdefault('total',0)
+            region_totals[prog][region]['total'] += 1
+            region_totals[prog][region][stage_code] += 1
+
+            total.setdefault('total',0)
+            total['total'] +=1
+            total[stage_code] +=1
+
+    context = {
+        'data': data,
+        'stage_codes': needed_stage_codes,
+        'stage_code_to_name': stage_code_to_name,
+        'program_totals': program_totals,
+        'region_totals': region_totals,
+        'total': total
+    }
+    # return JsonResponse({'result': context})
+    return render(request, 'crm_connector/lead-dashboard.html', context)
 
 
 def atlas_dashboard(request):
