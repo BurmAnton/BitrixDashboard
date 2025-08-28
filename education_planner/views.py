@@ -16,6 +16,7 @@ from .models import (
     EducationProgram, EduAgreement, Quota, Supplement, QuotaChange, Region, ROIV,
     Demand, DemandHistory, QuotaDistribution, AlternativeQuota
 )
+from .cache_utils import cache_atlas_data, AtlasDataCache
 import json
 import pandas as pd
 import re
@@ -2112,6 +2113,9 @@ def quota_summary_dashboard(request):
     from datetime import datetime, timedelta
     from crm_connector.models import AtlasApplication
     
+    # Предварительно загружаем данные Atlas в кеш (если их еще нет)
+    AtlasDataCache.get_cached_atlas_data()
+    
     # Получаем только активные квоты по ИРПО
     irpo_agreements = EduAgreement.objects.filter(
         federal_operator='IRPO',
@@ -2308,6 +2312,7 @@ def get_matching_applications(quota):
     return applications_data
 
 
+@cache_atlas_data(timeout=7200)  # Кеш на 2 часа
 def get_matching_applications_by_region(quota, region, specific_date=None):
     """Получить заявки, соответствующие квоте в конкретном регионе"""
     from crm_connector.models import AtlasApplication, Deal, Pipeline, Stage
@@ -2321,20 +2326,29 @@ def get_matching_applications_by_region(quota, region, specific_date=None):
         'list': []
     }
     
-    # Используем логику Atlas Dashboard - работаем через Deal и Stage
-    pipeline = Pipeline.objects.filter(name='Заявки (граждане)').first()
+    # Пытаемся получить данные из кеша
+    pipeline, atlas_apps, deals = AtlasDataCache.get_cached_atlas_data()
+    
+    # Если данных нет в кеше, загружаем как обычно
     if not pipeline:
-        return applications_data
+        pipeline = Pipeline.objects.filter(name='Заявки (граждане)').first()
+        if not pipeline:
+            return applications_data
+            
+    if not atlas_apps:
+        atlas_apps = list(AtlasApplication.objects.select_related('deal').filter(deal__pipeline=pipeline))
+    
+    if not deals:
+        deals = list(Deal.objects.select_related('stage').filter(pipeline=pipeline))
     
     # ТОЧНАЯ логика Atlas Dashboard
     # Создаем словарь сделка -> заявка как в Atlas Dashboard
     atlas_apps_dict = {}
-    atlas_apps = AtlasApplication.objects.select_related('deal').filter(deal__pipeline=pipeline)
     for app in atlas_apps:
-        atlas_apps_dict[app.deal_id] = app  # Последняя запись перезаписывает (как в Atlas)
+        if app.deal_id:
+            atlas_apps_dict[app.deal_id] = app  # Последняя запись перезаписывает (как в Atlas)
     
     # Теперь фильтруем по региону и программе через сделки
-    deals = Deal.objects.select_related('stage').filter(pipeline=pipeline)
     applications = []
     
     for deal in deals:
@@ -2381,6 +2395,7 @@ def get_matching_applications_by_region(quota, region, specific_date=None):
     return applications_data
 
 
+@cache_atlas_data(timeout=7200)  # Кеш на 2 часа
 def get_unmatched_applications():
     """Получить заявки, которые не соответствуют ни одной квоте"""
     from crm_connector.models import AtlasApplication, AtlasStatus
@@ -2401,12 +2416,8 @@ def get_unmatched_applications():
     for quota in active_quotas:
         quota_regions.update(quota.regions.values_list('name', flat=True))
     
-    # Кэш статусов для производительности
-    if not hasattr(get_unmatched_applications, '_status_cache'):
-        get_unmatched_applications._status_cache = {
-            status.name: status.order for status in AtlasStatus.objects.all()
-        }
-    status_cache = get_unmatched_applications._status_cache
+    # Используем кешированные статусы
+    status_cache = AtlasDataCache.get_cached_atlas_statuses()
     
     # Минимальный порядок статуса для подсчета
     min_order = 60
@@ -2460,6 +2471,7 @@ def calculate_coverage_percent(quota_quantity, demand_quantity, applications_qua
     return result
 
 
+@cache_atlas_data(timeout=7200)  # Кеш на 2 часа
 def get_applications_for_alternative_period(region, quota, start_str, end_str):
     """Получить заявки для альтернативного периода"""
     from crm_connector.models import AtlasApplication, Deal, Pipeline, Stage
@@ -2468,20 +2480,29 @@ def get_applications_for_alternative_period(region, quota, start_str, end_str):
         'submitted': 0, 'in_training': 0, 'completed': 0, 'total': 0, 'list': []
     }
     
-    # Используем логику Atlas Dashboard - работаем через Deal и Stage
-    pipeline = Pipeline.objects.filter(name='Заявки (граждане)').first()
+    # Пытаемся получить данные из кеша
+    pipeline, atlas_apps, deals = AtlasDataCache.get_cached_atlas_data()
+    
+    # Если данных нет в кеше, загружаем как обычно
     if not pipeline:
-        return applications_data
+        pipeline = Pipeline.objects.filter(name='Заявки (граждане)').first()
+        if not pipeline:
+            return applications_data
+            
+    if not atlas_apps:
+        atlas_apps = list(AtlasApplication.objects.select_related('deal').filter(deal__pipeline=pipeline))
+    
+    if not deals:
+        deals = list(Deal.objects.select_related('stage').filter(pipeline=pipeline))
     
     # ТОЧНАЯ логика Atlas Dashboard
     # Создаем словарь сделка -> заявка как в Atlas Dashboard
     atlas_apps_dict = {}
-    atlas_apps = AtlasApplication.objects.select_related('deal').filter(deal__pipeline=pipeline)
     for app in atlas_apps:
-        atlas_apps_dict[app.deal_id] = app  # Последняя запись перезаписывает (как в Atlas)
+        if app.deal_id:
+            atlas_apps_dict[app.deal_id] = app  # Последняя запись перезаписывает (как в Atlas)
     
     # Теперь фильтруем по региону и программе через сделки
-    deals = Deal.objects.select_related('stage').filter(pipeline=pipeline)
     applications = []
     
     for deal in deals:
@@ -2533,6 +2554,7 @@ def get_applications_for_alternative_period(region, quota, start_str, end_str):
     return applications_data
 
 
+@cache_atlas_data(timeout=7200)  # Кеш на 2 часа
 def group_quotas_by_region(quotas):
     """Группирует квоты по регионам для правильного отображения rowspan"""
     from crm_connector.models import AtlasApplication
