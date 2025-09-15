@@ -343,6 +343,10 @@ class AtlasApplication(models.Model):
     phone = models.CharField(max_length=50, blank=True, null=True, verbose_name="Телефон")
     email = models.EmailField(blank=True, null=True, verbose_name="Email")
     region = models.CharField(max_length=255, blank=True, null=True, verbose_name="Регион")
+    program = models.CharField(max_length=255, null=True, blank=True, verbose_name="Программа обучения")
+    last_active = models.DateTimeField(null=True, blank=True, verbose_name="Последняя активность")
+    potok = models.CharField(max_length=255, blank=True, null=True, verbose_name="Поток")
+    education_progress = models.CharField(max_length=255, null=True, blank=True, verbose_name="Прогресс")
     
     # Связь со сделкой в Bitrix24
     deal = models.ForeignKey(Deal, on_delete=models.SET_NULL, null=True, blank=True, 

@@ -15,8 +15,7 @@ from django.db.models import Count, Sum, F, ExpressionWrapper, Avg, DurationFiel
 from django.contrib import messages
 import logging
 import pandas as pd
-from .forms import ExcelImportForm
-from .forms import LeadImportForm
+from .forms import ExcelImportForm, AtlasLeadImportForm, LeadImportForm
 from datetime import datetime, timedelta
 
 logger = logging.getLogger(__name__)
@@ -1448,3 +1447,147 @@ def atlas_dashboard(request):
     
     return render(request, 'crm_connector/atlas_dashboard.html', context)
  
+
+def lead_progress(request):
+    education_products = {
+        'Инструменты искусственного интеллекта в сфере культуры': {
+            1: "Введение в ИИ в сфере культуры",
+            2: "Работа с большими языковыми моделями",
+            3: "Работа с диффузионными нейросетями",
+            4: "ИИ в исследовании и аналитике",
+            5: "Виртуальные ассистенты и чат-боты в сфере культуры"
+        },
+        'Специалист по эксплуатации беспилотных авиационных систем в сфере лесного хозяйства': {
+            1: "Введение в БАС. БАС в правовом поле(Аттестация)",
+            2: "2.1 Техническое обслуживание БАС",
+            3: "2.2 Диагностика и устранение неисправностей",
+            4: "2.3 Профилактика поломок и продление срока службы БАС",
+            5: "Обслуживание и ремонт БАС(Аттестация)",
+            6: "Основы управления и пилотрования БАС(Аттестация)",
+            7: "Применение БАС для решения задач в деятельности лесных хозяйств(Аттестация)"
+        },
+        'Оператор беспилотных авиационных систем (с максимальной взлетной массой 30 килограммов и менее)': {
+            1: "Правовое регулирование использования БАС",
+            2: "Введение в БАС. БАС в правовом поле(Аттестация)",
+            3: "Правовое регулирование",
+            4: "Обслуживание и ремонт БАС(Аттестация)",
+            5: "Составные части БПЛА",
+            6: "Основы управления и пилотрования БАС"
+        },
+        'Специалист по борьбе с беспилотными летательными аппаратами и защите объектов':{
+            1: "Введение в БАС. БАС в правовом поле",
+            2: "Связь и навигация",
+            3: "Основы радиоэлектронной борьбы (РЭБ)",
+            4: "Подготовка и применение средств радиоэлектронной борьбы"
+        }
+    }
+    context = {}
+    result = {}
+    if request.method == 'POST':
+        form = AtlasLeadImportForm(request.POST, request.FILES)
+        if form.is_valid():
+            failed_to_find = 0
+            file = form.cleaned_data['excel_file']
+        
+            # Читаем Excel с пропуском первых 2 строк (номеруем с 0)
+            df = pd.read_excel(file, header=None, engine='openpyxl')
+            amount_of_leads = 0
+            for _, row in df.iterrows():
+                if _ < 2:  # пропускаем первые 3 строки
+                    continue
+                name = row.iloc[1]
+                program = row.iloc[0]
+                email = row.iloc[2]
+                last_active = row.iloc[5]
+                potok = row.iloc[7]
+                col_index = 11
+                test_count = 0
+                progress = ''
+                razdel = 1
+                while col_index + 4 < len(row):
+                    topic_theory = row.iloc[col_index]       # теория (не нужна)
+                    topic_testing = row.iloc[col_index + 1]  # тестирование (надо)
+                    topic_practice = row.iloc[col_index + 2] # практика (не нужна)
+                    topic_start = row.iloc[col_index + 3]    # дата старта (не нужна)
+                    topic_end = row.iloc[col_index + 4]      # дата окончания (не нужна)
+                    if pd.notna(topic_testing) and str(topic_testing).strip() != '':
+                        progress += f"{topic_testing},"
+                        if topic_testing > 60:
+                            test_count +=1
+                        razdel +=1
+                    
+                    col_index += 5
+                progress += f"{test_count}"
+
+                if isinstance(last_active, str):
+                    last_active = datetime.strptime(last_active, "%d.%m.%Y")
+                elif isinstance(last_active, pd.Timestamp):
+                    last_active = last_active.to_pydatetime()
+                # Пытаемся найти пользователя по email
+
+# for program_id, program_name in EDUCATION_PROGRAMM:
+                #     if program_name == program:
+                #         program = program_id
+                if isinstance(last_active, str):
+                    dt = datetime.strptime(last_active, "%d.%m.%Y")
+                    last_active = timezone.make_aware(dt, timezone.get_current_timezone())
+                try:
+                    app = AtlasApplication.objects.get(email=email)
+                    app.program = program
+                    app.potok = potok
+                    app.last_active = last_active
+                    app.education_progress = progress
+                    app.save()
+                    amount_of_leads += 1
+                except AtlasApplication.DoesNotExist:
+                    failed_to_find +=1
+                    pass
+            
+            messages.success(request, f'Найдено: {amount_of_leads}')
+                            
+    
+    else:
+        form = AtlasLeadImportForm()
+        context = {
+            'form': form
+        }
+    applications = AtlasApplication.objects.all()
+    # try:
+    for app in applications:
+        index = 0
+        try:
+            program = app.program
+            if program in education_products:
+                potok = app.potok
+                full_name = app.full_name
+                education_progress = app.education_progress
+                result.setdefault(program, {})
+                result[program].setdefault(potok, {})
+                result[program][potok].setdefault('total', {topic: 0 for topic in education_products[program].values()})
+                result[program][potok]['total'].setdefault('total', 0)
+                result[program][potok].setdefault(full_name, {topic:0 for topic in education_products[program].values()})
+                result[program][potok][full_name].setdefault('total', 0)
+                
+                if program not in result:
+                    result[program] = {}
+                if potok not in result[program]:
+                    result[program][potok] = {}
+                prog = education_progress.split(",")
+                for topic in education_products[program].values():
+                    result[program][potok][full_name][topic] = int(prog[index])
+                    if (prog[index] == '0'):
+                        result[program][potok]['total'][topic] += 1
+                    index += 1
+                result[program][potok][full_name]['total'] = int(prog[index])
+                if (int(prog[index]) < len(education_products[program].values())):
+                    result[program][potok]['total']['total'] += 1
+        except Exception as e:
+            print(f"Ошибка при формировании таблицы: {e}")
+            pass
+    context = {
+    'result': result,
+    'topics': education_products,
+    'form': form
+    }
+    # return JsonResponse({'result': result})
+    return render(request, 'crm_connector/lead-progress.html', context)
