@@ -1565,6 +1565,8 @@ def lead_progress(request):
                 result[program].setdefault(potok, {})
                 result[program][potok].setdefault('total', {topic: 0 for topic in education_products[program].values()})
                 result[program][potok]['total'].setdefault('total', 0)
+                result[program][potok]['total'].setdefault('done', 0)
+                result[program][potok]['total'].setdefault('undone', 0)
                 result[program][potok].setdefault(full_name, {topic:0 for topic in education_products[program].values()})
                 result[program][potok][full_name].setdefault('total', 0)
                 
@@ -1581,6 +1583,10 @@ def lead_progress(request):
                 result[program][potok][full_name]['total'] = int(prog[index])
                 if (int(prog[index]) < len(education_products[program].values())):
                     result[program][potok]['total']['total'] += 1
+                    result[program][potok]['total']['undone'] += 1
+                else:
+                    result[program][potok]['total']['done'] += 1
+                result[program][potok]['total']['total'] += 1
         except Exception as e:
             print(f"Ошибка при формировании таблицы: {e}")
             pass

@@ -17,6 +17,25 @@
         text-align: center;
     }
 
+    .potok{
+        background:#ddd; 
+        font-weight:bold;
+    }
+
+    span.email {
+    font-size: smaller;
+    color: gray;
+    cursor: pointer;
+    }
+    span.email.clicked {
+    color: green;
+    font-weight: bold;
+    }
+    span.email:hover:not(.clicked) {
+    color: red;
+    font-weight: bold;
+    }
+
     .total-row{
         font-weight: bolder;
     }
@@ -25,6 +44,10 @@
         border-radius: 10px;
         background-color: rgb(0, 0, 0);
         color: rgb(255, 255, 255);
+    }
+
+    table.custom-dashboard th:first-child{
+        width: 18%;
     }
 
     table.custom-dashboard {
@@ -68,25 +91,31 @@
         background-color: #f1f6f7;
     }
     .Success{
+        font-weight: bolder;
         padding: 7px;
         border-radius: 10px;
         background-color: #00A000;
         text-shadow: black 0px 0px 2px;
         color: white;
+        margin: 2px 2px;
     }
     .Fail{
-        padding: 7px;
-        border-radius: 10px;
-        background-color: #c4c401;
-        text-shadow: black 0px 0px 2px;
-        color: white;
-    }
-    .Empty{
+        font-weight: bolder;
         padding: 7px;
         border-radius: 10px;
         background-color: #bd0000;
         text-shadow: black 0px 0px 2px;
         color: white;
+        margin: 2px 2px;
+    }
+    .Empty{
+        font-weight: bolder;
+        padding: 7px;
+        border-radius: 10px;
+        background-color: #727272;
+        text-shadow: black 0px 0px 2px;
+        color: white;
+        margin: 2px 2px;
         ;
     }
 
@@ -107,7 +136,13 @@
         {% for topic, value in topics.items %}
             {% if topic == prog %}
                 {% for index, name in value.items %}
-                    <th>{{ name }}</th>
+                
+                    <th>
+                        <label>
+                            <input type="checkbox" class="filter-success" data-col-index="{{ forloop.counter0 }}">
+                            {{ name }}
+                        </label>
+                    </th>
                 {% endfor %}
             {% endif %}
         {% endfor %}
@@ -116,12 +151,17 @@
     </thead>
     <tbody>
         {% for potok, listeners in potoki.items %}
-        <tr>
-            <td colspan="{{ topics|dict_get:prog|length|add:'2' }}" style="background:#ddd; font-weight:bold;">{{ potok }}</td>
+        <tr class="potok">
+            <td colspan="{{ topics|dict_get:prog|length|add:'2' }}" >
+                <label>
+                   <input type="checkbox" class="toggle-potok" data-potok-id="{{ potok }}"  checked>
+                    {{ potok }}
+                </label>
+            </td>
         </tr>
             {% for name, tests in listeners.items %}
                 {% if name == 'total' %}
-                <tr class="total-row">
+                <tr class="total-row" id="{{ potok }}">
                 <td>Общая сводка</td>
                 {% for educ,topic  in topics.items %}
                     {% if educ == prog %}
@@ -135,14 +175,17 @@
                     {% endif %}
                 {% endfor %}
                 <td>
-                    <span class="total">
-                    {{tests.total}}
-                    </span>
+                    <span class="Empty">{{tests.total}}</span>
+                    <span class="Success">{{tests.done}}</span>
+                    <span class="Fail">{{tests.undone}}</span>
                 </td>
                 </tr>
                 {% else %}
-                <tr>
-                <td>{{ name }}</td>
+                <tr id="{{ potok }}">
+                <td>
+                    {{ name }}<br>
+                    <span class="email">{{ tests.email }}</a>
+                </td>
                 {% for educ,topic  in topics.items %}
                     {% if educ == prog %}
                         {% for index, name in topic.items %}
@@ -178,5 +221,104 @@
     </tbody>
     </table>
 {% endfor %}
+    <script>
+    document.addEventListener('DOMContentLoaded', () => {
+    const emailSpans = document.querySelectorAll('span.email');
+    emailSpans.forEach(span => {
+        span.addEventListener('click', () => {
+            navigator.clipboard.writeText(span.textContent)
+            span.classList.add('clicked');
+            setTimeout(() => {
+                span.classList.remove('clicked');
+            }, 800);
+        });
+    });
 
+    // Получаем все чекбоксы фильтров колонок
+    const filters = document.querySelectorAll('input.filter-success');
+    // Получаем все чекбоксы фильтра потоков
+    const potokCheckboxes = document.querySelectorAll('input.toggle-potok');
+
+    // Функция для получения текущих активных фильтров статусов по колонкам
+    function getActiveColumnFilters() {
+        const active = new Set();
+        filters.forEach((filter, idx) => {
+            if (filter.checked) {
+                active.add(idx);
+            }
+        });
+        return active;
+    }
+
+    // Функция для проверки, скрыт ли поток по id (по чекбоксу)
+    function isPotokVisible(potokId) {
+        const potokCheckbox = Array.from(potokCheckboxes).find(cb => cb.dataset.potokId === potokId);
+        return potokCheckbox ? potokCheckbox.checked : true;
+    }
+
+    // Основная функция фильтрации строк с учётом всех фильтров
+    function applyFilters() {
+        const activeFilters = getActiveColumnFilters();
+
+        const tables = document.querySelectorAll('table.custom-dashboard');
+        tables.forEach(table => {
+            const rows = table.tBodies[0].rows;
+
+            for (let i = 0; i < rows.length; i++) {
+                const row = rows[i];
+
+                // Пропускаем заголовочные строки потоков (с классом 'potok')
+                if (row.classList.contains('potok')) {
+                    continue;
+                }
+
+                // Для остальных строк определим id потока из id строки (у вас id потока совпадает с id строки)
+                const potokId = row.id;
+                if (potokId && !isPotokVisible(potokId)) {
+                    // Если поток скрыт — скрываем строку
+                    row.style.setProperty('display', 'none', 'important');
+                    continue;
+                }
+
+                // Проверяем фильтры по колонкам
+                let shouldHide = false;
+
+                activeFilters.forEach(colIndex => {
+                    // +1 потому что первый столбец - имя
+                    const cell = row.cells[colIndex + 1];
+                    if (!cell) return;
+
+                    const hasSuccess = cell.querySelector('span.Success');
+                    if (hasSuccess) {
+                        // Если есть успех по активному фильтру, строку надо скрыть
+                        shouldHide = true;
+                    }
+                });
+
+                if (shouldHide) {
+                    row.style.display = 'none';
+                } else {
+                    row.style.removeProperty('display');
+                }
+            }
+        });
+    }
+
+    // События изменения фильтров
+    filters.forEach(filter => {
+        filter.addEventListener('change', () => {
+            applyFilters();
+        });
+    });
+
+    potokCheckboxes.forEach(checkbox => {
+        checkbox.addEventListener('change', () => {
+            applyFilters();
+        });
+    });
+
+    // Первоначальный запуск фильтрации
+    applyFilters();
+})
+    </script>
 {% endblock %}
