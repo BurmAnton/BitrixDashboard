@@ -14,7 +14,28 @@
     .container{
         width: 95%; 
         max-width: 95%;
-        text-align: center;
+        text-align: right;
+    }
+    .Export{
+        background-color: #217346; /* зелёный цвет Excel */
+        color: white;
+        border: none;
+        padding: 10px 30px;
+        font-size: 16px;
+        font-weight: 600;
+        border-radius: 5px;
+        cursor: pointer;
+        box-shadow: 0 4px 6px rgba(33, 115, 70, 0.3);
+        transition: background-color 0.3s ease;
+        margin-bottom: 5px;
+    }
+
+    .Export:hover{
+        background-color: #1b5f39;
+    }
+
+    .Export:active{
+        background-color: #164c2f;
     }
 
     .potok{
@@ -22,16 +43,16 @@
         font-weight:bold;
     }
 
-    span.email {
+    span.copy {
     font-size: smaller;
     color: gray;
     cursor: pointer;
     }
-    span.email.clicked {
+    span.copy.clicked {
     color: green;
     font-weight: bold;
     }
-    span.email:hover:not(.clicked) {
+    span.copy:hover:not(.clicked) {
     color: red;
     font-weight: bold;
     }
@@ -128,8 +149,9 @@
     <input type="submit"></button>
     </form>
 {% for prog, potoki in result.items %}
-    <h3> Программа {{ prog }}</h1>
-    <table border="1" class="custom-dashboard">
+    <h3 style="text-align: center;"> Программа {{ prog }}</h3>
+    <button onclick="exportTableToXLSX(this.id)" id="{{ prog }}" class="Export">  <svg xmlns="http://www.w3.org/2000/svg" height="24px" viewBox="0 -960 960 960" width="24px" fill="#FFFFFF"><path d="m720-120 160-160-56-56-64 64v-167h-80v167l-64-64-56 56 160 160ZM560 0v-80h320V0H560ZM240-160q-33 0-56.5-23.5T160-240v-560q0-33 23.5-56.5T240-880h280l240 240v121h-80v-81H480v-200H240v560h240v80H240Zm0-80v-560 560Z"/></svg></button>
+    <table border="1" class="custom-dashboard" id="table.{{ prog }}">
     <thead>
         <tr>
         <th>Имя</th>
@@ -151,7 +173,7 @@
     </thead>
     <tbody>
         {% for potok, listeners in potoki.items %}
-        <tr class="potok">
+        <tr class="potok" id="{{ potok }}">
             <td colspan="{{ topics|dict_get:prog|length|add:'2' }}" >
                 <label>
                    <input type="checkbox" class="toggle-potok" data-potok-id="{{ potok }}"  checked>
@@ -161,7 +183,7 @@
         </tr>
             {% for name, tests in listeners.items %}
                 {% if name == 'total' %}
-                <tr class="total-row" id="{{ potok }}">
+                <tr class="total-row">
                 <td>Общая сводка</td>
                 {% for educ,topic  in topics.items %}
                     {% if educ == prog %}
@@ -183,8 +205,19 @@
                 {% else %}
                 <tr id="{{ potok }}">
                 <td>
-                    {{ name }}<br>
-                    <span class="email">{{ tests.email }}</a>
+                    <span>
+                        {{ name }}
+                    </span>
+                    <br>
+                    <span class="copy">{{ tests.email }}</span>
+                    <br>
+                        {% if tests.phone %}
+                            <span class="copy">
+                               {{ tests.phone }}
+                            </span>
+                        {% else %}
+                            <span style="color: gray; font-size: smaller;">Нет телефона</span>
+                        {% endif %}
                 </td>
                 {% for educ,topic  in topics.items %}
                     {% if educ == prog %}
@@ -221,104 +254,192 @@
     </tbody>
     </table>
 {% endfor %}
-    <script>
-    document.addEventListener('DOMContentLoaded', () => {
-    const emailSpans = document.querySelectorAll('span.email');
-    emailSpans.forEach(span => {
-        span.addEventListener('click', () => {
-            navigator.clipboard.writeText(span.textContent)
-            span.classList.add('clicked');
-            setTimeout(() => {
-                span.classList.remove('clicked');
-            }, 800);
-        });
-    });
-
-    // Получаем все чекбоксы фильтров колонок
-    const filters = document.querySelectorAll('input.filter-success');
-    // Получаем все чекбоксы фильтра потоков
-    const potokCheckboxes = document.querySelectorAll('input.toggle-potok');
-
-    // Функция для получения текущих активных фильтров статусов по колонкам
-    function getActiveColumnFilters() {
-        const active = new Set();
-        filters.forEach((filter, idx) => {
-            if (filter.checked) {
-                active.add(idx);
-            }
-        });
-        return active;
+<script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
+<script>
+  function exportTableToXLSX(ChoosenTable) {
+    var table = document.getElementById('table.' + ChoosenTable);
+    if (!table) {
+        console.error("Таблица не найдена");
+        return;
     }
 
-    // Функция для проверки, скрыт ли поток по id (по чекбоксу)
-    function isPotokVisible(potokId) {
-        const potokCheckbox = Array.from(potokCheckboxes).find(cb => cb.dataset.potokId === potokId);
-        return potokCheckbox ? potokCheckbox.checked : true;
+    var workbook = XLSX.utils.book_new();
+
+    // Заголовки (будут одинаковые для всех листов)
+    var headerRow = ['ФИО', 'Email', 'Телефон'];
+    var firstRow = table.querySelector('tr');
+    var otherHeaders = [];
+
+    if (firstRow) {
+        var cells = Array.from(firstRow.cells);
+        for (var i = 1; i < cells.length; i++) {
+            otherHeaders.push(cells[i].innerText.trim());
+        }
     }
+    var headers = headerRow.concat(otherHeaders);
 
-    // Основная функция фильтрации строк с учётом всех фильтров
-    function applyFilters() {
-        const activeFilters = getActiveColumnFilters();
+    // Получаем все строки с классом potok (потоки)
+    var potokRows = table.querySelectorAll('tr.potok');
 
-        const tables = document.querySelectorAll('table.custom-dashboard');
-        tables.forEach(table => {
-            const rows = table.tBodies[0].rows;
+    potokRows.forEach(potokRow => {
+        var potokName = potokRow.id;
 
-            for (let i = 0; i < rows.length; i++) {
-                const row = rows[i];
+        var data = [];
+        data.push(headers);
 
-                // Пропускаем заголовочные строки потоков (с классом 'potok')
-                if (row.classList.contains('potok')) {
-                    continue;
-                }
+        // Фильтруем строки с data-id равным потоку potokName
+        var rows = table.querySelectorAll('tr');
 
-                // Для остальных строк определим id потока из id строки (у вас id потока совпадает с id строки)
-                const potokId = row.id;
-                if (potokId && !isPotokVisible(potokId)) {
-                    // Если поток скрыт — скрываем строку
-                    row.style.setProperty('display', 'none', 'important');
-                    continue;
-                }
+        rows.forEach(row => {
+            if (row.querySelectorAll('th').length) return;
+            if (row.style.display === 'none') return;
+            if (row.classList.contains('potok')) return;
+            if (row.id !== potokName) return;
 
-                // Проверяем фильтры по колонкам
-                let shouldHide = false;
+            var rowData = [];
+            var cells = Array.from(row.cells);
 
-                activeFilters.forEach(colIndex => {
-                    // +1 потому что первый столбец - имя
-                    const cell = row.cells[colIndex + 1];
-                    if (!cell) return;
-
-                    const hasSuccess = cell.querySelector('span.Success');
-                    if (hasSuccess) {
-                        // Если есть успех по активному фильтру, строку надо скрыть
-                        shouldHide = true;
+            if (row.classList.contains('total-row')) {
+                return;
+            } else {
+                if (cells.length > 0) {
+                    let firstCell = cells[0];
+                    let spans = firstCell.querySelectorAll('span');
+                    if (spans.length === 3) {
+                        spans.forEach(span => rowData.push(span.innerText.trim()));
+                    } else {
+                        rowData.push(firstCell.innerText.trim(), '', '');
                     }
-                });
-
-                if (shouldHide) {
-                    row.style.display = 'none';
-                } else {
-                    row.style.removeProperty('display');
+                }
+                for (let i = 1; i < cells.length; i++) {
+                    rowData.push(cells[i].innerText.trim());
                 }
             }
+
+            data.push(rowData);
         });
+
+        var worksheet = XLSX.utils.aoa_to_sheet(data);
+        XLSX.utils.book_append_sheet(workbook, worksheet, potokName);
+    });
+    
+    var wbout = XLSX.write(workbook, { bookType: 'xlsx', type: 'binary' });
+
+    function s2ab(s) {
+        var buf = new ArrayBuffer(s.length);
+        var view = new Uint8Array(buf);
+        for (var i = 0; i < s.length; i++) view[i] = s.charCodeAt(i) & 0xFF;
+        return buf;
     }
 
-    // События изменения фильтров
-    filters.forEach(filter => {
-        filter.addEventListener('change', () => {
-            applyFilters();
-        });
-    });
+    var blob = new Blob([s2ab(wbout)], { type: 'application/octet-stream' });
+    var link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = ChoosenTable + '.xlsx';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+}
 
-    potokCheckboxes.forEach(checkbox => {
-        checkbox.addEventListener('change', () => {
-            applyFilters();
-        });
-    });
 
-    // Первоначальный запуск фильтрации
-    applyFilters();
-})
+    document.addEventListener('DOMContentLoaded', () => {
+        
+        const emailSpans = document.querySelectorAll('span.copy');
+        emailSpans.forEach(span => {
+            span.addEventListener('click', () => {
+                navigator.clipboard.writeText(span.textContent)
+                span.classList.add('clicked');
+                setTimeout(() => {
+                    span.classList.remove('clicked');
+                }, 800);
+            });
+        });
+
+        // Получаем все чекбоксы фильтров колонок
+        const filters = document.querySelectorAll('input.filter-success');
+        // Получаем все чекбоксы фильтра потоков
+        const potokCheckboxes = document.querySelectorAll('input.toggle-potok');
+
+        // Функция для получения текущих активных фильтров статусов по колонкам
+        function getActiveColumnFilters() {
+            const active = new Set();
+            filters.forEach((filter, idx) => {
+                if (filter.checked) {
+                    active.add(idx);
+                }
+            });
+            return active;
+        }
+
+        // Функция для проверки, скрыт ли поток по id (по чекбоксу)
+        function isPotokVisible(potokId) {
+            const potokCheckbox = Array.from(potokCheckboxes).find(cb => cb.dataset.potokId === potokId);
+            return potokCheckbox ? potokCheckbox.checked : true;
+        }
+
+        // Основная функция фильтрации строк с учётом всех фильтров
+        function applyFilters() {
+            const activeFilters = getActiveColumnFilters();
+
+            const tables = document.querySelectorAll('table.custom-dashboard');
+            tables.forEach(table => {
+                const rows = table.tBodies[0].rows;
+
+                for (let i = 0; i < rows.length; i++) {
+                    const row = rows[i];
+
+                    // Пропускаем заголовочные строки потоков (с классом 'potok')
+                    if (row.classList.contains('potok')) {
+                        continue;
+                    }
+
+                    // Для остальных строк определим id потока из id строки (у вас id потока совпадает с id строки)
+                    const potokId = row.id;
+                    if (potokId && !isPotokVisible(potokId)) {
+                        // Если поток скрыт — скрываем строку
+                        row.style.setProperty('display', 'none', 'important');
+                        continue;
+                    }
+
+                    // Проверяем фильтры по колонкам
+                    let shouldHide = false;
+
+                    activeFilters.forEach(colIndex => {
+                        // +1 потому что первый столбец - имя
+                        const cell = row.cells[colIndex + 1];
+                        if (!cell) return;
+
+                        const hasSuccess = cell.querySelector('span.Success');
+                        if (hasSuccess) {
+                            // Если есть успех по активному фильтру, строку надо скрыть
+                            shouldHide = true;
+                        }
+                    });
+
+                    if (shouldHide) {
+                        row.style.display = 'none';
+                    } else {
+                        row.style.removeProperty('display');
+                    }
+                }
+            });
+        }
+
+        // События изменения фильтров
+        filters.forEach(filter => {
+            filter.addEventListener('change', () => {
+                applyFilters();
+            });
+        });
+
+        potokCheckboxes.forEach(checkbox => {
+            checkbox.addEventListener('change', () => {
+                applyFilters();
+            });
+        });
+
+        // Первоначальный запуск фильтрации
+        applyFilters();
+    })
     </script>
 {% endblock %}
