@@ -1569,6 +1569,8 @@ def lead_progress(request):
                 result[program][potok]['total'].setdefault('undone', 0)
                 result[program][potok].setdefault(full_name, {topic:0 for topic in education_products[program].values()})
                 result[program][potok][full_name].setdefault('total', 0)
+                result[program][potok][full_name].setdefault('email', app.email)
+                result[program][potok][full_name].setdefault('phone', app.phone)
                 
                 if program not in result:
                     result[program] = {}
@@ -1582,7 +1584,6 @@ def lead_progress(request):
                     index += 1
                 result[program][potok][full_name]['total'] = int(prog[index])
                 if (int(prog[index]) < len(education_products[program].values())):
-                    result[program][potok]['total']['total'] += 1
                     result[program][potok]['total']['undone'] += 1
                 else:
                     result[program][potok]['total']['done'] += 1
