@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Импорт НЕатлас{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="row">
+        <div class="col-md-8 offset-md-2">
+            <div class="card">
+                <div class="card-header bg-primary text-white">
+                    <h4 class="mb-0">Импорт сделов из Excel клиентов, которые ещё не в атласе</h4>
+                </div>
+                <div class="card-body">
+                    <form method="post" enctype="multipart/form-data">
+                        {% csrf_token %}
+                        
+                        <div class="alert alert-info">
+                            <h5>Инструкция по импорту:</h5>
+                            <ol>
+                                <li>Принимаются таблицы со следующими столбцами:</li>
+                                <ul>
+                                    <li>№</li>
+                                    <li>Название организации</li>
+                                    <li>ФИО</li>
+                                    <li>Контактный телефон в формате (+7 999 999 99 99)</li>
+                                    <li>Контактный e-mail </li>
+                                    <li>Наличие высшего или среднего специального образования (Да/Нет)</li>
+                                    <li>Дата рождения (дд.мм.гггг)</li>
+                                    <li>Позиция</li>
+                                </ul>
+                                <li>Загрузите файл и нажмите "Импортировать"</li>
+                            </ol>
+                            <p class="mb-0"><strong>Примечание:</strong> Заголовки колонок должны точно соответствовать указанным выше.</p>
+                        </div>
+                        {{ form.as_p}}
+                        <div class="d-flex justify-content-between">
+                            <button type="submit" class="btn btn-success">Импорт</button>
+                            <a href="#" class="btn btn-secondary">Назад</a>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

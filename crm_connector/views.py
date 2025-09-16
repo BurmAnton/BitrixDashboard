@@ -4,15 +4,18 @@ from django.conf import settings
 from django.urls import reverse
 from django.utils import timezone
 
+import openpyxl
 from .tasks import sync_leads, sync_deals, sync_contacts, sync_pipelines_task
 from .bitrix24_api import Bitrix24API
 from django.views.decorators.csrf import csrf_protect
 from .models import Lead, Deal, Contact, Pipeline, Stage, AtlasApplication, StageRule
 from django.db.models import Count, Sum, F, ExpressionWrapper, Avg, DurationField
+from .models import Lead, Deal, Contact, Pipeline, Stage, AtlasApplication, StageRule, Company
+from django.db.models import Count, Sum, F, ExpressionWrapper, Avg, DurationField, Q
 from django.contrib import messages
 import logging
 import pandas as pd
-from .forms import ExcelImportForm
+from .forms import ExcelImportForm, AtlasLeadImportForm, LeadImportForm
 from datetime import datetime, timedelta
 
 logger = logging.getLogger(__name__)
@@ -789,6 +792,132 @@ def import_atlas_applications(request):
     
     return render(request, 'crm_connector/import_atlas_applications.html', context)
 
+def import_not_atlas(request):
+    if request.method == 'POST':
+        form = LeadImportForm(request.POST, request.FILES)
+        if form.is_valid():
+            excel_file = form.cleaned_data['excel_file']
+            edcuationdirection = form.cleaned_data['training']
+
+            try:
+                wb = openpyxl.load_workbook(excel_file)
+                ws = wb.active
+            except Exception as e:
+                messages.error(request, f'Ошибка при открытии файла: {e}')
+                return render(request, 'crm_connector/import_lids.html', {'form': form})
+
+            missing_company_rows = []
+            missing_name_rows = []
+            missing_phone_rows = []
+
+            for row in ws.iter_rows(min_row=2, values_only=True):
+                ExcelPhone = row[3]
+                contact_name = row[2]
+                contact_phone = row[3]
+                contact_email = row[4]
+                CompanyStringList = str(row[1]).split() # Тут убрать лишние пробелы надо
+                company_name = ' '.join(CompanyStringList)   # Поэтому эти две строки существуют
+                # Проверка обязательных полей
+                if not row[1] and row[0] != None:
+                    missing_company_rows.append(int(row[0])) # Собираем номера полей, где нет компании
+                    continue
+                if contact_name is None and row[0] != None:
+                    missing_name_rows.append(int(row[0])) # Собираем номера полей, где нет ФИО
+                    continue
+                if not row[3] and row[0] != None:
+                    missing_phone_rows.append(int(row[0])) # Собираем номера полей, где нет телефона
+                    continue
+                # Проверка эмейла на вшивость
+                pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
+                if re.match(pattern, str(row[4])):
+                    contact_email = row[4]
+                else:
+                    contact_email = ''
+                # Проверка телефона на вшивость
+                if isinstance(ExcelPhone, float):
+                    if ExcelPhone.is_integer():
+                        ExcelPhone = str(int(ExcelPhone))
+                    else:
+                        ExcelPhone = str(ExcelPhone)
+                else:
+                    ExcelPhone = str(ExcelPhone).strip()
+                ExcelPhone = re.sub(r'\D','',ExcelPhone)
+                if ExcelPhone.startswith('7'):
+                    ExcelPhone = '8' + ExcelPhone[1:]
+                
+                # Создаем лид с status=0 и текущим временем создания
+                api = Bitrix24API()
+                contact_data = {
+                    'NAME': contact_name.split()[0] if contact_name and len(contact_name.split()) > 0 else '',
+                    'LAST_NAME': ' '.join(contact_name.split()[1:]) if contact_name and len(contact_name.split()) > 1 else '',
+                    'TYPE_ID': 'CURATOR',  # Тип контакта по умолчанию "куратор"
+                    'PHONE': [{'VALUE': contact_phone, 'VALUE_TYPE': 'WORK'}] if contact_phone else [],
+                    'EMAIL': [{'VALUE': contact_email, 'VALUE_TYPE': 'WORK'}] if contact_email else []
+                }
+
+                # Проверяем, существует ли контакт
+                existing_contact = None
+                if contact_email:
+                    existing_contacts = api.find_contact_by_email(contact_email)
+                    if existing_contacts:
+                        existing_contact = existing_contacts
+
+                if not existing_contact and contact_phone:
+                    existing_contacts = api.find_contact_by_phone(contact_phone)
+                    if existing_contacts:
+                        existing_contact = existing_contacts
+
+                contact_id = None
+                if existing_contact:
+                    contact_id = existing_contact['ID']
+                    # Обновляем существующий контакт
+                    api.update_contact(contact_id, contact_data)
+                else:
+                    # Создаем новый контакт
+                    contact_result = api.add_contact(contact_data)
+                    contact_id = contact_result
+
+                # 2. Создаем или находим компанию
+                company_data = {
+                    'TITLE': company_name,
+                    'OPENED': 'Y',
+                    }
+                            
+                        # Проверяем, существует ли компания
+                existing_companies = api.find_company_by_name(company_name)
+                company_id = None
+                            
+                if existing_companies:
+                    company_id = existing_companies['ID']
+                                # Обновляем существующую компанию
+                    api.update_company(company_id, company_data)
+                else:
+                                # Создаем новую компанию
+                    company_result = api.add_company(company_data)
+                    company_id = company_result
+
+                lead_data = {
+                        'TITLE': company_name,
+                        'CATEGORY_ID': '11',
+                        'COMPANY_ID': company_id,
+                        'CONTACT_ID': contact_id,
+                        # Указание направления обучения
+                        'UF_CRM_1741091080288': edcuationdirection
+                    }
+                api.add_deal(lead_data)
+            messages.success(request, 'Сделки успешно импортированы')
+            if missing_company_rows:
+                messages.warning(request, f'Пропущены строки из-за неуказанной компании: {",".join(map(str, missing_company_rows))}')
+            if missing_name_rows:
+                messages.warning(request, f'Пропущены строки из-за неуказанного ФИО: {",".join(map(str, missing_name_rows))}')
+            if missing_phone_rows:
+                messages.warning(request, f'Пропущены строки из-за неуказанного телефона: {",".join(map(str, missing_phone_rows))}')
+            
+    else:
+        form = LeadImportForm()
+
+    return render(request, 'crm_connector/import_lids.html', {'form': form})
+
 from django.views.generic import ListView
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.shortcuts import get_object_or_404
@@ -848,6 +977,127 @@ class ObjectHistoryView(LoginRequiredMixin, ListView):
         context['fields'] = fields
         
         return context
+
+def lead_dashboard(request):
+    # Список нужных кодов стейджей
+    needed_stage_codes = [
+        'NEW',
+        'UC_OHS476',
+        'PREPARATION',
+        'EXECUTING',
+        'UC_6HMXDA',
+        'UC_82NA5G',
+        'UC_WCW6RM',
+        'WON',
+        'LOSE',
+    ]
+    query = Q()
+    for code in needed_stage_codes:
+        query |= Q(bitrix_id__icontains=code)
+    # Загружаем стадии с такими кодами
+    stages = Stage.objects.filter(query).order_by('bitrix_id')
+    stage_id_to_code = {stage.bitrix_id: stage.name for stage in stages}
+    stage_code_to_name = {
+        'NEW': '1. Необработанная заявка',
+        'UC_OHS476': '2. Направлена инструкция по РвР',
+        'PREPARATION': '3. Подал заявки на РвР',
+        'EXECUTING': '4. Заявка на обучение одобрена',
+        'UC_6HMXDA': '5. Заключен 3-сторонний договор',
+        'UC_82NA5G': '6. Заключен договор на обучение',
+        'UC_WCW6RM': '7. Приступил к обучению',
+        'WON': '8. Прошел итоговую аттестацию',
+        'LOSE': '9. Отказ',
+    }
+    
+    for stage in stages:
+        query |= Q(stage__bitrix_id__icontains=stage.bitrix_id)
+    # Получаем сделки с требуемыми стейджами
+    deals = Deal.objects.filter(query).select_related('company', 'stage')
+
+    # Формируем словарь: {программа: {регион: {компания: {stage_code: count, ..., 'total': count}}}}
+    data = {}
+    program_totals = {}
+    region_totals = {}
+    total = {code:0 for code in needed_stage_codes}
+    headcompanies = {}
+
+    # Заполняем словарь родительских компаний
+    for deal in deals:
+        head = deal.company.head
+        try:
+            int(head)
+            Company.objects.get(bitrix_id = head).title
+        except:
+            head = ''
+        if head:
+            try:
+                headcompanies[head] = Company.objects.get(bitrix_id = deal.company.head).title
+            except Exception as e:
+                logger.error(f"Не удалось найти родительскую компаниню: {e}")
+
+    for deal in deals:
+        prog = deal.get_program_display() if hasattr(deal, 'get_program_display') else deal.program
+        region = deal.get_region_display() if hasattr(deal, 'get_region_display') else deal.region
+        headid = deal.company.head
+        try:
+            int(headid)
+        except:
+            headid = ''
+        if prog and region != '':
+            company_name = deal.company.title if deal.company else 'Без компании'
+            stage_code = deal.stage.bitrix_id
+            for code in needed_stage_codes:
+                if code in stage_code:
+                    stage_code = code
+            
+            data.setdefault(prog, {})
+            data[prog].setdefault(region, {})
+            if headid:
+                data[prog][region].setdefault(headcompanies[headid], {code: 0 for code in needed_stage_codes})
+                data[prog][region][headcompanies[headid]].setdefault('total', 0)
+                data[prog][region][headcompanies[headid]].setdefault('child', {})
+                data[prog][region][headcompanies[headid]]['total'] +=1
+                data[prog][region][headcompanies[headid]][stage_code] +=1
+                data[prog][region][headcompanies[headid]]['child'].setdefault(company_name, {code:0 for code in needed_stage_codes})
+                data[prog][region][headcompanies[headid]]['child'][company_name].setdefault('total', 0)
+                data[prog][region][headcompanies[headid]]['child'][company_name][stage_code] += 1
+                data[prog][region][headcompanies[headid]]['child'][company_name]['total'] += 1
+            else:
+                data[prog][region].setdefault(company_name, {code:0 for code in needed_stage_codes})
+                data[prog][region][company_name].setdefault('total',0)
+                data[prog][region][company_name][stage_code] += 1
+                data[prog][region][company_name]['total'] += 1
+
+
+
+            # Подсчёт общего количества сделок по программе
+            program_totals.setdefault(prog, {code: 0 for code in needed_stage_codes})
+            program_totals[prog].setdefault('total', 0)
+            program_totals[prog][stage_code] += 1
+            program_totals[prog]['total'] += 1
+
+            # Подсчёт общего количества сделок по региону
+            # Можно считать отдельно по (программа, регион) для точности:
+            region_totals.setdefault(prog, {})
+            region_totals[prog].setdefault(region, {code: 0 for code in needed_stage_codes})
+            region_totals[prog][region].setdefault('total',0)
+            region_totals[prog][region]['total'] += 1
+            region_totals[prog][region][stage_code] += 1
+
+            total.setdefault('total',0)
+            total['total'] +=1
+            total[stage_code] +=1
+
+    context = {
+        'data': data,
+        'stage_codes': needed_stage_codes,
+        'stage_code_to_name': stage_code_to_name,
+        'program_totals': program_totals,
+        'region_totals': region_totals,
+        'total': total
+    }
+    # return JsonResponse({'result': context})
+    return render(request, 'crm_connector/lead-dashboard.html', context)
 
 
 def atlas_dashboard(request):
@@ -1200,3 +1450,153 @@ def atlas_dashboard(request):
     
     return render(request, 'crm_connector/atlas_dashboard.html', context)
  
+
+def lead_progress(request):
+    education_products = {
+        'Инструменты искусственного интеллекта в сфере культуры': {
+            1: "Введение в ИИ в сфере культуры",
+            2: "Работа с большими языковыми моделями",
+            3: "Работа с диффузионными нейросетями",
+            4: "ИИ в исследовании и аналитике",
+            5: "Виртуальные ассистенты и чат-боты в сфере культуры"
+        },
+        'Специалист по эксплуатации беспилотных авиационных систем в сфере лесного хозяйства': {
+            1: "Введение в БАС. БАС в правовом поле(Аттестация)",
+            2: "2.1 Техническое обслуживание БАС",
+            3: "2.2 Диагностика и устранение неисправностей",
+            4: "2.3 Профилактика поломок и продление срока службы БАС",
+            5: "Обслуживание и ремонт БАС(Аттестация)",
+            6: "Основы управления и пилотрования БАС(Аттестация)",
+            7: "Применение БАС для решения задач в деятельности лесных хозяйств(Аттестация)"
+        },
+        'Оператор беспилотных авиационных систем (с максимальной взлетной массой 30 килограммов и менее)': {
+            1: "Правовое регулирование использования БАС",
+            2: "Введение в БАС. БАС в правовом поле(Аттестация)",
+            3: "Правовое регулирование",
+            4: "Обслуживание и ремонт БАС(Аттестация)",
+            5: "Составные части БПЛА",
+            6: "Основы управления и пилотрования БАС"
+        },
+        'Специалист по борьбе с беспилотными летательными аппаратами и защите объектов':{
+            1: "Введение в БАС. БАС в правовом поле",
+            2: "Связь и навигация",
+            3: "Основы радиоэлектронной борьбы (РЭБ)",
+            4: "Подготовка и применение средств радиоэлектронной борьбы"
+        }
+    }
+    context = {}
+    result = {}
+    if request.method == 'POST':
+        form = AtlasLeadImportForm(request.POST, request.FILES)
+        if form.is_valid():
+            failed_to_find = 0
+            file = form.cleaned_data['excel_file']
+        
+            # Читаем Excel с пропуском первых 2 строк (номеруем с 0)
+            df = pd.read_excel(file, header=None, engine='openpyxl')
+            amount_of_leads = 0
+            for _, row in df.iterrows():
+                if _ < 2:  # пропускаем первые 3 строки
+                    continue
+                name = row.iloc[1]
+                program = row.iloc[0]
+                email = row.iloc[2]
+                last_active = row.iloc[5]
+                potok = row.iloc[7]
+                col_index = 11
+                test_count = 0
+                progress = ''
+                razdel = 1
+                while col_index + 4 < len(row):
+                    topic_theory = row.iloc[col_index]       # теория (не нужна)
+                    topic_testing = row.iloc[col_index + 1]  # тестирование (надо)
+                    topic_practice = row.iloc[col_index + 2] # практика (не нужна)
+                    topic_start = row.iloc[col_index + 3]    # дата старта (не нужна)
+                    topic_end = row.iloc[col_index + 4]      # дата окончания (не нужна)
+                    if pd.notna(topic_testing) and str(topic_testing).strip() != '':
+                        progress += f"{topic_testing},"
+                        if topic_testing > 60:
+                            test_count +=1
+                        razdel +=1
+                    
+                    col_index += 5
+                progress += f"{test_count}"
+
+                if isinstance(last_active, str):
+                    last_active = datetime.strptime(last_active, "%d.%m.%Y")
+                elif isinstance(last_active, pd.Timestamp):
+                    last_active = last_active.to_pydatetime()
+                # Пытаемся найти пользователя по email
+
+# for program_id, program_name in EDUCATION_PROGRAMM:
+                #     if program_name == program:
+                #         program = program_id
+                if isinstance(last_active, str):
+                    dt = datetime.strptime(last_active, "%d.%m.%Y")
+                    last_active = timezone.make_aware(dt, timezone.get_current_timezone())
+                try:
+                    app = AtlasApplication.objects.get(email=email)
+                    app.program = program
+                    app.potok = potok
+                    app.last_active = last_active
+                    app.education_progress = progress
+                    app.save()
+                    amount_of_leads += 1
+                except AtlasApplication.DoesNotExist:
+                    failed_to_find +=1
+                    pass
+            
+            messages.success(request, f'Найдено: {amount_of_leads}')
+                            
+    
+    else:
+        form = AtlasLeadImportForm()
+        context = {
+            'form': form
+        }
+    applications = AtlasApplication.objects.all()
+    # try:
+    for app in applications:
+        index = 0
+        try:
+            program = app.program
+            if program in education_products:
+                potok = app.potok
+                full_name = app.full_name
+                education_progress = app.education_progress
+                result.setdefault(program, {})
+                result[program].setdefault(potok, {})
+                result[program][potok].setdefault('total', {topic: 0 for topic in education_products[program].values()})
+                result[program][potok]['total'].setdefault('total', 0)
+                result[program][potok]['total'].setdefault('done', 0)
+                result[program][potok]['total'].setdefault('undone', 0)
+                result[program][potok].setdefault(full_name, {topic:0 for topic in education_products[program].values()})
+                result[program][potok][full_name].setdefault('total', 0)
+                
+                if program not in result:
+                    result[program] = {}
+                if potok not in result[program]:
+                    result[program][potok] = {}
+                prog = education_progress.split(",")
+                for topic in education_products[program].values():
+                    result[program][potok][full_name][topic] = int(prog[index])
+                    if (prog[index] == '0'):
+                        result[program][potok]['total'][topic] += 1
+                    index += 1
+                result[program][potok][full_name]['total'] = int(prog[index])
+                if (int(prog[index]) < len(education_products[program].values())):
+                    result[program][potok]['total']['total'] += 1
+                    result[program][potok]['total']['undone'] += 1
+                else:
+                    result[program][potok]['total']['done'] += 1
+                result[program][potok]['total']['total'] += 1
+        except Exception as e:
+            print(f"Ошибка при формировании таблицы: {e}")
+            pass
+    context = {
+    'result': result,
+    'topics': education_products,
+    'form': form
+    }
+    # return JsonResponse({'result': result})
+    return render(request, 'crm_connector/lead-progress.html', context)

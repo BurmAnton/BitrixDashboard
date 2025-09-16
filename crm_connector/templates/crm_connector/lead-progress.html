@@ -1,0 +1,324 @@
+{% extends "base.html" %}
+{% load dict_filters %}
+{% block content %}
+
+{% block extra_css %}
+<style>
+    form{ 
+        text-align: left;
+        padding: 12px;
+        background-color: rgb(241, 241, 241);
+        width: 35%;
+        border-radius: 15px;
+    }
+    .container{
+        width: 95%; 
+        max-width: 95%;
+        text-align: center;
+    }
+
+    .potok{
+        background:#ddd; 
+        font-weight:bold;
+    }
+
+    span.email {
+    font-size: smaller;
+    color: gray;
+    cursor: pointer;
+    }
+    span.email.clicked {
+    color: green;
+    font-weight: bold;
+    }
+    span.email:hover:not(.clicked) {
+    color: red;
+    font-weight: bold;
+    }
+
+    .total-row{
+        font-weight: bolder;
+    }
+    .total{
+        padding: 7px;
+        border-radius: 10px;
+        background-color: rgb(0, 0, 0);
+        color: rgb(255, 255, 255);
+    }
+
+    table.custom-dashboard th:first-child{
+        width: 18%;
+    }
+
+    table.custom-dashboard {
+    margin-bottom: 25px;
+    width: 100%;
+    border-collapse: collapse;
+    table-layout: fixed;
+    word-wrap: break-word;
+    font-family: Arial, sans-serif;
+    font-size: 14px;
+    }
+
+    table.custom-dashboard th, table.custom-dashboard td {
+    border: 1px solid #ddd;
+    padding: 8px;
+    text-align: center;
+    vertical-align: middle;
+    overflow-wrap: break-word;
+    max-width: 150px;
+    }
+
+    table.custom-dashboard th {
+    background-color: #f2f2f2;
+    font-weight: bold;
+    }
+
+    table.custom-dashboard tr:nth-child(even) {
+    background-color: #fafafa;
+    }
+
+    table.custom-dashboard tr:hover {
+    background-color: #f1f1f1;
+    }
+
+    table.custom-dashboard td {
+    white-space: normal;
+    text-align: center;
+    }
+
+    table.custom-dashboard td:last-child {
+        background-color: #f1f6f7;
+    }
+    .Success{
+        font-weight: bolder;
+        padding: 7px;
+        border-radius: 10px;
+        background-color: #00A000;
+        text-shadow: black 0px 0px 2px;
+        color: white;
+        margin: 2px 2px;
+    }
+    .Fail{
+        font-weight: bolder;
+        padding: 7px;
+        border-radius: 10px;
+        background-color: #bd0000;
+        text-shadow: black 0px 0px 2px;
+        color: white;
+        margin: 2px 2px;
+    }
+    .Empty{
+        font-weight: bolder;
+        padding: 7px;
+        border-radius: 10px;
+        background-color: #727272;
+        text-shadow: black 0px 0px 2px;
+        color: white;
+        margin: 2px 2px;
+        ;
+    }
+
+</style>
+{% endblock %}
+    <form method="post" enctype="multipart/form-data">
+    <h2>Импорт заявок из Excel</h2>
+    {% csrf_token %}
+    {{ form.as_p }}
+    <input type="submit"></button>
+    </form>
+{% for prog, potoki in result.items %}
+    <h3> Программа {{ prog }}</h1>
+    <table border="1" class="custom-dashboard">
+    <thead>
+        <tr>
+        <th>Имя</th>
+        {% for topic, value in topics.items %}
+            {% if topic == prog %}
+                {% for index, name in value.items %}
+                
+                    <th>
+                        <label>
+                            <input type="checkbox" class="filter-success" data-col-index="{{ forloop.counter0 }}">
+                            {{ name }}
+                        </label>
+                    </th>
+                {% endfor %}
+            {% endif %}
+        {% endfor %}
+        <th>Итого</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for potok, listeners in potoki.items %}
+        <tr class="potok">
+            <td colspan="{{ topics|dict_get:prog|length|add:'2' }}" >
+                <label>
+                   <input type="checkbox" class="toggle-potok" data-potok-id="{{ potok }}"  checked>
+                    {{ potok }}
+                </label>
+            </td>
+        </tr>
+            {% for name, tests in listeners.items %}
+                {% if name == 'total' %}
+                <tr class="total-row" id="{{ potok }}">
+                <td>Общая сводка</td>
+                {% for educ,topic  in topics.items %}
+                    {% if educ == prog %}
+                        {% for index, name in topic.items %}
+                            <td>
+                                <span class="total">
+                                    {{tests|dict_get:name}}
+                                </span>
+                            </td>
+                        {% endfor %}
+                    {% endif %}
+                {% endfor %}
+                <td>
+                    <span class="Empty">{{tests.total}}</span>
+                    <span class="Success">{{tests.done}}</span>
+                    <span class="Fail">{{tests.undone}}</span>
+                </td>
+                </tr>
+                {% else %}
+                <tr id="{{ potok }}">
+                <td>
+                    {{ name }}<br>
+                    <span class="email">{{ tests.email }}</a>
+                </td>
+                {% for educ,topic  in topics.items %}
+                    {% if educ == prog %}
+                        {% for index, name in topic.items %}
+                            <td>
+                                {% with value=tests|dict_get:name %}
+                                    {% if value > 60 %}
+                                        <span class="Success">{{ value }}</span>
+                                    {% elif value == 0 %}
+                                        <span class="Empty">{{ value }}</span>
+                                    {% else %}
+                                        <span class="Fail">{{ value }}</span>
+                                    {% endif %}
+                                {% endwith %}
+                            </td>
+                        {% endfor %}
+                    {% endif %}
+                {% endfor %}
+                <td>
+                    {% with value=tests.total %}
+                        {% if value == topics|dict_get:prog|length %}
+                            <span class="Success">{{ value }}</span>
+                        {% elif value == 0 %}
+                            <span class="Empty">{{ value }}</span>
+                        {% else %}
+                            <span class="Fail">{{ value }}</span>
+                        {% endif %}
+                    {% endwith %}
+                </td>
+                </tr>
+                {% endif %}
+            {% endfor %}
+        {% endfor %}
+    </tbody>
+    </table>
+{% endfor %}
+    <script>
+    document.addEventListener('DOMContentLoaded', () => {
+    const emailSpans = document.querySelectorAll('span.email');
+    emailSpans.forEach(span => {
+        span.addEventListener('click', () => {
+            navigator.clipboard.writeText(span.textContent)
+            span.classList.add('clicked');
+            setTimeout(() => {
+                span.classList.remove('clicked');
+            }, 800);
+        });
+    });
+
+    // Получаем все чекбоксы фильтров колонок
+    const filters = document.querySelectorAll('input.filter-success');
+    // Получаем все чекбоксы фильтра потоков
+    const potokCheckboxes = document.querySelectorAll('input.toggle-potok');
+
+    // Функция для получения текущих активных фильтров статусов по колонкам
+    function getActiveColumnFilters() {
+        const active = new Set();
+        filters.forEach((filter, idx) => {
+            if (filter.checked) {
+                active.add(idx);
+            }
+        });
+        return active;
+    }
+
+    // Функция для проверки, скрыт ли поток по id (по чекбоксу)
+    function isPotokVisible(potokId) {
+        const potokCheckbox = Array.from(potokCheckboxes).find(cb => cb.dataset.potokId === potokId);
+        return potokCheckbox ? potokCheckbox.checked : true;
+    }
+
+    // Основная функция фильтрации строк с учётом всех фильтров
+    function applyFilters() {
+        const activeFilters = getActiveColumnFilters();
+
+        const tables = document.querySelectorAll('table.custom-dashboard');
+        tables.forEach(table => {
+            const rows = table.tBodies[0].rows;
+
+            for (let i = 0; i < rows.length; i++) {
+                const row = rows[i];
+
+                // Пропускаем заголовочные строки потоков (с классом 'potok')
+                if (row.classList.contains('potok')) {
+                    continue;
+                }
+
+                // Для остальных строк определим id потока из id строки (у вас id потока совпадает с id строки)
+                const potokId = row.id;
+                if (potokId && !isPotokVisible(potokId)) {
+                    // Если поток скрыт — скрываем строку
+                    row.style.setProperty('display', 'none', 'important');
+                    continue;
+                }
+
+                // Проверяем фильтры по колонкам
+                let shouldHide = false;
+
+                activeFilters.forEach(colIndex => {
+                    // +1 потому что первый столбец - имя
+                    const cell = row.cells[colIndex + 1];
+                    if (!cell) return;
+
+                    const hasSuccess = cell.querySelector('span.Success');
+                    if (hasSuccess) {
+                        // Если есть успех по активному фильтру, строку надо скрыть
+                        shouldHide = true;
+                    }
+                });
+
+                if (shouldHide) {
+                    row.style.display = 'none';
+                } else {
+                    row.style.removeProperty('display');
+                }
+            }
+        });
+    }
+
+    // События изменения фильтров
+    filters.forEach(filter => {
+        filter.addEventListener('change', () => {
+            applyFilters();
+        });
+    });
+
+    potokCheckboxes.forEach(checkbox => {
+        checkbox.addEventListener('change', () => {
+            applyFilters();
+        });
+    });
+
+    // Первоначальный запуск фильтрации
+    applyFilters();
+})
+    </script>
+{% endblock %}

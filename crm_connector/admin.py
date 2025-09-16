@@ -1,5 +1,6 @@
 from django.contrib import admin
 from .models import Pipeline, Stage, Deal, Lead, Contact, AtlasApplication, STAGE_TYPE_CHOICES, AtlasStatus, RRStatus, StageRule
+from .models import Pipeline, Stage, Deal, Company, Lead, Contact, AtlasApplication, STAGE_TYPE_CHOICES, AtlasStatus, RRStatus, StageRule
 from django import forms
 from django.contrib import messages
 from django.utils.html import format_html
@@ -94,12 +95,14 @@ class StageAdmin(SimpleHistoryAdmin):
 @admin.register(Deal)
 class DealAdmin(SimpleHistoryAdmin):
     list_display = ['title', 'bitrix_id', 'pipeline', 'stage', 'amount', 'is_closed', 'created_at', 'last_sync', 'view_history_link']
+    list_display = ['title', 'bitrix_id', 'pipeline', 'stage', 'amount', 'company', 'region', 'created_at', 'last_sync', 'view_history_link']
     list_filter = ('pipeline', 'stage', 'is_closed', 'created_at')
     search_fields = ('title', 'bitrix_id')
     readonly_fields = ('bitrix_id', 'created_at', 'closed_at', 'last_sync', 'details_pretty', 'view_history_link')
     fieldsets = (
         ('Основная информация', {
             'fields': ('bitrix_id', 'title', 'pipeline', 'stage', 'amount', 'is_closed', 'is_new')
+            'fields': ('bitrix_id', 'title', 'pipeline', 'stage', 'program', 'company','region', 'amount', 'is_closed', 'is_new')
         }),
         ('Даты', {
             'fields': ('created_at', 'closed_at', 'last_sync')
@@ -132,6 +135,11 @@ class DealAdmin(SimpleHistoryAdmin):
     details_pretty.short_description = 'Детали сделки'
 
 admin.site.register(Lead, admin.ModelAdmin)
+
+@admin.register(Company)
+class CompanyAdmin(admin.ModelAdmin):
+    list_display = ['title', 'bitrix_id']
+    search_fields = ['title', 'bitrix_id']
 
 @admin.register(Contact)
 class ContactAdmin(admin.ModelAdmin):
