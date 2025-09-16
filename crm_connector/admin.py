@@ -101,7 +101,6 @@ class DealAdmin(SimpleHistoryAdmin):
     readonly_fields = ('bitrix_id', 'created_at', 'closed_at', 'last_sync', 'details_pretty', 'view_history_link')
     fieldsets = (
         ('Основная информация', {
-            'fields': ('bitrix_id', 'title', 'pipeline', 'stage', 'amount', 'is_closed', 'is_new')
             'fields': ('bitrix_id', 'title', 'pipeline', 'stage', 'program', 'company','region', 'amount', 'is_closed', 'is_new')
         }),
         ('Даты', {
