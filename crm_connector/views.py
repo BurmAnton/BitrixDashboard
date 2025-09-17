@@ -1324,6 +1324,8 @@ def atlas_dashboard(request):
     
     # Общая статистика
     total_applications = deals.count()
+    # Подсчитываем активные заявки (исключая отказы)
+    active_applications = sum(stage_stats[stage]['total'] for stage in ordered_stages if stage != 'Отказы')
     
     # Подготовка данных для графиков (JSON)
     import json
@@ -1426,6 +1428,7 @@ def atlas_dashboard(request):
     
     context = {
         'total_applications': total_applications,
+        'active_applications': active_applications,
         'stage_stats': stage_stats,
         'stages_chart_data': json.dumps(stages_chart_data, ensure_ascii=False),
         'weekly_chart_data': json.dumps(weekly_chart_data, ensure_ascii=False),

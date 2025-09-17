@@ -1,0 +1,1213 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Сводный дашборд квот ИРПО{% endblock %}
+
+{% block extra_css %}
+<style>
+    .container {
+        max-width: 95% !important;
+    }
+    .dashboard-container {
+        padding: 20px 0;
+        max-width: 100%;
+        margin: 0 auto;
+    }
+    
+    .program-section {
+        margin-bottom: 20px;
+        border: 1px solid #dee2e6;
+        border-radius: 8px;
+        overflow: hidden;
+    }
+    
+    .program-header {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        padding: 15px 20px;
+        cursor: pointer;
+        min-height: 60px;
+        display: flex;
+        align-items: center;
+    }
+    
+    .program-header:hover {
+        opacity: 0.95;
+    }
+    
+    .program-body {
+        background: white;
+        padding: 20px;
+    }
+    
+    .quota-table {
+        width: 100%;
+        border-collapse: collapse;
+    }
+    
+    .quota-table th {
+        background: #f8f9fa;
+        padding: 8px 10px;
+        text-align: left;
+        font-weight: 600;
+        border-bottom: 2px solid #dee2e6;
+        font-size: 13px;
+        line-height: 1.3;
+    }
+    
+    .quota-table td {
+        padding: 10px 8px;
+        border-bottom: 1px solid #dee2e6;
+        vertical-align: top;
+        line-height: 1.3;
+    }
+    
+    .region-column {
+        background: #fffacd;
+        width: 12%;
+        min-width: 120px;
+        word-wrap: break-word;
+        text-align: center;
+        vertical-align: middle;
+    }
+    
+    .quota-info-column {
+        background: #f0f8ff;
+        width: 15%;
+        min-width: 140px;
+        word-wrap: break-word;
+    }
+    
+    .period-column {
+        background: #f8f0ff;
+        width: 18%;
+        min-width: 160px;
+        word-wrap: break-word;
+    }
+    
+    .format-column {
+        background: #f0fff8;
+        width: 15%;
+        min-width: 140px;
+        word-wrap: break-word;
+    }
+    
+    .demand-column {
+        background: #fff8f0;
+        width: 18%;
+        min-width: 160px;
+        word-wrap: break-word;
+    }
+    
+    .application-column {
+        background: #f0fff0;
+        width: 20%;
+        min-width: 180px;
+        word-wrap: break-word;
+    }
+    
+    .coverage-column {
+        background: #fff0f8;
+        width: 7%;
+        min-width: 60px;
+        text-align: center;
+    }
+    
+    .region-distribution {
+        margin: 5px 0;
+        padding: 5px;
+        background: #f8f9fa;
+        border-radius: 4px;
+    }
+    
+    .distribution-input {
+        max-width: 80px;
+    }
+    
+    .demand-item {
+        margin: 5px 0;
+        padding: 8px;
+        background: white;
+        border: 1px solid #dee2e6;
+        border-radius: 4px;
+    }
+    
+
+    
+    .coverage-badge {
+        display: inline-block;
+        padding: 8px 12px;
+        border-radius: 20px;
+        font-weight: bold;
+        font-size: 16px;
+    }
+    
+    .coverage-high {
+        background: #28a745;
+        color: white;
+    }
+    
+    .coverage-over {
+        background: #6f42c1;
+        color: white;
+    }
+    
+    .coverage-medium {
+        background: #ffc107;
+        color: #000;
+    }
+    
+    .coverage-low {
+        background: #dc3545;
+        color: white;
+    }
+    
+    .unmatched-section {
+        margin-top: 30px;
+        padding: 20px;
+        background: #fff3cd;
+        border: 1px solid #ffc107;
+        border-radius: 8px;
+    }
+    
+    .add-demand-btn {
+        padding: 4px 8px;
+        font-size: 12px;
+        margin: 2px;
+    }
+    
+    .history-link {
+        cursor: pointer;
+        color: #007bff;
+        text-decoration: underline;
+    }
+    
+    .summary-stats {
+        display: flex;
+        justify-content: space-around;
+        margin-bottom: 30px;
+    }
+    
+    .stat-card {
+        flex: 1;
+        margin: 0 10px;
+        padding: 20px;
+        background: white;
+        border-radius: 8px;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        text-align: center;
+    }
+    
+    .stat-value {
+        font-size: 32px;
+        font-weight: bold;
+        color: #667eea;
+    }
+    
+    .stat-label {
+        color: #6c757d;
+        margin-top: 5px;
+    }
+    
+    .quota-table {
+        table-layout: auto;
+        width: 100%;
+    }
+    
+    .quota-table tbody tr:hover {
+        background-color: rgba(0,123,255,0.05);
+    }
+    
+    .text-truncate-multiline {
+        display: -webkit-box;
+        -webkit-line-clamp: 3;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+    
+    .table-responsive-custom {
+        overflow-x: auto;
+        min-height: 200px;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="dashboard-container">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1 class="mb-0">
+            <i class="bi bi-grid-3x3-gap me-2"></i>
+            Сводный дашборд квот ИРПО
+        </h1>
+        <button class="btn btn-outline-info btn-sm" type="button" data-bs-toggle="collapse" data-bs-target="#statusInfo" aria-expanded="false">
+            <i class="bi bi-info-circle"></i> Справка по статусам
+        </button>
+    </div>
+    
+    <!-- Справка по статусам -->
+    <div class="collapse mb-4" id="statusInfo">
+        <div class="card card-body">
+            <h6><i class="bi bi-info-circle me-2"></i>Учитываемые статусы заявок Atlas:</h6>
+            <div class="row">
+                <div class="col-md-4">
+                    <strong>В подаче (60-139):</strong>
+                    <ul class="small">
+                        <li>Ожидание загрузки заявления</li>
+                        <li>Ожидает проверки заявления</li>
+                        <li>Заявление на исправлении</li>
+                        <li>Ожидание загрузки договора</li>
+                        <li>Ожидает проверки договора</li>
+                        <li>Договор на исправлении</li>
+                        <li>Ожидает приказ на зачисление</li>
+                        <li>Ожидает прикрепления приказа на зачисление</li>
+                    </ul>
+                </div>
+                <div class="col-md-4">
+                    <strong>На обучении (140-159):</strong>
+                    <ul class="small">
+                        <li>Ожидает начала обучения</li>
+                        <li>Обучается</li>
+                    </ul>
+                </div>
+                <div class="col-md-4">
+                    <strong>Завершили (160+):</strong>
+                    <ul class="small">
+                        <li>Обучение завершено</li>
+                        <li>Прикрепить приказ об отчисл. усп.</li>
+                        <li>Ожидает документа о квалификации</li>
+                        <li>Запрос оригиналов док. о квалификации</li>
+                        <li>Отправка док. о квалификации</li>
+                    </ul>
+                </div>
+            </div>
+            <p class="small text-muted mb-0">Заявки со статусами ниже "Ожидание загрузки заявления" (порядок < 60) не учитываются в статистике.</p>
+        </div>
+    </div>
+    
+    <!-- Общая статистика -->
+    <div class="summary-stats">
+        <div class="stat-card">
+            <div class="stat-value">{{ total_quotas }}</div>
+            <div class="stat-label">Всего квот</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value">{{ total_demands }}</div>
+            <div class="stat-label">Заявленная потребность</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value">{{ total_applications }}</div>
+            <div class="stat-label">Заявок в системе</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value">
+                {% if total_demands > 0 %}
+                    {{ total_applications|floatformat:0 }}%
+                {% else %}
+                    0%
+                {% endif %}
+            </div>
+            <div class="stat-label">Общее покрытие</div>
+        </div>
+    </div>
+    
+    <!-- Программы и квоты -->
+    {% for program_id, data in programs_data.items %}
+    <div class="program-section">
+        <div class="program-header" onclick="toggleProgram({{ program_id }})">
+            <div class="w-100">
+                <div class="d-flex justify-content-between align-items-start">
+                    <div class="flex-grow-1 me-3">
+                        <h3 class="mb-2">
+                            <i class="bi bi-mortarboard me-2"></i>
+                            {{ data.program.name }}
+                        </h3>
+                        <div class="small opacity-75">
+                            <span class="badge bg-light text-dark me-2">Квот: {{ data.total_quota }}</span>
+                            <span class="badge bg-light text-dark me-2">Потребность: {{ data.total_demand }}</span>
+                            <span class="badge bg-light text-dark me-2">Заявок: {{ data.total_applications }}</span>
+                            <span class="badge bg-light text-dark">
+                                Покрытие: {{ data.coverage_percent|floatformat:0 }}%
+                                {% if data.coverage_by_demand > 0 %}
+                                    (по потребности: {{ data.coverage_by_demand|floatformat:0 }}%, по квоте: {{ data.coverage_by_quota|floatformat:0 }}%)
+                                {% endif %}
+                            </span>
+                        </div>
+                    </div>
+                    <div>
+                        <i class="bi bi-chevron-down fs-4" id="chevron-{{ program_id }}"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="program-body" id="program-body-{{ program_id }}">
+            <div class="table-responsive-custom">
+                <table class="quota-table">
+                <thead>
+                    <tr>
+                        <th class="region-column">Регион</th>
+                        <th class="quota-info-column">Квота</th>
+                        <th class="period-column">Период</th>
+                        <th class="format-column">
+                            <div class="text-center">
+                                <div class="d-flex">
+                                    <div class="flex-fill border-end">
+                                        <div class="small fw-semibold">Формат</div>
+                                    </div>
+                                    <div class="flex-fill">
+                                        <div class="small fw-semibold">Длительность</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </th>
+                        <th class="demand-column">Потребность РОИВ</th>
+                        <th class="application-column">
+                            <div class="text-center">
+                                <div class="mb-1">Заявки из Атласа</div>
+                                <div class="small text-muted mb-2">(от "Ожидание загрузки заявления")</div>
+                                <div class="d-flex">
+                                    <div class="flex-fill border-end">
+                                        <div class="small fw-semibold">Подача</div>
+                                    </div>
+                                    <div class="flex-fill border-end">
+                                        <div class="small fw-semibold">Обучение</div>
+                                    </div>
+                                    <div class="flex-fill">
+                                        <div class="small fw-semibold">Завершили</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </th>
+                        <th class="coverage-column">% Покрытия</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for region_group in data.quotas_by_region %}
+                        {% for row in region_group.rows %}
+                        <tr>
+                            <!-- Колонка региона -->
+                            {% if forloop.first %}
+                            <td class="region-column" rowspan="{{ region_group.rowspan }}">
+                                <div class="fw-bold text-dark fs-5">{{ region_group.region.name }}</div>
+                            </td>
+                            {% endif %}
+                            
+                            <!-- Колонка информации о квоте -->
+                            <td class="quota-info-column">
+                                <div class="mb-1">
+                                    <div class="small text-muted mb-1">{{ row.quota_data.quota.agreement.number }}</div>
+                                </div>
+                                
+                                <div class="mb-1">
+                                    <div class="d-flex align-items-center">
+                                        <span class="small fw-semibold me-1">Мест:</span>
+                                        {% if row.is_alternative %}
+                                            <!-- Редактирование альтернативной квоты -->
+                                            <div class="d-flex align-items-center">
+                                                <input type="number" 
+                                                       class="alternative-quota-input form-control form-control-sm" 
+                                                       data-alt-quota-id="{{ row.distribution.alt_quota_id }}"
+                                                       value="{{ row.distribution.allocated }}"
+                                                       min="1"
+                                                       onchange="updateAlternativeQuota(this)"
+                                                       style="width: 60px;">
+                                                <button class="btn btn-sm btn-outline-success ms-1 py-0 px-1" 
+                                                        onclick="saveAlternativeQuota({{ row.distribution.alt_quota_id }})"
+                                                        title="Сохранить альтернативную квоту">
+                                                    <i class="bi bi-check"></i>
+                                                </button>
+                                            </div>
+                                        {% elif row.quota_data.distributions|length > 1 %}
+                                            <!-- Редактирование распределения основной квоты -->
+                                            <div class="d-flex align-items-center">
+                                                <input type="number" 
+                                                       class="distribution-input form-control form-control-sm" 
+                                                       data-quota-id="{{ row.quota_data.quota.id }}"
+                                                       data-region-id="{{ row.distribution.region.id }}"
+                                                       value="{{ row.distribution.allocated }}"
+                                                       max="{{ row.quota_data.quota.quantity }}"
+                                                       onchange="updateDistribution(this)"
+                                                       style="width: 60px;">
+                                                <span class="mx-1">/</span>
+                                                <span class="text-muted small">{{ row.quota_data.quota.quantity }}</span>
+                                                <button class="btn btn-sm btn-outline-primary ms-1 py-0 px-1" 
+                                                        onclick="saveDistribution({{ row.quota_data.quota.id }})"
+                                                        title="Сохранить">
+                                                    <i class="bi bi-check"></i>
+                                                </button>
+                                            </div>
+                                        {% else %}
+                                            <!-- Отображение основной квоты -->
+                                            <span class="badge bg-primary">{{ row.quota_data.quota.quantity }}</span>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                            </td>
+                            
+                            <!-- Колонка периода -->
+                            <td class="period-column">
+                                {% if row.is_alternative and row.distribution.alternative_start %}
+                                    <!-- Альтернативный период из заявок -->
+                                    <div class="py-1">
+                                        <div class="d-flex align-items-center justify-content-center mb-1">
+                                            <span class="small text-warning fw-semibold">{{ row.distribution.alternative_start_str }}</span>
+                                            <i class="bi bi-arrow-right mx-2 text-muted"></i>
+                                            <span class="small text-warning fw-semibold">{{ row.distribution.alternative_end_str }}</span>
+                                        </div>
+                                        <div class="text-center">
+                                            <span class="badge bg-warning text-dark small">Альтернативная дата</span>
+                                        </div>
+                                    </div>
+                                {% elif row.quota_data.quota.start_date %}
+                                    <!-- Основной период квоты -->
+                                    <div class="py-1">
+                                        <div class="d-flex align-items-center justify-content-center mb-1">
+                                            <span class="small text-primary fw-semibold">{{ row.quota_data.quota.start_date|date:"d.m.Y" }}</span>
+                                            <i class="bi bi-arrow-right mx-2 text-muted"></i>
+                                            <span class="small text-success fw-semibold">{{ row.quota_data.quota.end_date|date:"d.m.Y" }}</span>
+                                        </div>
+                                        {% if row.quota_data.quota.start_date and row.quota_data.quota.end_date %}
+                                        <div class="text-center">
+                                            <span class="badge bg-secondary small">{{ row.quota_data.quota.duration_days }} дн.</span>
+                                        </div>
+                                        {% endif %}
+                                    </div>
+                                {% else %}
+                                    <div class="text-center text-muted fst-italic py-2">
+                                        <i class="bi bi-calendar-x me-1"></i>
+                                        <span class="small">Не указан</span>
+                                    </div>
+                                {% endif %}
+                            </td>
+                            
+                            <!-- Колонка формата и длительности -->
+                            <td class="format-column">
+                                <div class="d-flex h-100">
+                                    <!-- Формат -->
+                                    <div class="flex-fill border-end text-center d-flex flex-column justify-content-center">
+                                        <i class="bi bi-book text-primary mb-1"></i>
+                                        <div class="small fw-semibold">{{ row.quota_data.quota.education_program.get_study_form_display|default:"Не указана" }}</div>
+                                    </div>
+                                    <!-- Длительность -->
+                                    <div class="flex-fill text-center d-flex flex-column justify-content-center">
+                                        <i class="bi bi-clock text-success mb-1"></i>
+                                        <div class="small fw-semibold">
+                                            {% if row.quota_data.quota.education_program.academic_hours %}
+                                                {{ row.quota_data.quota.education_program.academic_hours }} ч.
+                                            {% else %}
+                                                Не указана
+                                            {% endif %}
+                                        </div>
+                                    </div>
+                                </div>
+                            </td>
+                            
+                            <!-- Колонка потребностей -->
+                            <td class="demand-column">
+                                <div>
+                                    {% if row.distribution.demands %}
+                                        {% for demand in row.distribution.demands %}
+                                        <div class="demand-item mb-1 p-1 border rounded small">
+                                            <div class="d-flex justify-content-between align-items-center">
+                                                <div>
+                                                    <span class="fw-semibold text-success">{{ demand.quantity }} мест</span>
+                                                    <div class="small text-muted">{{ demand.roiv.name }}</div>
+                                                </div>
+                                                <div class="btn-group btn-group-sm" role="group">
+                                                    {% if demand.document_link %}
+                                                    <a href="{{ demand.document_link }}" target="_blank" 
+                                                       class="btn btn-outline-info py-0 px-1" title="Документ">
+                                                        <i class="bi bi-file-text"></i>
+                                                    </a>
+                                                    {% endif %}
+                                                    <button class="btn btn-outline-primary py-0 px-1" 
+                                                            onclick="showDemandHistory({{ demand.id }})" title="История">
+                                                        <i class="bi bi-clock-history"></i>
+                                                    </button>
+                                                    <button class="btn btn-outline-warning py-0 px-1" 
+                                                            onclick="editDemand({{ demand.id }})" title="Редактировать">
+                                                        <i class="bi bi-pencil"></i>
+                                                    </button>
+                                                    <button class="btn btn-outline-danger py-0 px-1" 
+                                                            onclick="deleteDemand({{ demand.id }})" title="Удалить">
+                                                        <i class="bi bi-trash"></i>
+                                                    </button>
+                                                </div>
+                                            </div>
+                                            {% if demand.comment %}
+                                                <div class="small text-muted">{{ demand.comment|truncatechars:40 }}</div>
+                                            {% endif %}
+                                        </div>
+                                        {% endfor %}
+                                    {% else %}
+                                        <div class="text-muted fst-italic small mb-1">Нет потребности</div>
+                                    {% endif %}
+                                    
+                                    <div class="d-grid gap-1">
+                                        <button class="btn btn-sm btn-success py-1"
+                                                onclick="addDemand({{ row.quota_data.quota.id }}, {{ row.distribution.region.id }}, {% if row.is_alternative %}'{{ row.distribution.alternative_start_str }}', '{{ row.distribution.alternative_end_str }}'{% else %}'{{ row.quota_data.quota.start_date|date:"d.m.Y" }}', '{{ row.quota_data.quota.end_date|date:"d.m.Y" }}'{% endif %})" title="Добавить потребность">
+                                            <i class="bi bi-plus-circle me-1"></i> Добавить
+                                        </button>
+                                        
+                                        {% if row.distribution.total_demand %}
+                                        <div class="alert alert-info py-1 mb-0 small">
+                                            <strong>Итого:</strong> {{ row.distribution.total_demand|default:0 }} мест
+                                        </div>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                            </td>
+                            
+                            <!-- Колонка заявок -->
+                            <td class="application-column">
+                                {% if row.distribution.applications.total > 0 %}
+                                    <div class="d-flex h-100">
+                                        <!-- Подача -->
+                                        <div class="flex-fill border-end text-center d-flex flex-column justify-content-center">
+                                            <div class="fw-bold text-warning fs-5">{{ row.distribution.applications.submitted }}</div>
+                                            <div class="small text-muted">заявок</div>
+                                        </div>
+                                        <!-- Обучение -->
+                                        <div class="flex-fill border-end text-center d-flex flex-column justify-content-center">
+                                            <div class="fw-bold text-info fs-5">{{ row.distribution.applications.in_training }}</div>
+                                            <div class="small text-muted">обучаются</div>
+                                        </div>
+                                        <!-- Завершили -->
+                                        <div class="flex-fill text-center d-flex flex-column justify-content-center">
+                                            <div class="fw-bold text-success fs-5">{{ row.distribution.applications.completed }}</div>
+                                            <div class="small text-muted">завершили</div>
+                                        </div>
+                                    </div>
+                                {% else %}
+                                    <div class="text-muted fst-italic text-center py-2 small">
+                                        <i class="bi bi-inbox"></i><br>
+                                        Нет заявок
+                                    </div>
+                                {% endif %}
+                            </td>
+                            
+                            <!-- Колонка процента покрытия -->
+                            <td class="coverage-column">
+                                {% if row.distribution.coverage_percent > 100 %}
+                                    <span class="coverage-badge coverage-over">
+                                {% elif row.distribution.coverage_percent >= 80 %}
+                                    <span class="coverage-badge coverage-high">
+                                {% elif row.distribution.coverage_percent >= 50 %}
+                                    <span class="coverage-badge coverage-medium">
+                                {% else %}
+                                    <span class="coverage-badge coverage-low">
+                                {% endif %}
+                                    {{ row.distribution.coverage_percent|floatformat:0 }}%
+                                </span>
+                                {% if row.distribution.coverage_by_demand > 0 %}
+                                <div class="small text-muted mt-1" style="font-size: 0.7rem; line-height: 1.1;">
+                                    <div>По потребности: {{ row.distribution.coverage_by_demand|floatformat:0 }}%</div>
+                                    <div>По квоте: {{ row.distribution.coverage_by_quota|floatformat:0 }}%</div>
+                                </div>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    {% endfor %}
+                </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+    
+    <!-- Несопоставленные заявки -->
+    {% if unmatched_applications %}
+    <div class="unmatched-section">
+        <h3>
+            <i class="bi bi-exclamation-triangle me-2"></i>
+            Заявки без соответствующих квот
+        </h3>
+        <p>Найдено {{ unmatched_applications|length }} заявок, которые не соответствуют ни одной активной квоте ИРПО:</p>
+        
+        <table class="table table-sm">
+            <thead>
+                <tr>
+                    <th>ID заявки</th>
+                    <th>ФИО</th>
+                    <th>Регион</th>
+                    <th>Дата создания</th>
+                    <th>Статус синхронизации</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for app in unmatched_applications|slice:":20" %}
+                <tr>
+                    <td>{{ app.application_id }}</td>
+                    <td>{{ app.full_name|default:"Не указана" }}</td>
+                    <td>{{ app.region }}</td>
+                    <td>{{ app.created_at|date:"d.m.Y"|default:"Не указана" }}</td>
+                    <td>{% if app.is_synced %}Синхронизировано{% else %}Не синхронизировано{% endif %}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        
+        {% if unmatched_applications|length > 20 %}
+        <p class="text-muted">Показаны первые 20 заявок из {{ unmatched_applications|length }}</p>
+        {% endif %}
+    </div>
+    {% endif %}
+</div>
+
+<!-- Модальное окно для добавления/редактирования потребности -->
+<div class="modal fade" id="demandModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="demandModalTitle">Добавить потребность</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="demandForm">
+                    <input type="hidden" id="demandId">
+                    <input type="hidden" id="quotaId">
+                    <input type="hidden" id="regionId">
+                    <input type="hidden" id="demandStartDate">
+                    <input type="hidden" id="demandEndDate">
+                    
+                    <!-- Поле выбора РОИВ для создания -->
+                    <div class="mb-3" id="roivSelectGroup">
+                        <label class="form-label">РОИВ *</label>
+                        <div class="d-flex gap-2">
+                            <select class="form-control flex-grow-1" id="demandRoiv" required>
+                                <option value="">Выберите РОИВ</option>
+                                {% for roiv in roivs %}
+                                <option value="{{ roiv.id }}" data-region="{{ roiv.region.id }}">{{ roiv.name }} ({{ roiv.region.name }})</option>
+                                {% endfor %}
+                            </select>
+                            <button type="button" class="btn btn-outline-primary" onclick="showAddRoivModal()" title="Добавить новый РОИВ">
+                                <i class="bi bi-plus"></i>
+                            </button>
+                        </div>
+                        <small class="text-muted">Выберите региональный орган исполнительной власти</small>
+                    </div>
+                    
+                    <!-- Поле отображения РОИВ для редактирования (только чтение) -->
+                    <div class="mb-3" id="roivDisplayGroup" style="display: none;">
+                        <label class="form-label">РОИВ</label>
+                        <div class="form-control bg-light" id="demandRoivDisplay" style="background-color: #f8f9fa!important;">
+                            <!-- Здесь будет отображаться выбранный РОИВ -->
+                        </div>
+                        <small class="text-muted">РОИВ нельзя изменить при редактировании потребности</small>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Количество мест</label>
+                        <input type="number" class="form-control" id="demandQuantity" required>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Ссылка на письмо</label>
+                        <input type="url" class="form-control" id="demandDocumentLink">
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Комментарий</label>
+                        <textarea class="form-control" id="demandComment" rows="3"></textarea>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
+                <button type="button" class="btn btn-primary" onclick="saveDemand()">Сохранить</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Модальное окно для добавления нового РОИВ -->
+<div class="modal fade" id="addRoivModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Добавить новый РОИВ</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="addRoivForm">
+                    <div class="mb-3">
+                        <label class="form-label">Регион *</label>
+                        <select class="form-control" id="roivRegion" required>
+                            <option value="">Выберите регион</option>
+                            {% regroup roivs by region as regions_list %}
+                            {% for region_group in regions_list %}
+                                <option value="{{ region_group.grouper.id }}">{{ region_group.grouper.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Название РОИВ *</label>
+                        <input type="text" class="form-control" id="roivName" required 
+                               placeholder="Например: Министерство образования области">
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Полное наименование</label>
+                        <textarea class="form-control" id="roivFullName" rows="2" 
+                                  placeholder="Полное официальное наименование РОИВ"></textarea>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Контактная информация</label>
+                        <textarea class="form-control" id="roivContactInfo" rows="2" 
+                                  placeholder="Email, телефон, адрес"></textarea>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
+                <button type="button" class="btn btn-primary" onclick="saveRoiv()">Создать РОИВ</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Модальное окно истории потребности -->
+<div class="modal fade" id="historyModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">История изменений потребности</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div id="historyContent"></div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// Переключение отображения программы
+function toggleProgram(programId) {
+    const body = document.getElementById(`program-body-${programId}`);
+    const chevron = document.getElementById(`chevron-${programId}`);
+    
+    if (body.style.display === 'none') {
+        body.style.display = 'block';
+        chevron.classList.remove('bi-chevron-right');
+        chevron.classList.add('bi-chevron-down');
+    } else {
+        body.style.display = 'none';
+        chevron.classList.remove('bi-chevron-down');
+        chevron.classList.add('bi-chevron-right');
+    }
+}
+
+// Добавление потребности
+function addDemand(quotaId, regionId, startDate, endDate) {
+    document.getElementById('demandModalTitle').textContent = 'Добавить потребность';
+    document.getElementById('demandId').value = '';
+    document.getElementById('quotaId').value = quotaId;
+    document.getElementById('regionId').value = regionId;
+    document.getElementById('demandStartDate').value = startDate || '';
+    document.getElementById('demandEndDate').value = endDate || '';
+    document.getElementById('demandQuantity').value = '';
+    document.getElementById('demandDocumentLink').value = '';
+    document.getElementById('demandComment').value = '';
+    
+    // Переключаем режим формы: показываем выбор РОИВ, скрываем отображение
+    document.getElementById('roivSelectGroup').style.display = 'block';
+    document.getElementById('roivDisplayGroup').style.display = 'none';
+    document.getElementById('demandRoiv').setAttribute('required', 'required');
+    document.getElementById('demandRoiv').value = '';
+    
+    // Фильтруем РОИВ по выбранному региону
+    filterRoivByRegion(regionId);
+    
+    new bootstrap.Modal(document.getElementById('demandModal')).show();
+}
+
+// Фильтрация РОИВ по региону
+function filterRoivByRegion(regionId) {
+    const roivSelect = document.getElementById('demandRoiv');
+    const options = roivSelect.querySelectorAll('option');
+    
+    console.log('Фильтрация РОИВ по regionId:', regionId);
+    
+    // Сбрасываем выбор
+    roivSelect.value = '';
+    
+    let visibleCount = 0;
+    options.forEach(option => {
+        if (option.value === '') {
+            option.style.display = 'block'; // Показываем опцию "Выберите РОИВ"
+        } else {
+            const optionRegion = option.getAttribute('data-region');
+            console.log(`РОИВ "${option.textContent}": regionId=${regionId}, optionRegion=${optionRegion}, match=${optionRegion === regionId}`);
+            
+            // Сравниваем как строки для надежности
+            const shouldShow = String(optionRegion) === String(regionId);
+            option.style.display = shouldShow ? 'block' : 'none';
+            if (shouldShow) visibleCount++;
+        }
+    });
+    
+    console.log('Видимых РОИВ после фильтрации:', visibleCount);
+    
+    // Если после фильтрации нет ни одного видимого РОИВ, показываем все
+    if (visibleCount === 0) {
+        console.log('Нет РОИВ для региона, показываем все');
+        options.forEach(option => {
+            if (option.value !== '') {
+                option.style.display = 'block';
+            }
+        });
+    }
+}
+
+// Показать модальное окно добавления РОИВ
+function showAddRoivModal() {
+    // Устанавливаем регион из контекста потребности
+    const regionId = document.getElementById('regionId').value;
+    if (regionId) {
+        document.getElementById('roivRegion').value = regionId;
+    }
+    
+    // Очищаем форму
+    document.getElementById('roivName').value = '';
+    document.getElementById('roivFullName').value = '';
+    document.getElementById('roivContactInfo').value = '';
+    
+    new bootstrap.Modal(document.getElementById('addRoivModal')).show();
+}
+
+// Редактирование потребности
+function editDemand(demandId) {
+    document.getElementById('demandModalTitle').textContent = 'Редактировать потребность';
+    document.getElementById('demandId').value = demandId;
+    
+    // Загружаем данные потребности
+    fetch('{% url "education_planner:manage_demand" %}', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': '{{ csrf_token }}'
+        },
+        body: JSON.stringify({
+            action: 'get',
+            demand_id: demandId
+        })
+    })
+    .then(response => response.json())
+    .then(result => {
+        if (result.success) {
+            const demand = result.demand;
+            
+            // Заполняем форму данными
+            document.getElementById('demandQuantity').value = demand.quantity;
+            document.getElementById('demandDocumentLink').value = demand.document_link;
+            document.getElementById('demandComment').value = demand.comment;
+            document.getElementById('demandStartDate').value = demand.start_date;
+            document.getElementById('demandEndDate').value = demand.end_date;
+            
+            // Переключаем режим формы: скрываем выбор РОИВ, показываем отображение
+            document.getElementById('roivSelectGroup').style.display = 'none';
+            document.getElementById('roivDisplayGroup').style.display = 'block';
+            document.getElementById('demandRoivDisplay').textContent = `${demand.roiv.name} (${demand.roiv.region_name})`;
+            
+            // Сохраняем ID РОИВ в скрытое поле для отправки
+            document.getElementById('demandRoiv').value = demand.roiv.id;
+            document.getElementById('demandRoiv').removeAttribute('required');
+            
+            new bootstrap.Modal(document.getElementById('demandModal')).show();
+        } else {
+            alert('Ошибка загрузки данных потребности: ' + result.message);
+        }
+    })
+    .catch(error => {
+        alert('Ошибка сети: ' + error.message);
+    });
+}
+
+// Сохранение потребности
+// Сохранение РОИВ
+function saveRoiv() {
+    const regionId = document.getElementById('roivRegion').value;
+    const name = document.getElementById('roivName').value;
+    const fullName = document.getElementById('roivFullName').value;
+    const contactInfo = document.getElementById('roivContactInfo').value;
+    
+    if (!regionId || !name) {
+        alert('Пожалуйста, заполните обязательные поля');
+        return;
+    }
+    
+    const data = {
+        region_id: regionId,
+        name: name,
+        full_name: fullName,
+        contact_info: contactInfo
+    };
+    
+    fetch('{% url "education_planner:manage_roiv" %}', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': '{{ csrf_token }}'
+        },
+        body: JSON.stringify(data)
+    })
+    .then(response => response.json())
+    .then(result => {
+        if (result.success) {
+            // Добавляем новый РОИВ в список
+            const roivSelect = document.getElementById('demandRoiv');
+            const option = document.createElement('option');
+            option.value = result.roiv.id;
+            option.setAttribute('data-region', result.roiv.region_id);
+            option.textContent = `${result.roiv.name} (${result.roiv.region_name})`;
+            roivSelect.appendChild(option);
+            
+            // Выбираем созданный РОИВ
+            roivSelect.value = result.roiv.id;
+            
+            // Закрываем модальное окно
+            bootstrap.Modal.getInstance(document.getElementById('addRoivModal')).hide();
+            
+            alert('РОИВ успешно создан');
+        } else {
+            alert('Ошибка: ' + result.error);
+        }
+    })
+    .catch(error => {
+        alert('Ошибка сети: ' + error.message);
+    });
+}
+
+function saveDemand() {
+    const demandId = document.getElementById('demandId').value;
+    const action = demandId ? 'update' : 'create';
+    const roivId = document.getElementById('demandRoiv').value;
+    
+    if (!roivId) {
+        alert('Пожалуйста, выберите РОИВ');
+        return;
+    }
+    
+    // Валидация количества
+    const quantityValue = document.getElementById('demandQuantity').value;
+    const quantity = parseInt(quantityValue) || 0;
+    if (quantity <= 0) {
+        alert('Пожалуйста, укажите корректное количество мест (больше 0)');
+        return;
+    }
+    
+    const data = {
+        action: action,
+        quota_id: document.getElementById('quotaId').value,
+        roiv_id: roivId,
+        quantity: quantity,
+        document_link: document.getElementById('demandDocumentLink').value,
+        comment: document.getElementById('demandComment').value,
+        start_date: document.getElementById('demandStartDate').value,
+        end_date: document.getElementById('demandEndDate').value
+    };
+    
+    if (demandId) {
+        data.demand_id = demandId;
+    }
+    
+    fetch('{% url "education_planner:manage_demand" %}', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': '{{ csrf_token }}'
+        },
+        body: JSON.stringify(data)
+    })
+    .then(response => response.json())
+    .then(result => {
+        if (result.success) {
+            bootstrap.Modal.getInstance(document.getElementById('demandModal')).hide();
+            location.reload();
+        } else {
+            alert('Ошибка: ' + result.message);
+        }
+    });
+}
+
+// Удаление потребности
+function deleteDemand(demandId) {
+    if (!confirm('Вы уверены, что хотите удалить эту потребность? Это действие нельзя отменить.')) {
+        return;
+    }
+    
+    fetch('{% url "education_planner:manage_demand" %}', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': '{{ csrf_token }}'
+        },
+        body: JSON.stringify({
+            action: 'delete',
+            demand_id: demandId
+        })
+    })
+    .then(response => response.json())
+    .then(result => {
+        if (result.success) {
+            alert('Потребность успешно удалена');
+            location.reload(); // Обновляем страницу
+        } else {
+            alert('Ошибка при удалении: ' + result.message);
+        }
+    })
+    .catch(error => {
+        alert('Ошибка сети: ' + error.message);
+    });
+}
+
+// Показать историю потребности
+function showDemandHistory(demandId) {
+    fetch('{% url "education_planner:manage_demand" %}', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': '{{ csrf_token }}'
+        },
+        body: JSON.stringify({
+            action: 'get_history',
+            demand_id: demandId
+        })
+    })
+    .then(response => response.json())
+    .then(result => {
+        if (result.success) {
+            let html = '<table class="table table-sm"><thead><tr>';
+            html += '<th>Действие</th><th>Было</th><th>Стало</th><th>Пользователь</th><th>Комментарий</th><th>Дата</th>';
+            html += '</tr></thead><tbody>';
+            
+            result.history.forEach(item => {
+                html += '<tr>';
+                html += `<td>${item.action}</td>`;
+                html += `<td>${item.quantity_before}</td>`;
+                html += `<td>${item.quantity_after}</td>`;
+                html += `<td>${item.user}</td>`;
+                html += `<td>${item.comment}</td>`;
+                html += `<td>${item.created_at}</td>`;
+                html += '</tr>';
+            });
+            
+            html += '</tbody></table>';
+            
+            document.getElementById('historyContent').innerHTML = html;
+            new bootstrap.Modal(document.getElementById('historyModal')).show();
+        }
+    });
+}
+
+// Сохранение распределения квоты
+let distributions = {};
+
+function updateDistribution(input) {
+    const quotaId = input.dataset.quotaId;
+    const regionId = input.dataset.regionId;
+    
+    if (!distributions[quotaId]) {
+        distributions[quotaId] = [];
+    }
+    
+    // Обновляем или добавляем распределение
+    const existing = distributions[quotaId].find(d => d.region_id == regionId);
+    if (existing) {
+        existing.quantity = parseInt(input.value);
+    } else {
+        distributions[quotaId].push({
+            region_id: regionId,
+            quantity: parseInt(input.value)
+        });
+    }
+}
+
+function saveDistribution(quotaId) {
+    if (!distributions[quotaId]) {
+        alert('Нет изменений для сохранения');
+        return;
+    }
+    
+    fetch('{% url "education_planner:distribute_quota" %}', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': '{{ csrf_token }}'
+        },
+        body: JSON.stringify({
+            quota_id: quotaId,
+            distributions: distributions[quotaId]
+        })
+    })
+    .then(response => response.json())
+    .then(result => {
+        if (result.success) {
+            alert('Распределение сохранено');
+            delete distributions[quotaId];
+        } else {
+            alert('Ошибка: ' + result.message);
+        }
+    });
+}
+
+// Обновление альтернативной квоты
+function updateAlternativeQuota(input) {
+    // Здесь можно добавить визуальную индикацию изменения
+    input.style.backgroundColor = '#fff3cd';
+}
+
+// Сохранение альтернативной квоты
+function saveAlternativeQuota(altQuotaId) {
+    const input = document.querySelector(`input[data-alt-quota-id="${altQuotaId}"]`);
+    const newQuantity = parseInt(input.value) || 1;
+    
+    if (newQuantity < 1) {
+        alert('Количество мест должно быть больше 0');
+        return;
+    }
+    
+    fetch('/education/manage-alternative-quota/', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': getCsrfToken()
+        },
+        body: JSON.stringify({
+            action: 'update',
+            alt_quota_id: altQuotaId,
+            quantity: newQuantity
+        })
+    })
+    .then(response => response.json())
+    .then(result => {
+        if (result.success) {
+            input.style.backgroundColor = '#d1e7dd';
+            setTimeout(() => {
+                input.style.backgroundColor = '';
+                location.reload(); // Обновляем страницу для пересчета покрытия
+            }, 1000);
+        } else {
+            alert('Ошибка: ' + result.message);
+            input.style.backgroundColor = '#f8d7da';
+        }
+    })
+    .catch(error => {
+        alert('Ошибка сети: ' + error.message);
+        input.style.backgroundColor = '#f8d7da';
+    });
+}
+
+// Получение CSRF токена
+function getCsrfToken() {
+    return '{{ csrf_token }}';
+}
+</script>
+{% endblock %}

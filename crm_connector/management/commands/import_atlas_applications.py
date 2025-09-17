@@ -7,6 +7,7 @@ from django.db import transaction, models
 from django.utils import timezone
 from crm_connector.models import Deal, Pipeline, Stage, AtlasApplication, StageRule
 from crm_connector.bitrix24_api import Bitrix24API
+from education_planner.cache_utils import AtlasDataCache
 import logging
 import re
 
@@ -83,6 +84,11 @@ class Command(BaseCommand):
         
         # 4. Сопоставление и обработка заявок
         self.process_applications(applications_data, options['dry_run'])
+        
+        # Очистка кеша после импорта
+        self.stdout.write("Очищаем кеш данных Атласа...")
+        AtlasDataCache.clear_cache()
+        self.stdout.write(self.style.SUCCESS("Кеш успешно очищен"))
         
         # Вывод статистики
         self.print_statistics()

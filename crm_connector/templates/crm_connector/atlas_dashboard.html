@@ -266,7 +266,8 @@
     <div class="row">
         <div class="col-md-12">
             <div class="stats-card">
-                <h4>Общее количество заявок: {{ total_applications }}</h4>
+                <h4>Активные заявки (без отказов): {{ active_applications }}</h4>
+                <small class="text-muted">Всего заявок: {{ total_applications }}</small>
             </div>
         </div>
     </div>
@@ -343,8 +344,9 @@
                                         {% endwith %}
                                     {% endfor %}
                                     <td class="text-center">
-                                        {% with total=program_data.total.values|sum_values %}
+                                        {% with total=program_data.total|active_sum %}
                                         <span class="badge bg-primary fs-6">{{ total }}</span>
+                                        <div><small class="text-muted">Всего: {% with all_total=program_data.total.values|sum_values %}{{ all_total }}{% endwith %}</small></div>
                                         {% endwith %}
                                     </td>
                                 </tr>
@@ -384,8 +386,9 @@
                                         {% endwith %}
                                     {% endfor %}
                                     <td class="text-center">
-                                        {% with total=region_period_data.stages.values|sum_values %}
+                                        {% with total=region_period_data.stages|active_sum %}
                                         <span class="badge bg-success">{{ total }}</span>
+                                        <div><small class="text-muted">Всего: {% with all_total=region_period_data.stages.values|sum_values %}{{ all_total }}{% endwith %}</small></div>
                                         {% endwith %}
                                     </td>
                                 </tr>
@@ -421,7 +424,8 @@
                                     {% endwith %}
                                 {% endfor %}
                                 <td class="text-center">
-                                    <span class="badge bg-dark fs-6">{{ total_applications }}</span>
+                                    <span class="badge bg-dark fs-6">{{ active_applications }}</span>
+                                    <div><small class="text-muted">Всего: {{ total_applications }}</small></div>
                                 </td>
                             </tr>
                         </tbody>

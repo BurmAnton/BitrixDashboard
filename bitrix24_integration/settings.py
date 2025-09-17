@@ -140,6 +140,21 @@ BITRIX24_SETTINGS = {
     'REDIRECT_URI': os.getenv('BITRIX24_REDIRECT_URI', 'http://localhost:8000/bitrix24/auth-redirect/'),
 }
 
+# Настройки кеша Redis
+CACHES = {
+    'default': {
+        'BACKEND': 'django_redis.cache.RedisCache',
+        'LOCATION': os.getenv('REDIS_CACHE_URL', 'redis://127.0.0.1:6379/1'),
+        'OPTIONS': {
+            'CLIENT_CLASS': 'django_redis.client.DefaultClient',
+            'CONNECTION_POOL_KWARGS': {'max_connections': 50},
+            'SERIALIZER': 'django_redis.serializers.pickle.PickleSerializer',
+        },
+        'KEY_PREFIX': 'bitrix_dashboard',
+        'TIMEOUT': 7200,  # 2 часа по умолчанию
+    }
+}
+
 # Настройки Celery для фоновых задач
 CELERY_BROKER_URL = os.getenv('CELERY_BROKER_URL', 'redis://localhost:6379/0')
 CELERY_RESULT_BACKEND = os.getenv('CELERY_RESULT_BACKEND', 'redis://localhost:6379/0')

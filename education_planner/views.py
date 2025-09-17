@@ -5,6 +5,7 @@ from django.http import JsonResponse, HttpResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 from django.db.models import Q, Count, Sum, Prefetch
+from django.db import models
 from django.core.paginator import Paginator
 from django.utils import timezone
 from django.db import transaction
@@ -12,12 +13,59 @@ from django.core.files.storage import default_storage
 from django.core.files.base import ContentFile
 from .forms import EducationProgramForm, ProgramSectionFormSet
 from .models import (
-    EducationProgram, EduAgreement, Quota, Supplement, QuotaChange, Region
+    EducationProgram, EduAgreement, Quota, Supplement, QuotaChange, Region, ROIV,
+    Demand, DemandHistory, QuotaDistribution, AlternativeQuota
 )
+from .cache_utils import cache_atlas_data, AtlasDataCache
 import json
 import pandas as pd
 import re
 import io
+
+
+def get_missing_columns_message(missing_columns, is_supplement=False, federal_operator=None):
+    """
+    Генерирует детальное сообщение об отсутствующих колонках в Excel файле
+    """
+    if is_supplement:
+        # Описания для дополнительных соглашений
+        column_descriptions = {
+            'Программа обучения': 'Название программы обучения',
+            'Форма обучения': 'Форма обучения (очная, заочная, очно-заочная, дистанционная)',
+            'Длительность': 'Академические часы (например: 72 ч.)',
+            'Регионы реализации': 'Регионы реализации (названия регионов через запятую)',
+            'Количество мест': 'Количество мест',
+            'Стоимость за заявку': 'Стоимость за одну заявку',
+            'Дата начала': 'Дата начала обучения (DD.MM.YYYY)',
+            'Дата окончания': 'Дата окончания обучения (DD.MM.YYYY)'
+        }
+    else:
+        # Описания для основных договоров
+        column_descriptions = {
+            'договор_номер': 'Номер договора',
+            'программа_название': 'Название программы обучения',
+            'программа_тип': 'Тип программы (Повышение квалификации, Профессиональная переподготовка)',
+            'программа_часы': 'Академические часы',
+            'программа_форма': 'Форма обучения (очная, заочная, очно-заочная, дистанционная)',
+            'регионы': 'Регионы реализации (названия регионов через запятую)',
+            'количество': 'Количество мест',
+            'стоимость_за_заявку': 'Стоимость за одну заявку',
+            'дата_начала': 'Дата начала обучения (DD.MM.YYYY)',
+            'дата_окончания': 'Дата окончания обучения (DD.MM.YYYY)'
+        }
+    
+    missing_details = []
+    for col in missing_columns:
+        description = column_descriptions.get(col, col)
+        missing_details.append(f"'{col}' ({description})")
+    
+    message = f'В Excel файле отсутствуют обязательные колонки:\n\n{chr(10).join(missing_details)}\n\nПожалуйста, добавьте эти колонки в файл и повторите импорт.'
+    
+    # Добавляем примечание для ВНИИ в дополнительных соглашениях
+    if is_supplement and federal_operator == 'VNII':
+        message += "\n\nПримечание: Для договоров ВНИИ колонки 'Регионы реализации', 'Дата начала' и 'Дата окончания' не обязательны."
+    
+    return message
 import os
 
 # Create your views here.
@@ -344,6 +392,139 @@ def agreement_detail(request, pk):
 
 
 @login_required
+@require_http_methods(["GET"])
+def get_supplement_quotas(request, pk):
+    """Получение истории квот (квот, которые были заменены дополнительными соглашениями)"""
+    agreement = get_object_or_404(EduAgreement, pk=pk)
+    
+    if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+        try:
+            # Проверяем, есть ли подписанные дополнительные соглашения
+            signed_supplements = agreement.supplements.filter(
+                status=Supplement.SupplementStatus.SIGNED
+            ).order_by('-signing_date', '-created_at')
+            
+            if signed_supplements.exists():
+                # Если есть подписанные дополнительные соглашения, показываем неактивные квоты
+                # (те, что были заменены при импорте дополнительных соглашений)
+                historical_quotas = agreement.quotas.filter(is_active=False).select_related('education_program').prefetch_related('regions')
+                context_message = "Эти квоты были заменены в результате применения дополнительных соглашений."
+            else:
+                # Если нет подписанных дополнительных соглашений, показываем все квоты как исторические
+                # (поскольку без подписанного договора или доп. соглашения квоты не действуют)
+                historical_quotas = agreement.quotas.all().select_related('education_program').prefetch_related('regions')
+                context_message = "Квоты не действуют, так как основной договор не подписан и нет подписанных дополнительных соглашений."
+            
+            total_places = 0
+            programs_set = set()
+            
+            for quota in historical_quotas:
+                total_places += quota.quantity
+                programs_set.add(quota.education_program.id)
+            
+            if historical_quotas.exists():
+                # Генерируем HTML для таблицы исторических квот
+                status_badge = 'bg-warning text-dark' if signed_supplements.exists() else 'bg-secondary'
+                status_text = 'Заменена' if signed_supplements.exists() else 'Неактивна'
+                
+                html = f'''
+                <div class="table-responsive">
+                    <table class="table table-sm table-striped mb-0 quotas-table">
+                        <thead class="table-secondary">
+                            <tr>
+                                <th style="min-width: 300px;">Программа обучения</th>
+                                <th style="min-width: 200px;">Регионы реализации</th>
+                                <th style="min-width: 80px;">Количество мест</th>
+                                <th style="min-width: 100px;">Стоимость за заявку</th>
+                                <th style="min-width: 120px;">Общая стоимость</th>
+                                <th style="min-width: 140px;">Период обучения</th>
+                                <th style="min-width: 120px;">Статус</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                '''
+                
+                for quota in historical_quotas:
+                    html += f'''
+                        <tr class="table-secondary">
+                            <td class="text-start">
+                                <div class="d-flex flex-column">
+                                    <strong>{quota.education_program.name}</strong>
+                                    <small class="text-muted">
+                                        {quota.education_program.get_program_type_display()} • 
+                                        {quota.education_program.academic_hours} ч. • 
+                                        {quota.education_program.get_study_form_display()}
+                                    </small>
+                                </div>
+                            </td>
+                            <td class="text-start regions-cell">
+                                {quota.regions_display}
+                            </td>
+                            <td>
+                                <span class="badge bg-secondary">{quota.quantity} мест</span>
+                            </td>
+                            <td>
+                                <span class="badge bg-secondary">{quota.formatted_cost_per_quota}</span>
+                            </td>
+                            <td>
+                                <span class="badge bg-secondary">{quota.formatted_total_cost}</span>
+                            </td>
+                            <td class="period-cell">
+                                <div class="d-flex flex-column">
+                    '''
+                    if quota.formatted_start_date:
+                        html += f'<span class="text-muted">{quota.formatted_start_date}</span>'
+                    if quota.formatted_end_date:
+                        html += f'<span class="text-muted">{quota.formatted_end_date}</span>'
+                    if not quota.formatted_start_date and not quota.formatted_end_date:
+                        html += '<span class="text-muted">—</span>'
+                    
+                    html += f'''
+                                </div>
+                            </td>
+                            <td>
+                                <span class="badge {status_badge}">{status_text}</span>
+                            </td>
+                        </tr>
+                    '''
+                
+                html += f'''
+                        </tbody>
+                    </table>
+                </div>
+                <div class="alert alert-warning mt-3 mb-0">
+                    <i class="bi bi-info-circle me-2"></i>
+                    <strong>Историческая информация:</strong> {context_message}
+                </div>
+                '''
+            else:
+                html = '''
+                <div class="alert alert-info mb-0">
+                    <i class="bi bi-info-circle me-2"></i>
+                    По данному договору нет исторических данных о квотах.
+                </div>
+                '''
+            
+            return JsonResponse({
+                'success': True,
+                'html': html,
+                'program_count': len(programs_set),
+                'total_places': total_places
+            })
+            
+        except Exception as e:
+            return JsonResponse({
+                'success': False,
+                'message': f'Ошибка загрузки квот: {str(e)}'
+            })
+    
+    return JsonResponse({
+        'success': False,
+        'message': 'Метод не поддерживается'
+    })
+
+
+@login_required
 @csrf_exempt
 @require_http_methods(["POST"])
 def create_agreement(request):
@@ -423,6 +604,11 @@ def manage_quota(request, agreement_id):
                 except ValueError:
                     pass
             
+            # Для ВНИИ даты и регионы не обязательны
+            if agreement.federal_operator == 'VNII':
+                start_date = None
+                end_date = None
+            
             quota = Quota.objects.create(
                 agreement=agreement,
                 education_program_id=data['program_id'],
@@ -431,9 +617,9 @@ def manage_quota(request, agreement_id):
                 start_date=start_date,
                 end_date=end_date
             )
-            # Добавляем выбранные регионы
+            # Добавляем выбранные регионы (для ВНИИ регионы могут отсутствовать)
             region_ids = data.get('regions', [])
-            if region_ids:
+            if region_ids and agreement.federal_operator != 'VNII':
                 quota.regions.set(region_ids)
             
             return JsonResponse({
@@ -450,31 +636,40 @@ def manage_quota(request, agreement_id):
             quota.quantity = data['quantity']
             quota.cost_per_quota = data.get('cost_per_quota', quota.cost_per_quota)
             
-            # Обработка дат
-            if 'start_date' in data:
-                if data['start_date']:
-                    try:
-                        quota.start_date = datetime.strptime(data['start_date'], '%Y-%m-%d').date()
-                    except ValueError:
-                        pass
-                else:
-                    quota.start_date = None
-                    
-            if 'end_date' in data:
-                if data['end_date']:
-                    try:
-                        quota.end_date = datetime.strptime(data['end_date'], '%Y-%m-%d').date()
-                    except ValueError:
-                        pass
-                else:
-                    quota.end_date = None
+            # Обработка дат (для ВНИИ даты игнорируются)
+            if agreement.federal_operator != 'VNII':
+                if 'start_date' in data:
+                    if data['start_date']:
+                        try:
+                            quota.start_date = datetime.strptime(data['start_date'], '%Y-%m-%d').date()
+                        except ValueError:
+                            pass
+                    else:
+                        quota.start_date = None
+                        
+                if 'end_date' in data:
+                    if data['end_date']:
+                        try:
+                            quota.end_date = datetime.strptime(data['end_date'], '%Y-%m-%d').date()
+                        except ValueError:
+                            pass
+                    else:
+                        quota.end_date = None
+            else:
+                # Для ВНИИ очищаем даты
+                quota.start_date = None
+                quota.end_date = None
             
             quota.save()
             
-            # Обновляем регионы если они переданы
-            region_ids = data.get('regions', [])
-            if region_ids:
-                quota.regions.set(region_ids)
+            # Обновляем регионы если они переданы (для ВНИИ регионы могут отсутствовать)
+            if agreement.federal_operator != 'VNII':
+                region_ids = data.get('regions', [])
+                if region_ids:
+                    quota.regions.set(region_ids)
+                elif 'regions' in data:
+                    # Если передан пустой список, очищаем регионы
+                    quota.regions.clear()
             
             return JsonResponse({
                 'success': True,
@@ -569,8 +764,10 @@ def supplement_detail(request, pk):
         
         return JsonResponse({
             'number': supplement.number,
-            'signing_date': supplement.signing_date.strftime('%d.%m.%Y') if supplement.signing_date else 'Не подписано',
-            'status': supplement.get_status_display(),
+            'signing_date': supplement.signing_date.strftime('%Y-%m-%d') if supplement.signing_date else '',
+            'signing_date_display': supplement.signing_date.strftime('%d.%m.%Y') if supplement.signing_date else 'Не подписано',
+            'status': supplement.status,
+            'status_display': supplement.get_status_display(),
             'description': supplement.description,
             'document_link': supplement.document_link,
             'changes': changes
@@ -583,6 +780,49 @@ def supplement_detail(request, pk):
     }
     
     return render(request, 'education_planner/supplement_detail.html', context)
+
+
+@login_required
+@csrf_exempt
+@require_http_methods(["POST"])
+def edit_supplement(request, pk):
+    """Редактирование дополнительного соглашения"""
+    supplement = get_object_or_404(Supplement, pk=pk)
+    
+    if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+        try:
+            data = json.loads(request.body)
+            
+            # Обновляем поля дополнительного соглашения
+            supplement.number = data.get('number', supplement.number)
+            supplement.description = data.get('description', supplement.description)
+            supplement.status = data.get('status', supplement.status)
+            
+            # Обновляем дату подписания если предоставлена
+            if 'signing_date' in data and data['signing_date']:
+                try:
+                    from datetime import datetime
+                    supplement.signing_date = datetime.strptime(data['signing_date'], '%Y-%m-%d').date()
+                except ValueError:
+                    pass
+            
+            supplement.save()
+            
+            return JsonResponse({
+                'success': True,
+                'message': 'Дополнительное соглашение успешно обновлено'
+            })
+            
+        except Exception as e:
+            return JsonResponse({
+                'success': False,
+                'message': f'Ошибка при обновлении дополнительного соглашения: {str(e)}'
+            })
+    
+    return JsonResponse({
+        'success': False,
+        'message': 'Метод не поддерживается'
+    })
 
 
 @login_required
@@ -657,9 +897,10 @@ def analyze_quotas_excel(request):
             # Удаляем временный файл
             if default_storage.exists(file_path):
                 default_storage.delete(file_path)
+            
             return JsonResponse({
                 'success': False, 
-                'message': f'Отсутствуют необходимые колонки: {", ".join(missing_columns)}'
+                'message': get_missing_columns_message(missing_columns, is_supplement=False)
             })
         
         # Анализируем регионы
@@ -750,7 +991,7 @@ def process_excel_import(df, file_name, region_mappings={}, use_old_region_logic
     if missing_columns:
         return JsonResponse({
             'success': False, 
-            'message': f'Отсутствуют обязательные колонки: {", ".join(missing_columns)}'
+            'message': get_missing_columns_message(missing_columns, is_supplement=False)
         })
     
     # Статистика
@@ -767,15 +1008,20 @@ def process_excel_import(df, file_name, region_mappings={}, use_old_region_logic
                 program_form = clean_text_data(row['программа_форма'])
                 regions_text = clean_text_data(row['регионы'])
                 
-                if not all([agreement_number, program_name, regions_text]):
-                    errors.append(f'Строка {index + 2}: Отсутствуют обязательные данные')
-                    error_count += 1
-                    continue
-
-                # Ищем договор
+                # Ищем договор сначала, чтобы проверить федерального оператора
                 agreement = EduAgreement.objects.filter(number=agreement_number).first()
                 if not agreement:
                     errors.append(f'Строка {index + 2}: Договор {agreement_number} не найден')
+                    error_count += 1
+                    continue
+
+                # Для ВНИИ регионы не обязательны
+                required_fields = [agreement_number, program_name]
+                if agreement.federal_operator != 'VNII':
+                    required_fields.append(regions_text)
+                
+                if not all(required_fields):
+                    errors.append(f'Строка {index + 2}: Отсутствуют обязательные данные')
                     error_count += 1
                     continue
 
@@ -790,20 +1036,22 @@ def process_excel_import(df, file_name, region_mappings={}, use_old_region_logic
                     try:
                         # Определяем тип программы
                         program_type_choices = {
-                            'дпо пк': EducationProgram.ProgramType.QUALIFICATION_UPGRADE,
-                            'повышение квалификации': EducationProgram.ProgramType.QUALIFICATION_UPGRADE,
-                            'профессиональная переподготовка': EducationProgram.ProgramType.PROFESSIONAL_RETRAINING,
-                            'программы профессионального обучения': EducationProgram.ProgramType.PROFESSIONAL_TRAINING
+                            'дпо пк': EducationProgram.ProgramType.ADVANCED,
+                            'повышение квалификации': EducationProgram.ProgramType.ADVANCED,
+                            'профессиональная переподготовка': EducationProgram.ProgramType.PROFESSIONAL_RE,
+                            'профессиональное обучение': EducationProgram.ProgramType.PROFESSIONAL,
+                            'программы профессионального обучения': EducationProgram.ProgramType.PROFESSIONAL
                         }
                         
                         program_type_key = program_type.lower()
-                        program_type_value = program_type_choices.get(program_type_key, EducationProgram.ProgramType.QUALIFICATION_UPGRADE)
+                        program_type_value = program_type_choices.get(program_type_key, EducationProgram.ProgramType.ADVANCED)
                         
                         # Определяем форму обучения
                         study_form_choices = {
                             'очная': EducationProgram.StudyForm.FULL_TIME,
-                            'заочная': EducationProgram.StudyForm.PART_TIME,
-                            'очно-заочная': EducationProgram.StudyForm.MIXED
+                            'заочная': EducationProgram.StudyForm.DISTANCE,
+                            'очно-заочная': EducationProgram.StudyForm.PART_TIME,
+                            'дистанционная': EducationProgram.StudyForm.DISTANCE
                         }
                         
                         study_form_key = program_form.lower()
@@ -887,7 +1135,8 @@ def process_excel_import(df, file_name, region_mappings={}, use_old_region_logic
                                 # Регион не найден и нет пользовательского выбора
                                 errors.append(f'Строка {index + 2}: Регион "{region_name}" не найден и не настроен')
                 
-                if not regions:
+                # Для ВНИИ регионы не обязательны
+                if not regions and agreement.federal_operator != 'VNII':
                     error_count += 1
                     continue
 
@@ -1026,7 +1275,7 @@ def import_quotas_excel(request):
         if missing_columns:
             return JsonResponse({
                 'success': False, 
-                'message': f'Отсутствуют обязательные колонки: {", ".join(missing_columns)}'
+                'message': get_missing_columns_message(missing_columns, is_supplement=False)
             })
         
         # Статистика
@@ -1065,19 +1314,21 @@ def import_quotas_excel(request):
                         try:
                             # Определяем тип программы
                             program_type_choices = {
-                                'повышение квалификации': EducationProgram.ProgramType.QUALIFICATION_UPGRADE,
-                                'профессиональная переподготовка': EducationProgram.ProgramType.PROFESSIONAL_RETRAINING,
-                                'программы профессионального обучения': EducationProgram.ProgramType.PROFESSIONAL_TRAINING
+                                'повышение квалификации': EducationProgram.ProgramType.ADVANCED,
+                                'профессиональная переподготовка': EducationProgram.ProgramType.PROFESSIONAL_RE,
+                                'программы профессионального обучения': EducationProgram.ProgramType.PROFESSIONAL,
+                                'профессиональное обучение': EducationProgram.ProgramType.PROFESSIONAL
                             }
                             
                             program_type_key = program_type.lower()
-                            program_type_value = program_type_choices.get(program_type_key, EducationProgram.ProgramType.QUALIFICATION_UPGRADE)
+                            program_type_value = program_type_choices.get(program_type_key, EducationProgram.ProgramType.ADVANCED)
                             
                             # Определяем форму обучения
                             study_form_choices = {
                                 'очная': EducationProgram.StudyForm.FULL_TIME,
-                                'заочная': EducationProgram.StudyForm.PART_TIME,
-                                'очно-заочная': EducationProgram.StudyForm.MIXED
+                                'заочная': EducationProgram.StudyForm.DISTANCE,
+                                'очно-заочная': EducationProgram.StudyForm.PART_TIME,
+                                'дистанционная': EducationProgram.StudyForm.DISTANCE
                             }
                             
                             study_form_key = program_form.lower()
@@ -1096,9 +1347,12 @@ def import_quotas_excel(request):
                             error_count += 1
                             continue
 
-                    # Парсим регионы с использованием пользовательских выборов
-                    regions_names = [clean_text_data(name) for name in regions_text.split(',') if clean_text_data(name)]
+                    # Парсим регионы с использованием пользовательских выборов (для ВНИИ регионы не обязательны)
+                    regions_names = []
                     regions = []
+                    
+                    if agreement.federal_operator != 'VNII' and regions_text:
+                        regions_names = [clean_text_data(name) for name in regions_text.split(',') if clean_text_data(name)]
                     
                     for region_name in regions_names:
                         # Сначала пытаемся найти регион стандартным способом
@@ -1145,7 +1399,8 @@ def import_quotas_excel(request):
                                 # Регион не найден и нет пользовательского выбора
                                 errors.append(f'Строка {index + 2}: Регион "{region_name}" не найден и не настроен')
                     
-                    if not regions:
+                    # Для ВНИИ регионы не обязательны
+                    if not regions and agreement.federal_operator != 'VNII':
                         error_count += 1
                         continue
 
@@ -1182,9 +1437,10 @@ def import_quotas_excel(request):
                         agreement=agreement,
                         education_program=program,
                         quantity=int(row['количество']),
-                        cost_per_quota=float(row['стоимость_за_заявку']),
                         start_date=start_date,
-                        end_date=end_date
+                        end_date=end_date,
+                        cost_per_quota=float(row['стоимость_за_заявку']),
+                        is_active=True
                     )
                     quota.regions.set(regions)
                     created_count += 1
@@ -1309,13 +1565,17 @@ def analyze_supplement_excel(request):
             return JsonResponse({'success': False, 'message': f'Ошибка чтения файла: {str(e)}'})
         
         # Проверяем наличие необходимых колонок
-        required_columns = ['Программа обучения', 'Форма обучения', 'Длительность', 'Регионы реализации', 'Количество мест']
+        required_columns = ['Программа обучения', 'Форма обучения', 'Длительность', 'Количество мест']
+        # Для не-ВНИИ регионы обязательны
+        if agreement.federal_operator != 'VNII':
+            required_columns.append('Регионы реализации')
+        
         missing_columns = [col for col in required_columns if col not in df.columns]
         
         if missing_columns:
             return JsonResponse({
                 'success': False,
-                'message': f'Отсутствуют обязательные колонки: {", ".join(missing_columns)}'
+                'message': get_missing_columns_message(missing_columns, is_supplement=True, federal_operator=agreement.federal_operator)
             })
         
         # Очищаем и парсим данные
@@ -1327,14 +1587,30 @@ def analyze_supplement_excel(request):
                 continue
             
             program_name = clean_text_data(str(row['Программа обучения']))
-            program_type = clean_text_data(str(row.get('Форма обучения', '')))
+            study_form_text = clean_text_data(str(row.get('Форма обучения', '')))
             duration_text = clean_text_data(str(row.get('Длительность', '')))
-            regions_text = clean_text_data(str(row['Регионы реализации']))
+            # Для ВНИИ регионы не обязательны
+            if agreement.federal_operator != 'VNII':
+                regions_text = clean_text_data(str(row.get('Регионы реализации', '')))
+            else:
+                regions_text = ''
             
             try:
                 quantity = int(row['Количество мест'])
             except (ValueError, TypeError):
                 continue
+            
+            # Парсим стоимость за заявку
+            cost_per_quota = None
+            if 'Стоимость за заявку' in row and pd.notna(row['Стоимость за заявку']):
+                try:
+                    cost_str = str(row['Стоимость за заявку']).replace(' ', '').replace(',', '.')
+                    # Убираем символы валюты
+                    cost_str = re.sub(r'[^\d.,]', '', cost_str)
+                    if cost_str and cost_str != 'nan':
+                        cost_per_quota = float(cost_str)
+                except (ValueError, TypeError):
+                    pass
             
             # Парсим длительность (академические часы)
             duration = None
@@ -1359,12 +1635,7 @@ def analyze_supplement_excel(request):
             program = None
             programs = EducationProgram.objects.filter(name__icontains=program_name)
             
-            # Фильтруем по типу программы
-            if program_type:
-                for pt_choice, pt_display in EducationProgram.ProgramType.choices:
-                    if program_type.lower() in pt_display.lower():
-                        programs = programs.filter(program_type=pt_choice)
-                        break
+            # Не фильтруем по типу программы, так как колонка содержит форму обучения
             
             # Фильтруем по длительности
             if duration:
@@ -1373,42 +1644,73 @@ def analyze_supplement_excel(request):
             if programs.exists():
                 program = programs.first()
             else:
-                error_parts = [program_name]
-                if program_type:
-                    error_parts.append(f"тип: {program_type}")
-                if duration:
-                    error_parts.append(f"длительность: {duration} ч.")
-                
-                return JsonResponse({
-                    'success': False,
-                    'message': f'Программа не найдена: {" | ".join(error_parts)}'
-                })
+                # Автоматически создаём программу если не найдена
+                try:
+                    default_type = EducationProgram.ProgramType.ADVANCED
+                    study_form_map = {
+                        'очная': EducationProgram.StudyForm.FULL_TIME,
+                        'заочная': EducationProgram.StudyForm.DISTANCE,
+                        'очно-заочная': EducationProgram.StudyForm.PART_TIME,
+                        'дистанционная': EducationProgram.StudyForm.DISTANCE
+                    }
+                    study_form_value = study_form_map.get(study_form_text.lower(), EducationProgram.StudyForm.FULL_TIME) if study_form_text else EducationProgram.StudyForm.FULL_TIME
+                    program = EducationProgram.objects.create(
+                        name=program_name,
+                        program_type=default_type,
+                        academic_hours=duration,
+                        study_form=study_form_value,
+                        description='Автоматически создана при анализе доп. соглашения'
+                    )
+                except Exception as e:
+                    error_parts = [program_name]
+                    if study_form_text:
+                        error_parts.append(f"форма: {study_form_text}")
+                    if duration:
+                        error_parts.append(f"длительность: {duration} ч.")
+                    
+                    return JsonResponse({
+                        'success': False,
+                        'message': f'Не удалось создать программу: {" | ".join(error_parts)}. Ошибка: {str(e)}'
+                    })
             
             # Парсим регионы
             regions_names = []
-            for name in regions_text.split(','):
-                cleaned_name = clean_text_data(name)
-                if cleaned_name:
-                    # Убираем содержимое в скобках
-                    cleaned_name = re.sub(r'\([^)]*\)', '', cleaned_name).strip()
+            if regions_text:  # Проверяем, что regions_text не пустой
+                for name in regions_text.split(','):
+                    cleaned_name = clean_text_data(name)
                     if cleaned_name:
-                        regions_names.append(cleaned_name)
+                        # Убираем содержимое в скобках
+                        cleaned_name = re.sub(r'\([^)]*\)', '', cleaned_name).strip()
+                        if cleaned_name:
+                            regions_names.append(cleaned_name)
             
-            # Проверяем регионы
+            # Проверяем регионы (для ВНИИ регионы не обязательны)
             valid_regions = []
-            for region_name in regions_names:
-                region, match_type = find_region_without_creating(region_name)
-                if match_type != 'not_found' and region:
-                    valid_regions.append(region.name)
-                else:
-                    unrecognized_regions.add(region_name)
-            
-            if valid_regions:
+            if agreement.federal_operator != 'VNII':
+                for region_name in regions_names:
+                    region, match_type = find_region_without_creating(region_name)
+                    if match_type != 'not_found' and region:
+                        valid_regions.append(region.name)
+                    else:
+                        unrecognized_regions.add(region_name)
+                
+                # Для не-ВНИИ должны быть регионы
+                if valid_regions:
+                    new_quotas.append({
+                        'program_id': program.id,
+                        'program_name': program.name,
+                        'regions': valid_regions,
+                        'quantity': quantity,
+                        'cost_per_quota': cost_per_quota
+                    })
+            else:
+                # Для ВНИИ добавляем квоту без регионов
                 new_quotas.append({
                     'program_id': program.id,
                     'program_name': program.name,
-                    'regions': valid_regions,
-                    'quantity': quantity
+                    'regions': [],
+                    'quantity': quantity,
+                    'cost_per_quota': cost_per_quota
                 })
         
         # Сохраняем данные в сессии
@@ -1470,9 +1772,16 @@ def import_supplement_excel(request):
         # Получаем данные дополнительного соглашения
         supplement_number = request.POST.get('supplement_number', '')
         supplement_description = request.POST.get('supplement_description', '')
+        supplement_signing_date = request.POST.get('supplement_signing_date', '')
+        supplement_status = request.POST.get('supplement_status', 'NEGOTIATION')
         
         if not supplement_number:
             return JsonResponse({'success': False, 'message': 'Номер дополнительного соглашения обязателен'})
+        
+        # Валидация статуса
+        valid_statuses = [choice[0] for choice in Supplement.SupplementStatus.choices]
+        if supplement_status not in valid_statuses:
+            supplement_status = 'NEGOTIATION'
         
         agreement_id = file_data['agreement_id']
         
@@ -1494,12 +1803,22 @@ def import_supplement_excel(request):
 
         
         with transaction.atomic():
+            # Обрабатываем дату подписания
+            signing_date = None
+            if supplement_signing_date:
+                try:
+                    from datetime import datetime
+                    signing_date = datetime.strptime(supplement_signing_date, '%Y-%m-%d').date()
+                except ValueError:
+                    signing_date = None
+            
             # Создаем дополнительное соглашение
             supplement = Supplement.objects.create(
                 agreement=agreement,
                 number=supplement_number,
                 description=supplement_description or f'Импорт из файла {file_name}',
-                status=Supplement.SupplementStatus.NEGOTIATION
+                status=supplement_status,
+                signing_date=signing_date
             )
             
             # 1. Деактивируем все старые квоты
@@ -1509,9 +1828,13 @@ def import_supplement_excel(request):
             for index, row in df.iterrows():
                 try:
                     program_name = clean_text_data(str(row['Программа обучения']))
-                    program_type = clean_text_data(str(row.get('Форма обучения', '')))
+                    study_form_text = clean_text_data(str(row.get('Форма обучения', '')))
                     duration_text = clean_text_data(str(row.get('Длительность', '')))
-                    regions_text = clean_text_data(str(row['Регионы реализации']))
+                    # Для ВНИИ регионы не обязательны
+                    if agreement.federal_operator != 'VNII':
+                        regions_text = clean_text_data(str(row.get('Регионы реализации', '')))
+                    else:
+                        regions_text = ''
                     
                     # Парсим количество
                     try:
@@ -1539,84 +1862,104 @@ def import_supplement_excel(request):
                     # Находим программу
                     programs = EducationProgram.objects.filter(name__icontains=program_name)
                     
-                    if program_type:
-                        for pt_choice, pt_display in EducationProgram.ProgramType.choices:
-                            if program_type.lower() in pt_display.lower():
-                                programs = programs.filter(program_type=pt_choice)
-                                break
+                    # Не фильтруем по типу программы, так как колонка содержит форму обучения
                     
                     if duration:
                         programs = programs.filter(academic_hours=duration)
                     
                     if not programs.exists():
-                        continue
+                        # Автоматически создаём программу если не найдена
+                        try:
+                            default_type = EducationProgram.ProgramType.ADVANCED
+                            study_form_map = {
+                                'очная': EducationProgram.StudyForm.FULL_TIME,
+                                'заочная': EducationProgram.StudyForm.DISTANCE,
+                                'очно-заочная': EducationProgram.StudyForm.PART_TIME,
+                                'дистанционная': EducationProgram.StudyForm.DISTANCE
+                            }
+                            study_form_value = study_form_map.get(study_form_text.lower(), EducationProgram.StudyForm.FULL_TIME) if study_form_text else EducationProgram.StudyForm.FULL_TIME
+                            program = EducationProgram.objects.create(
+                                name=program_name,
+                                program_type=default_type,
+                                academic_hours=duration,
+                                study_form=study_form_value,
+                                description='Автоматически создана при анализе доп. соглашения'
+                            )
+                        except Exception:
+                            continue
+                    else:
+                        program = programs.first()
                     
-                    program = programs.first()
-                    
-                    # Парсим регионы
-                    regions_names = [clean_text_data(name.strip()) for name in regions_text.split(',')]
-                    regions_names = [name for name in regions_names if name]
-                    
+                    # Парсим регионы (для ВНИИ регионы не обязательны)
                     valid_regions = []
-                    for region_name in regions_names:
-                        # Применяем mapping если есть
-                        if region_name in region_mappings:
-                            mapping = region_mappings[region_name]
-                            if mapping['action'] == 'map':
-                                region_name = mapping['target_region']
-                            elif mapping['action'] == 'skip':
+                    if agreement.federal_operator != 'VNII' and regions_text:
+                        regions_names = [clean_text_data(name.strip()) for name in regions_text.split(',')]
+                        regions_names = [name for name in regions_names if name]
+                        
+                        for region_name in regions_names:
+                            # Применяем mapping если есть
+                            if region_name in region_mappings:
+                                mapping = region_mappings[region_name]
+                                if mapping['action'] == 'map':
+                                    region_name = mapping['target_region']
+                                elif mapping['action'] == 'skip':
+                                    continue
+                            
+                            try:
+                                region = Region.objects.get(name=region_name)
+                                valid_regions.append(region)
+                            except Region.DoesNotExist:
                                 continue
                         
-                        try:
-                            region = Region.objects.get(name=region_name)
-                            valid_regions.append(region)
-                        except Region.DoesNotExist:
+                        # Для не-ВНИИ регионы обязательны
+                        if not valid_regions:
                             continue
                     
-                    if not valid_regions:
-                        continue
-                    
-                    # Парсим даты
+                    # Парсим даты (для ВНИИ даты не обрабатываются)
                     start_date = None
                     end_date = None
                     cost_per_quota = None
                     
-                    # Дата начала
-                    if 'Дата начала' in row and pd.notna(row['Дата начала']):
-                        try:
-                            from datetime import datetime
-                            start_date_str = str(row['Дата начала']).strip()
-                            if start_date_str and start_date_str != 'nan':
-                                # Пробуем разные форматы дат
-                                for date_format in ['%d.%m.%Y', '%Y-%m-%d', '%d/%m/%Y']:
-                                    try:
-                                        start_date = datetime.strptime(start_date_str, date_format).date()
-                                        break
-                                    except ValueError:
-                                        continue
-                        except (ValueError, TypeError):
-                            pass
-                    
-                    # Дата окончания
-                    if 'Дата окончания' in row and pd.notna(row['Дата окончания']):
-                        try:
-                            from datetime import datetime
-                            end_date_str = str(row['Дата окончания']).strip()
-                            if end_date_str and end_date_str != 'nan':
-                                # Пробуем разные форматы дат
-                                for date_format in ['%d.%m.%Y', '%Y-%m-%d', '%d/%m/%Y']:
-                                    try:
-                                        end_date = datetime.strptime(end_date_str, date_format).date()
-                                        break
-                                    except ValueError:
-                                        continue
-                        except (ValueError, TypeError):
-                            pass
+                    if agreement.federal_operator != 'VNII':
+                        # Дата начала
+                        if 'Дата начала' in row and pd.notna(row['Дата начала']):
+                            try:
+                                from datetime import datetime
+                                start_date_str = str(row['Дата начала']).strip()
+                                if start_date_str and start_date_str != 'nan':
+                                    # Пробуем разные форматы дат
+                                    for date_format in ['%d.%m.%Y', '%Y-%m-%d', '%d/%m/%Y']:
+                                        try:
+                                            start_date = datetime.strptime(start_date_str, date_format).date()
+                                            break
+                                        except ValueError:
+                                            continue
+                            except (ValueError, TypeError):
+                                pass
+                        
+                        # Дата окончания
+                        if 'Дата окончания' in row and pd.notna(row['Дата окончания']):
+                            try:
+                                from datetime import datetime
+                                end_date_str = str(row['Дата окончания']).strip()
+                                if end_date_str and end_date_str != 'nan':
+                                    # Пробуем разные форматы дат
+                                    for date_format in ['%d.%m.%Y', '%Y-%m-%d', '%d/%m/%Y']:
+                                        try:
+                                            end_date = datetime.strptime(end_date_str, date_format).date()
+                                            break
+                                        except ValueError:
+                                            continue
+                            except (ValueError, TypeError):
+                                pass
                     
                     # Стоимость за заявку
                     if 'Стоимость за заявку' in row and pd.notna(row['Стоимость за заявку']):
                         try:
                             cost_str = str(row['Стоимость за заявку']).replace(' ', '').replace(',', '.')
+                            # Убираем символы валюты
+                            import re
+                            cost_str = re.sub(r'[^\d.,]', '', cost_str)
                             if cost_str and cost_str != 'nan':
                                 cost_per_quota = float(cost_str)
                         except (ValueError, TypeError):
@@ -1762,3 +2105,922 @@ def download_supplement_template(request):
     response['Content-Disposition'] = 'attachment; filename="template_import_supplement.xlsx"'
     
     return response
+
+
+@login_required
+def quota_summary_dashboard(request):
+    """Сводный дашборд квот, потребностей и заявок"""
+    from datetime import datetime, timedelta
+    from crm_connector.models import AtlasApplication
+    
+    # Предварительно загружаем данные Atlas в кеш (если их еще нет)
+    AtlasDataCache.get_cached_atlas_data()
+    
+    # Получаем только активные квоты по ИРПО
+    irpo_agreements = EduAgreement.objects.filter(
+        federal_operator='IRPO',
+        status__in=[EduAgreement.AgreementStatus.SIGNED, EduAgreement.AgreementStatus.COMPLETED]
+    )
+    
+    quotas = Quota.objects.filter(
+        agreement__in=irpo_agreements,
+        is_active=True
+    ).select_related('education_program', 'agreement').prefetch_related('regions', 'demands', 'distributions')
+    
+    # Группируем квоты по программам
+    programs_data = {}
+    
+    for quota in quotas:
+        program_id = quota.education_program.id
+        program_name = quota.education_program.name
+        
+        if program_id not in programs_data:
+            programs_data[program_id] = {
+                'program': quota.education_program,
+                'quotas': [],
+                'total_quota': 0,
+                'total_demand': 0,
+                'total_applications': 0,
+                'coverage_percent': 0
+            }
+        
+        # Подсчитываем потребности для квоты
+        demands = quota.demands.filter(status=Demand.DemandStatus.ACTIVE)
+        total_demand = demands.aggregate(total=models.Sum('quantity'))['total'] or 0
+        
+        # Получаем распределение квот по регионам
+        distributions = []
+        if quota.regions.count() > 1:
+            # Если квота на несколько регионов, проверяем распределение
+            for region in quota.regions.all():
+                distribution = quota.distributions.filter(region=region).first()
+                # Если распределения нет, создаем его с нулевым количеством
+                if not distribution:
+                    distribution = QuotaDistribution.objects.create(
+                        quota=quota,
+                        region=region,
+                        allocated_quantity=0
+                    )
+                allocated = distribution.allocated_quantity
+                
+                # Потребности для региона и конкретного периода
+                region_demands = demands.filter(
+                    region=region,
+                    start_date=quota.start_date,
+                    end_date=quota.end_date
+                )
+                # Также включаем потребности без указания дат (старые записи)
+                region_demands_legacy = demands.filter(
+                    region=region,
+                    start_date__isnull=True,
+                    end_date__isnull=True
+                )
+                region_demands = region_demands | region_demands_legacy
+                region_demand_quantity = region_demands.aggregate(total=models.Sum('quantity'))['total'] or 0
+                
+                # Заявки для региона (с фильтрацией по дате квоты)
+                region_applications = get_matching_applications_by_region(quota, region, quota.start_date)
+                
+                # Процент покрытия для региона
+                region_coverage = calculate_coverage_percent(allocated, region_demand_quantity, region_applications['total'])
+                
+                distributions.append({
+                    'region': region,
+                    'allocated': allocated,
+                    'demands': region_demands,
+                    'total_demand': region_demand_quantity,
+                    'applications': region_applications,
+                    'coverage_percent': region_coverage['main'],
+                    'coverage_by_demand': region_coverage['by_demand'],
+                    'coverage_by_quota': region_coverage['by_quota']
+                })
+        else:
+            # Если квота на один регион
+            region = quota.regions.first()
+            if region:
+                # Потребности для региона и конкретного периода
+                region_demands = demands.filter(
+                    region=region,
+                    start_date=quota.start_date,
+                    end_date=quota.end_date
+                )
+                # Также включаем потребности без указания дат (старые записи)
+                region_demands_legacy = demands.filter(
+                    region=region,
+                    start_date__isnull=True,
+                    end_date__isnull=True
+                )
+                region_demands = region_demands | region_demands_legacy
+                region_demand_quantity = region_demands.aggregate(total=models.Sum('quantity'))['total'] or 0
+                
+                # Заявки для региона (с фильтрацией по дате квоты)
+                region_applications = get_matching_applications_by_region(quota, region, quota.start_date)
+                
+                # Процент покрытия для региона
+                region_coverage = calculate_coverage_percent(quota.quantity, region_demand_quantity, region_applications['total'])
+                
+                distributions.append({
+                    'region': region,
+                    'allocated': quota.quantity,
+                    'demands': region_demands,
+                    'total_demand': region_demand_quantity,
+                    'applications': region_applications,
+                    'coverage_percent': region_coverage['main'],
+                    'coverage_by_demand': region_coverage['by_demand'],
+                    'coverage_by_quota': region_coverage['by_quota']
+                })
+        
+        # Подсчитываем общие заявки для квоты (сумма по всем регионам)
+        applications_data = {'submitted': 0, 'in_training': 0, 'completed': 0, 'total': 0}
+        for dist in distributions:
+            applications_data['submitted'] += dist['applications']['submitted']
+            applications_data['in_training'] += dist['applications']['in_training']
+            applications_data['completed'] += dist['applications']['completed']
+            applications_data['total'] += dist['applications']['total']
+        
+        # Рассчитываем покрытие для всей квоты
+        quota_coverage = calculate_coverage_percent(quota.quantity, total_demand, applications_data['total'])
+        
+        quota_data = {
+            'quota': quota,
+            'distributions': distributions,
+            'total_demand': total_demand,
+            'demands': demands,
+            'applications': applications_data,
+            'coverage_percent': quota_coverage['main'],
+            'coverage_by_demand': quota_coverage['by_demand'],
+            'coverage_by_quota': quota_coverage['by_quota']
+        }
+        
+        programs_data[program_id]['quotas'].append(quota_data)
+        programs_data[program_id]['total_quota'] += quota.quantity
+        programs_data[program_id]['total_demand'] += total_demand
+        programs_data[program_id]['total_applications'] += applications_data['total']
+    
+    # Пересчитываем общий процент покрытия для каждой программы
+    for program_id in programs_data:
+        data = programs_data[program_id]
+        program_coverage = calculate_coverage_percent(
+            data['total_quota'],
+            data['total_demand'],
+            data['total_applications']
+        )
+        data['coverage_percent'] = program_coverage['main']
+        data['coverage_by_demand'] = program_coverage['by_demand']
+        data['coverage_by_quota'] = program_coverage['by_quota']
+        
+        # Группируем данные по регионам для правильного отображения rowspan
+        data['quotas_by_region'] = group_quotas_by_region(data['quotas'])
+    
+    # Получаем несопоставленные заявки
+    unmatched_applications = get_unmatched_applications()
+    
+    # Получаем список всех РОИВ для выпадающих списков
+    roivs = ROIV.objects.filter(is_active=True).select_related('region').order_by('region__name', 'name')
+    
+    context = {
+        'programs_data': programs_data,
+        'unmatched_applications': unmatched_applications,
+        'total_quotas': sum(p['total_quota'] for p in programs_data.values()),
+        'total_demands': sum(p['total_demand'] for p in programs_data.values()),
+        'total_applications': sum(p['total_applications'] for p in programs_data.values()),
+        'roivs': roivs,
+    }
+    
+    return render(request, 'education_planner/quota_summary_dashboard.html', context)
+
+
+def get_matching_applications(quota):
+    """Получить заявки, соответствующие квоте (общая функция)"""
+    applications_data = {
+        'submitted': 0,
+        'in_training': 0,
+        'completed': 0,
+        'total': 0,
+        'list': []
+    }
+    
+    # Суммируем заявки по всем регионам квоты (с фильтрацией по дате квоты)
+    for region in quota.regions.all():
+        region_data = get_matching_applications_by_region(quota, region, quota.start_date)
+        applications_data['submitted'] += region_data['submitted']
+        applications_data['in_training'] += region_data['in_training']
+        applications_data['completed'] += region_data['completed']
+        applications_data['total'] += region_data['total']
+        applications_data['list'].extend(region_data['list'])
+    
+    return applications_data
+
+
+@cache_atlas_data(timeout=7200)  # Кеш на 2 часа
+def get_matching_applications_by_region(quota, region, specific_date=None):
+    """Получить заявки, соответствующие квоте в конкретном регионе"""
+    from crm_connector.models import AtlasApplication, Deal, Pipeline, Stage
+    from datetime import timedelta, datetime
+    
+    applications_data = {
+        'submitted': 0,
+        'in_training': 0,
+        'completed': 0,
+        'total': 0,
+        'list': []
+    }
+    
+    # Пытаемся получить данные из кеша
+    pipeline, atlas_apps, deals = AtlasDataCache.get_cached_atlas_data()
+    
+    # Если данных нет в кеше, загружаем как обычно
+    if not pipeline:
+        pipeline = Pipeline.objects.filter(name='Заявки (граждане)').first()
+        if not pipeline:
+            return applications_data
+            
+    if not atlas_apps:
+        atlas_apps = list(AtlasApplication.objects.select_related('deal').filter(deal__pipeline=pipeline))
+    
+    if not deals:
+        deals = list(Deal.objects.select_related('stage').filter(pipeline=pipeline))
+    
+    # ТОЧНАЯ логика Atlas Dashboard
+    # Создаем словарь сделка -> заявка как в Atlas Dashboard
+    atlas_apps_dict = {}
+    for app in atlas_apps:
+        if app.deal_id:
+            atlas_apps_dict[app.deal_id] = app  # Последняя запись перезаписывает (как в Atlas)
+    
+    # Теперь фильтруем по региону и программе через сделки
+    applications = []
+    
+    for deal in deals:
+        atlas_app = atlas_apps_dict.get(deal.id)
+        if (atlas_app and 
+            atlas_app.region == region.name and
+            atlas_app.raw_data and
+            quota.education_program.name.lower() in atlas_app.raw_data.get('Программа обучения', '').lower()):
+            applications.append(atlas_app)
+    
+    # Исключаем скрытые этапы
+    hidden_stages = ['1. Необработанная заявка', '2. Направлена инструкция по РвР']
+    
+    # Определяем целевую дату для сравнения
+    target_date_str = None
+    if specific_date:
+        target_date_str = specific_date.strftime('%d.%m.%Y')
+    elif quota.start_date:
+        target_date_str = quota.start_date.strftime('%d.%m.%Y')
+    
+    for app in applications:
+        if app.deal and app.deal.stage and app.deal.stage.name not in hidden_stages:
+            # ВАЖНО: фильтруем по конкретной дате если указана
+            if target_date_str and app.raw_data:
+                app_start_str = app.raw_data.get('Начало периода обучения', '')
+                if app_start_str != target_date_str:
+                    continue  # Пропускаем заявки с другой датой
+            
+            stage_sort = app.deal.stage.sort
+            
+            # Считаем все заявки (как в Atlas Dashboard)
+            applications_data['total'] += 1
+            
+            # Категоризируем по этапам согласно Atlas Dashboard
+            if stage_sort in [30, 40, 50, 60]:  # Этапы 3-6: подача
+                applications_data['submitted'] += 1
+            elif stage_sort == 70:  # Этап 7: обучение
+                applications_data['in_training'] += 1
+            elif stage_sort == 80:  # Этап 8: завершили
+                applications_data['completed'] += 1
+    
+    applications_data['list'] = list(applications[:5])
+    
+    return applications_data
+
+
+@cache_atlas_data(timeout=7200)  # Кеш на 2 часа
+def get_unmatched_applications():
+    """Получить заявки, которые не соответствуют ни одной квоте"""
+    from crm_connector.models import AtlasApplication, AtlasStatus
+    
+    # Получаем все активные квоты ИРПО
+    irpo_agreements = EduAgreement.objects.filter(
+        federal_operator='IRPO',
+        status__in=[EduAgreement.AgreementStatus.SIGNED, EduAgreement.AgreementStatus.COMPLETED]
+    )
+    
+    active_quotas = Quota.objects.filter(
+        agreement__in=irpo_agreements,
+        is_active=True
+    )
+    
+    # Получаем регионы из активных квот
+    quota_regions = set()
+    for quota in active_quotas:
+        quota_regions.update(quota.regions.values_list('name', flat=True))
+    
+    # Используем кешированные статусы
+    status_cache = AtlasDataCache.get_cached_atlas_statuses()
+    
+    # Минимальный порядок статуса для подсчета
+    min_order = 60
+    
+    # Получаем все заявки с подходящим статусом
+    all_valid_applications = []
+    for app in AtlasApplication.objects.all()[:1000]:  # Ограничиваем для производительности
+        atlas_status_name = app.raw_data.get('Статус заявки в Атлас', '') if app.raw_data else ''
+        if atlas_status_name and atlas_status_name in status_cache:
+            status_order = status_cache[atlas_status_name]
+            if status_order >= min_order:
+                all_valid_applications.append(app)
+    
+    # Из них выбираем те, которые не соответствуют регионам квот
+    unmatched = []
+    for app in all_valid_applications:
+        if not quota_regions or app.region not in quota_regions:
+            unmatched.append(app)
+    
+    return unmatched[:50]  # Ограничиваем количество для производительности
+
+
+def calculate_coverage_percent(quota_quantity, demand_quantity, applications_quantity):
+    """Рассчитать процент закрытия квоты
+    
+    Возвращает словарь с процентами покрытия:
+    - by_demand: процент покрытия по потребности РОИВ
+    - by_quota: процент покрытия по квоте
+    - main: основной процент (по потребности, если есть, иначе по квоте)
+    """
+    result = {
+        'by_demand': 0,
+        'by_quota': 0,
+        'main': 0
+    }
+    
+    # Процент покрытия по потребности РОИВ
+    if demand_quantity > 0:
+        result['by_demand'] = (applications_quantity / demand_quantity) * 100
+    
+    # Процент покрытия по квоте
+    if quota_quantity > 0:
+        result['by_quota'] = (applications_quantity / quota_quantity) * 100
+    
+    # Основной процент (приоритет потребности)
+    if demand_quantity > 0:
+        result['main'] = result['by_demand']
+    elif quota_quantity > 0:
+        result['main'] = result['by_quota']
+    
+    return result
+
+
+@cache_atlas_data(timeout=7200)  # Кеш на 2 часа
+def get_applications_for_alternative_period(region, quota, start_str, end_str):
+    """Получить заявки для альтернативного периода"""
+    from crm_connector.models import AtlasApplication, Deal, Pipeline, Stage
+    
+    applications_data = {
+        'submitted': 0, 'in_training': 0, 'completed': 0, 'total': 0, 'list': []
+    }
+    
+    # Пытаемся получить данные из кеша
+    pipeline, atlas_apps, deals = AtlasDataCache.get_cached_atlas_data()
+    
+    # Если данных нет в кеше, загружаем как обычно
+    if not pipeline:
+        pipeline = Pipeline.objects.filter(name='Заявки (граждане)').first()
+        if not pipeline:
+            return applications_data
+            
+    if not atlas_apps:
+        atlas_apps = list(AtlasApplication.objects.select_related('deal').filter(deal__pipeline=pipeline))
+    
+    if not deals:
+        deals = list(Deal.objects.select_related('stage').filter(pipeline=pipeline))
+    
+    # ТОЧНАЯ логика Atlas Dashboard
+    # Создаем словарь сделка -> заявка как в Atlas Dashboard
+    atlas_apps_dict = {}
+    for app in atlas_apps:
+        if app.deal_id:
+            atlas_apps_dict[app.deal_id] = app  # Последняя запись перезаписывает (как в Atlas)
+    
+    # Теперь фильтруем по региону и программе через сделки
+    applications = []
+    
+    for deal in deals:
+        atlas_app = atlas_apps_dict.get(deal.id)
+        if (atlas_app and 
+            atlas_app.region == region.name and
+            atlas_app.raw_data and
+            quota.education_program.name.lower() in atlas_app.raw_data.get('Программа обучения', '').lower()):
+            applications.append(atlas_app)
+    
+    # Исключаем скрытые этапы
+    hidden_stages = ['1. Необработанная заявка', '2. Направлена инструкция по РвР']
+    
+    valid_applications = []
+    processed_deal_ids = set()  # Дополнительная защита от дублей
+    
+    for app in applications:
+        if app.raw_data and app.deal_id not in processed_deal_ids:
+            # Проверяем программу
+            app_program = app.raw_data.get('Программа обучения', '')
+            if quota.education_program.name.lower() not in app_program.lower():
+                continue
+                
+            # Проверяем дату начала
+            app_start = app.raw_data.get('Начало периода обучения', '')
+            if app_start != start_str:
+                continue
+                
+            # Проверяем этап Deal
+            if app.deal and app.deal.stage and app.deal.stage.name not in hidden_stages:
+                stage_sort = app.deal.stage.sort
+                
+                processed_deal_ids.add(app.deal_id)
+                valid_applications.append(app)
+                
+                # Считаем все заявки (как в Atlas Dashboard)
+                applications_data['total'] += 1
+                
+                # Категоризируем по этапам согласно Atlas Dashboard
+                if stage_sort in [30, 40, 50, 60]:  # Этапы 3-6: подача
+                    applications_data['submitted'] += 1
+                elif stage_sort == 70:  # Этап 7: обучение
+                    applications_data['in_training'] += 1
+                elif stage_sort == 80:  # Этап 8: завершили
+                    applications_data['completed'] += 1
+    
+    applications_data['list'] = valid_applications[:5]
+    
+    return applications_data
+
+
+@cache_atlas_data(timeout=7200)  # Кеш на 2 часа
+def group_quotas_by_region(quotas):
+    """Группирует квоты по регионам для правильного отображения rowspan"""
+    from crm_connector.models import AtlasApplication
+    from datetime import datetime, timedelta
+    import numpy as np
+    
+    def business_days_between(start_date, end_date):
+        """Подсчет рабочих дней между датами"""
+        try:
+            return int(np.busday_count(start_date, end_date))
+        except:
+            return 999  # Если ошибка, возвращаем большое число
+    
+    def find_alternative_periods(quota, region, existing_dates):
+        """Найти альтернативные периоды из заявок в пределах 10 рабочих дней"""
+        if not quota.start_date:
+            return []
+        
+        # Ищем заявки для этого региона и программы
+        apps = AtlasApplication.objects.filter(
+            region=region.name,
+            raw_data__icontains=quota.education_program.name  # Полное название программы
+        )
+        
+        alternative_periods = set()
+        main_start = quota.start_date
+        
+        for app in apps:
+            if app.raw_data:
+                app_start_str = app.raw_data.get('Начало периода обучения', '')
+                app_end_str = app.raw_data.get('Окончание периода обучения', '')
+                
+                if app_start_str and app_end_str:
+                    try:
+                        app_start = datetime.strptime(app_start_str, '%d.%m.%Y').date()
+                        app_end = datetime.strptime(app_end_str, '%d.%m.%Y').date()
+                        
+                        # Проверяем, что дата в пределах 10 рабочих дней
+                        business_days = business_days_between(main_start, app_start)
+                        
+                        # ВАЖНО: исключаем даты, которые уже есть среди основных квот
+                        if (0 < business_days <= 10 and 
+                            app_start != main_start and 
+                            app_start not in existing_dates):
+                            
+                            # Дополнительная проверка: есть ли активные заявки для этой даты
+                            apps_for_period = get_applications_for_alternative_period(
+                                region, quota, app_start_str, app_end_str
+                            )
+                            
+                            # Добавляем альтернативный период только если есть заявки
+                            if apps_for_period['total'] > 0:
+                                alternative_periods.add((app_start, app_end, app_start_str, app_end_str))
+                    except:
+                        continue
+        
+        return list(alternative_periods)
+    
+    grouped = {}
+    
+    # Сначала собираем все существующие даты по регионам и программам
+    existing_dates_by_region_program = {}
+    
+    for quota_data in quotas:
+        for dist in quota_data['distributions']:
+            region_id = dist['region'].id
+            program_id = quota_data['quota'].education_program.id
+            
+            key = (region_id, program_id)
+            if key not in existing_dates_by_region_program:
+                existing_dates_by_region_program[key] = set()
+            
+            if quota_data['quota'].start_date:
+                existing_dates_by_region_program[key].add(quota_data['quota'].start_date)
+    
+    # Теперь группируем данные
+    for quota_data in quotas:
+        for dist in quota_data['distributions']:
+            region_id = dist['region'].id
+            region_name = dist['region'].name
+            
+            if region_id not in grouped:
+                grouped[region_id] = {
+                    'region': dist['region'],
+                    'rows': []
+                }
+            
+            # Создаем основную строку данных для этого региона и квоты
+            row_data = {
+                'quota_data': quota_data,
+                'distribution': dist,
+                'is_alternative': False
+            }
+            
+            grouped[region_id]['rows'].append(row_data)
+    
+    # Отдельно ищем альтернативные периоды для каждого региона и программы
+    processed_alternatives = set()  # Чтобы не дублировать альтернативы
+    
+    for quota_data in quotas:
+        for dist in quota_data['distributions']:
+            region_id = dist['region'].id
+            program_id = quota_data['quota'].education_program.id
+            
+            # Ключ для отслеживания уже обработанных комбинаций
+            alt_key = (region_id, program_id)
+            if alt_key in processed_alternatives:
+                continue
+            
+            processed_alternatives.add(alt_key)
+            
+            # Получаем все существующие даты для этой программы в этом регионе
+            existing_dates = existing_dates_by_region_program.get(alt_key, set())
+            
+            # Ищем альтернативные периоды
+            alternative_periods = find_alternative_periods(quota_data['quota'], dist['region'], existing_dates)
+            
+            for alt_start, alt_end, alt_start_str, alt_end_str in alternative_periods:
+                # Получаем заявки для альтернативного периода
+                alt_applications = get_applications_for_alternative_period(
+                    dist['region'], quota_data['quota'], alt_start_str, alt_end_str
+                )
+                
+                # Получаем или создаем альтернативную квоту
+                alt_quota, created = AlternativeQuota.objects.get_or_create(
+                    quota=quota_data['quota'],
+                    region=dist['region'],
+                    start_date=alt_start,
+                    end_date=alt_end,
+                    defaults={'quantity': dist['allocated']}  # По умолчанию копируем количество из основной квоты
+                )
+                
+                # Пересчитываем потребности для альтернативного периода
+                alt_demands = quota_data['quota'].demands.filter(
+                    status=Demand.DemandStatus.ACTIVE,
+                    region=dist['region'],
+                    start_date=alt_start,
+                    end_date=alt_end
+                )
+                alt_demand_quantity = alt_demands.aggregate(total=models.Sum('quantity'))['total'] or 0
+                
+                # Создаем distribution для альтернативного периода
+                alt_distribution = {
+                    'region': dist['region'],
+                    'allocated': alt_quota.quantity,  # Используем количество из альтернативной квоты
+                    'alternative_start': alt_start,
+                    'alternative_end': alt_end,
+                    'alternative_start_str': alt_start_str,
+                    'alternative_end_str': alt_end_str,
+                    'applications': alt_applications,
+                    'demands': alt_demands,
+                    'total_demand': alt_demand_quantity,
+                    'alt_quota_id': alt_quota.id  # Добавляем ID альтернативной квоты
+                }
+                
+                # Рассчитываем покрытие для альтернативного периода
+                alt_coverage = calculate_coverage_percent(
+                    alt_quota.quantity, 
+                    alt_demand_quantity, 
+                    alt_applications['total']
+                )
+                alt_distribution['coverage_percent'] = alt_coverage['main']
+                alt_distribution['coverage_by_demand'] = alt_coverage['by_demand']
+                alt_distribution['coverage_by_quota'] = alt_coverage['by_quota']
+                
+                # Создаем строку для альтернативного периода
+                alt_row_data = {
+                    'quota_data': quota_data,
+                    'distribution': alt_distribution,
+                    'is_alternative': True
+                }
+                
+                grouped[region_id]['rows'].append(alt_row_data)
+    
+    # Преобразуем в список для удобства в шаблоне
+    result = []
+    for region_data in grouped.values():
+        region_data['rowspan'] = len(region_data['rows'])
+        result.append(region_data)
+    
+    return result
+
+
+@login_required
+@csrf_exempt
+@require_http_methods(["POST"])
+def manage_alternative_quota(request):
+    """API для управления альтернативными квотами"""
+    try:
+        data = json.loads(request.body)
+        action = data.get('action')
+        
+        if action == 'update':
+            alt_quota = get_object_or_404(AlternativeQuota, pk=data['alt_quota_id'])
+            
+            # Валидация количества
+            try:
+                quantity = int(data['quantity'])
+                if quantity <= 0:
+                    return JsonResponse({
+                        'success': False,
+                        'message': 'Количество мест должно быть положительным числом'
+                    })
+            except (ValueError, TypeError):
+                return JsonResponse({
+                    'success': False,
+                    'message': 'Некорректное количество мест'
+                })
+            
+            alt_quota.quantity = quantity
+            alt_quota.save()
+            
+            return JsonResponse({
+                'success': True,
+                'message': 'Альтернативная квота успешно обновлена'
+            })
+            
+        else:
+            return JsonResponse({
+                'success': False,
+                'message': 'Неподдерживаемое действие'
+            })
+            
+    except Exception as e:
+        return JsonResponse({
+            'success': False,
+            'message': f'Ошибка: {str(e)}'
+        })
+
+
+@login_required
+@csrf_exempt  
+@require_http_methods(["GET", "POST", "PUT", "DELETE"])
+def manage_roiv(request):
+    """API для управления РОИВ"""
+    from .models import ROIV, Region
+    
+    if request.method == 'GET':
+        region_id = request.GET.get('region_id')
+        if region_id:
+            roivs = ROIV.objects.filter(region_id=region_id, is_active=True)
+        else:
+            roivs = ROIV.objects.filter(is_active=True)
+        
+        data = [{
+            'id': roiv.id,
+            'name': roiv.name,
+            'full_name': roiv.full_name,
+            'region_id': roiv.region_id,
+            'region_name': roiv.region.name,
+            'contact_info': roiv.contact_info
+        } for roiv in roivs]
+        
+        return JsonResponse({'roivs': data})
+    
+    elif request.method == 'POST':
+        try:
+            data = json.loads(request.body)
+            region = Region.objects.get(id=data['region_id'])
+            
+            roiv = ROIV.objects.create(
+                name=data['name'],
+                region=region,
+                full_name=data.get('full_name', ''),
+                contact_info=data.get('contact_info', '')
+            )
+            
+            return JsonResponse({
+                'success': True,
+                'roiv': {
+                    'id': roiv.id,
+                    'name': roiv.name,
+                    'full_name': roiv.full_name,
+                    'region_id': roiv.region_id,
+                    'region_name': roiv.region.name
+                }
+            })
+        except Exception as e:
+            return JsonResponse({'success': False, 'error': str(e)})
+    
+    return JsonResponse({'success': False, 'error': 'Method not allowed'})
+
+
+@login_required
+@csrf_exempt
+@require_http_methods(["POST"])
+def manage_demand(request):
+    """Управление потребностями РОИВ"""
+    try:
+        data = json.loads(request.body)
+        action = data.get('action')
+        
+        if action == 'create':
+            quota = get_object_or_404(Quota, pk=data['quota_id'])
+            roiv = get_object_or_404(ROIV, pk=data['roiv_id'])
+            
+            # Валидация количества
+            try:
+                quantity = int(data['quantity'])
+                if quantity <= 0:
+                    return JsonResponse({
+                        'success': False,
+                        'message': 'Количество мест должно быть положительным числом'
+                    })
+            except (ValueError, TypeError):
+                return JsonResponse({
+                    'success': False,
+                    'message': 'Некорректное количество мест'
+                })
+            
+            # Получаем даты периода из запроса
+            start_date = None
+            end_date = None
+            if data.get('start_date'):
+                from datetime import datetime
+                start_date = datetime.strptime(data['start_date'], '%d.%m.%Y').date()
+            if data.get('end_date'):
+                from datetime import datetime  
+                end_date = datetime.strptime(data['end_date'], '%d.%m.%Y').date()
+            
+            demand = Demand.objects.create(
+                quota=quota,
+                roiv=roiv,
+                region=roiv.region,  # Автоматически заполняется из РОИВ
+                quantity=quantity,
+                document_link=data.get('document_link', ''),
+                comment=data.get('comment', ''),
+                start_date=start_date,
+                end_date=end_date,
+                created_by=request.user
+            )
+            
+            return JsonResponse({
+                'success': True,
+                'message': 'Потребность успешно создана',
+                'demand_id': demand.id
+            })
+            
+        elif action == 'update':
+            demand = get_object_or_404(Demand, pk=data['demand_id'])
+            
+            # Валидация количества при обновлении
+            if 'quantity' in data:
+                try:
+                    quantity = int(data['quantity'])
+                    if quantity <= 0:
+                        return JsonResponse({
+                            'success': False,
+                            'message': 'Количество мест должно быть положительным числом'
+                        })
+                    demand.quantity = quantity
+                except (ValueError, TypeError):
+                    return JsonResponse({
+                        'success': False,
+                        'message': 'Некорректное количество мест'
+                    })
+            
+            # Обновляем остальные поля
+            demand.document_link = data.get('document_link', demand.document_link)
+            demand.comment = data.get('comment', demand.comment)
+            demand.status = data.get('status', demand.status)
+            demand.save()
+            
+            return JsonResponse({
+                'success': True,
+                'message': 'Потребность успешно обновлена'
+            })
+            
+        elif action == 'delete':
+            demand = get_object_or_404(Demand, pk=data['demand_id'])
+            demand.status = Demand.DemandStatus.CANCELLED
+            demand.save()
+            
+            # Создаем запись в истории
+            DemandHistory.objects.create(
+                demand=demand,
+                action=DemandHistory.ActionType.CANCELLED,
+                quantity_before=demand.quantity,
+                quantity_after=0,
+                user=request.user,
+                comment='Потребность отменена'
+            )
+            
+            return JsonResponse({
+                'success': True,
+                'message': 'Потребность отменена'
+            })
+            
+        elif action == 'get':
+            demand = get_object_or_404(Demand, pk=data['demand_id'])
+            
+            return JsonResponse({
+                'success': True,
+                'demand': {
+                    'id': demand.id,
+                    'quantity': demand.quantity,
+                    'document_link': demand.document_link or '',
+                    'comment': demand.comment or '',
+                    'roiv': {
+                        'id': demand.roiv.id,
+                        'name': demand.roiv.name,
+                        'region_name': demand.roiv.region.name
+                    },
+                    'start_date': demand.start_date.strftime('%d.%m.%Y') if demand.start_date else '',
+                    'end_date': demand.end_date.strftime('%d.%m.%Y') if demand.end_date else ''
+                }
+            })
+            
+        elif action == 'get_history':
+            demand = get_object_or_404(Demand, pk=data['demand_id'])
+            history = demand.history.all()
+            
+            history_data = []
+            for h in history:
+                history_data.append({
+                    'action': h.get_action_display(),
+                    'quantity_before': h.quantity_before,
+                    'quantity_after': h.quantity_after,
+                    'user': h.user.get_full_name() if h.user else 'Система',
+                    'comment': h.comment,
+                    'created_at': h.created_at.strftime('%d.%m.%Y %H:%M')
+                })
+            
+            return JsonResponse({
+                'success': True,
+                'history': history_data
+            })
+            
+    except Exception as e:
+        return JsonResponse({'success': False, 'message': f'Ошибка: {str(e)}'})
+
+
+@login_required
+@csrf_exempt
+@require_http_methods(["POST"])
+def distribute_quota(request):
+    """Распределение квоты между регионами"""
+    try:
+        data = json.loads(request.body)
+        quota = get_object_or_404(Quota, pk=data['quota_id'])
+        distributions = data.get('distributions', [])
+        
+        # Проверяем, что сумма распределений не превышает квоту
+        total_allocated = sum(d['quantity'] for d in distributions)
+        if total_allocated > quota.quantity:
+            return JsonResponse({
+                'success': False,
+                'message': f'Сумма распределений ({total_allocated}) превышает квоту ({quota.quantity})'
+            })
+        
+        # Удаляем старые распределения
+        quota.distributions.all().delete()
+        
+        # Создаем новые распределения
+        for dist in distributions:
+            region = get_object_or_404(Region, pk=dist['region_id'])
+            QuotaDistribution.objects.create(
+                quota=quota,
+                region=region,
+                allocated_quantity=dist['quantity']
+            )
+        
+        return JsonResponse({
+            'success': True,
+            'message': 'Квота успешно распределена'
+        })
+        
+    except Exception as e:
+        return JsonResponse({'success': False, 'message': f'Ошибка: {str(e)}'})
