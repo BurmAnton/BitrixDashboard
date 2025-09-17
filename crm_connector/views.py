@@ -1448,7 +1448,8 @@ def atlas_dashboard(request):
     return render(request, 'crm_connector/atlas_dashboard.html', context)
  
 
-def lead_progress(request):
+
+def attestation_progress(request):
     education_products = {
         'Инструменты искусственного интеллекта в сфере культуры': {
             1: "Введение в ИИ в сфере культуры",
@@ -1532,7 +1533,7 @@ def lead_progress(request):
                     dt = datetime.strptime(last_active, "%d.%m.%Y")
                     last_active = timezone.make_aware(dt, timezone.get_current_timezone())
                 try:
-                    app = AtlasApplication.objects.get(email=email)
+                    app = AtlasApplication.objects.filter(email=email).first()
                     app.program = program
                     app.potok = potok
                     app.last_active = last_active
@@ -1559,13 +1560,14 @@ def lead_progress(request):
             program = app.program
             if program in education_products:
                 potok = app.potok
+                if potok == "nan":
+                    potok = "Поток неопределен"
                 full_name = app.full_name
                 education_progress = app.education_progress
                 result.setdefault(program, {})
                 result[program].setdefault(potok, {})
                 result[program][potok].setdefault('total', {topic: 0 for topic in education_products[program].values()})
                 result[program][potok]['total'].setdefault('total', 0)
-                result[program][potok]['total'].setdefault('done', 0)
                 result[program][potok]['total'].setdefault('undone', 0)
                 result[program][potok].setdefault(full_name, {topic:0 for topic in education_products[program].values()})
                 result[program][potok][full_name].setdefault('total', 0)
@@ -1585,8 +1587,6 @@ def lead_progress(request):
                 result[program][potok][full_name]['total'] = int(prog[index])
                 if (int(prog[index]) < len(education_products[program].values())):
                     result[program][potok]['total']['undone'] += 1
-                else:
-                    result[program][potok]['total']['done'] += 1
                 result[program][potok]['total']['total'] += 1
         except Exception as e:
             print(f"Ошибка при формировании таблицы: {e}")
@@ -1597,4 +1597,4 @@ def lead_progress(request):
     'form': form
     }
     # return JsonResponse({'result': result})
-    return render(request, 'crm_connector/lead-progress.html', context)
+    return render(request, 'crm_connector/attestation-progress.html', context)

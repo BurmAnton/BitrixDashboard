@@ -1,7 +1,6 @@
 {% extends "base.html" %}
 {% load dict_filters %}
 {% block content %}
-
 {% block extra_css %}
 <style>
     form{ 
@@ -11,10 +10,15 @@
         width: 35%;
         border-radius: 15px;
     }
+    .tableTitle{
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    }
     .container{
         width: 95%; 
         max-width: 95%;
-        text-align: right;
+        text-align: center;
     }
     .Export{
         background-color: #217346; /* зелёный цвет Excel */
@@ -25,7 +29,7 @@
         font-weight: 600;
         border-radius: 5px;
         cursor: pointer;
-        box-shadow: 0 4px 6px rgba(33, 115, 70, 0.3);
+        box-shadow: 0 4px 6px rgba(33, 115, 70, 0.192);
         transition: background-color 0.3s ease;
         margin-bottom: 5px;
     }
@@ -49,22 +53,21 @@
     cursor: pointer;
     }
     span.copy.clicked {
-    color: green;
+    color: #5cb85c;
     font-weight: bold;
     }
     span.copy:hover:not(.clicked) {
-    color: red;
+    color: #5bc0de;
     font-weight: bold;
     }
 
     .total-row{
         font-weight: bolder;
+        background-color: #fff3cd !important;
+        color: rgba(0, 0, 0, 0.774);
     }
-    .total{
-        padding: 7px;
-        border-radius: 10px;
-        background-color: rgb(0, 0, 0);
-        color: rgb(255, 255, 255);
+    .total-row:hover{
+        background-color: #ffeaa7 !important; 
     }
 
     table.custom-dashboard th:first-child{
@@ -78,7 +81,7 @@
     table-layout: fixed;
     word-wrap: break-word;
     font-family: Arial, sans-serif;
-    font-size: 14px;
+    font-size: large;
     }
 
     table.custom-dashboard th, table.custom-dashboard td {
@@ -107,50 +110,39 @@
     white-space: normal;
     text-align: center;
     }
-
-    table.custom-dashboard td:last-child {
-        background-color: #f1f6f7;
-    }
     .Success{
         font-weight: bolder;
-        padding: 7px;
-        border-radius: 10px;
-        background-color: #00A000;
-        text-shadow: black 0px 0px 2px;
-        color: white;
+        background-color: #5cb85c28 !important;
+        color: black;
         margin: 2px 2px;
     }
     .Fail{
         font-weight: bolder;
-        padding: 7px;
-        border-radius: 10px;
-        background-color: #bd0000;
-        text-shadow: black 0px 0px 2px;
-        color: white;
+        background-color: #d9544f2d !important;
+        color: black;
         margin: 2px 2px;
     }
     .Empty{
         font-weight: bolder;
-        padding: 7px;
-        border-radius: 10px;
-        background-color: #727272;
-        text-shadow: black 0px 0px 2px;
-        color: white;
+        background-color: #7272722c !important;
+        color: black;
         margin: 2px 2px;
-        ;
     }
 
 </style>
 {% endblock %}
+<h1>Дашборд завершенных аттестаций </h1>
     <form method="post" enctype="multipart/form-data">
     <h2>Импорт заявок из Excel</h2>
     {% csrf_token %}
     {{ form.as_p }}
-    <input type="submit"></button>
+    <input type="submit" class="btn btn-primary"></button>
     </form>
 {% for prog, potoki in result.items %}
-    <h3 style="text-align: center;"> Программа {{ prog }}</h3>
-    <button onclick="exportTableToXLSX(this.id)" id="{{ prog }}" class="Export">  <svg xmlns="http://www.w3.org/2000/svg" height="24px" viewBox="0 -960 960 960" width="24px" fill="#FFFFFF"><path d="m720-120 160-160-56-56-64 64v-167h-80v167l-64-64-56 56 160 160ZM560 0v-80h320V0H560ZM240-160q-33 0-56.5-23.5T160-240v-560q0-33 23.5-56.5T240-880h280l240 240v121h-80v-81H480v-200H240v560h240v80H240Zm0-80v-560 560Z"/></svg></button>
+    <div class="tableTitle">
+        <h3 style="text-align: left;"> Программа {{ prog }}</h3>
+        <button onclick="exportTableToXLSX(this.id)" id="{{ prog }}" class="Export">  <svg xmlns="http://www.w3.org/2000/svg" height="24px" viewBox="0 -960 960 960" width="24px" fill="#FFFFFF"><path d="m720-120 160-160-56-56-64 64v-167h-80v167l-64-64-56 56 160 160ZM560 0v-80h320V0H560ZM240-160q-33 0-56.5-23.5T160-240v-560q0-33 23.5-56.5T240-880h280l240 240v121h-80v-81H480v-200H240v560h240v80H240Zm0-80v-560 560Z"/></svg></button>
+    </div>
     <table border="1" class="custom-dashboard" id="table.{{ prog }}">
     <thead>
         <tr>
@@ -161,7 +153,7 @@
                 
                     <th>
                         <label>
-                            <input type="checkbox" class="filter-success" data-col-index="{{ forloop.counter0 }}">
+                            <input type="checkbox" class="filter-success" data-table-id="{{ prog }}" data-col-index="{{ forloop.counter0 }}">
                             {{ name }}
                         </label>
                     </th>
@@ -184,22 +176,22 @@
             {% for name, tests in listeners.items %}
                 {% if name == 'total' %}
                 <tr class="total-row">
-                <td>Общая сводка</td>
+                <td >Общая сводка</td>
                 {% for educ,topic  in topics.items %}
                     {% if educ == prog %}
                         {% for index, name in topic.items %}
-                            <td>
-                                <span class="total">
-                                    {{tests|dict_get:name}}
-                                </span>
+                            <td >
+                                {{tests|dict_get:name}}
                             </td>
                         {% endfor %}
                     {% endif %}
                 {% endfor %}
-                <td>
-                    <span class="Empty">{{tests.total}}</span>
-                    <span class="Success">{{tests.done}}</span>
-                    <span class="Fail">{{tests.undone}}</span>
+                <td >
+                    {{tests.undone}}
+                    <br>
+                    <span style="font-size:smaller;opacity: 50%;">
+                        Всего: {{tests.total}}
+                    </span>
                 </td>
                 </tr>
                 {% else %}
@@ -222,31 +214,27 @@
                 {% for educ,topic  in topics.items %}
                     {% if educ == prog %}
                         {% for index, name in topic.items %}
-                            <td>
                                 {% with value=tests|dict_get:name %}
-                                    {% if value > 60 %}
-                                        <span class="Success">{{ value }}</span>
-                                    {% elif value == 0 %}
-                                        <span class="Empty">{{ value }}</span>
-                                    {% else %}
-                                        <span class="Fail">{{ value }}</span>
-                                    {% endif %}
-                                {% endwith %}
-                            </td>
+                                {% if value > 60 %}
+                                    <td class="Success">{{ value }}</td>
+                                {% elif value == 0 %}
+                                    <td class="Empty">{{ value }}</td>
+                                {% else %}
+                                    <td class="Fail">{{ value }}</td>
+                                {% endif %}
+                            {% endwith %}
                         {% endfor %}
                     {% endif %}
                 {% endfor %}
-                <td>
-                    {% with value=tests.total %}
-                        {% if value == topics|dict_get:prog|length %}
-                            <span class="Success">{{ value }}</span>
-                        {% elif value == 0 %}
-                            <span class="Empty">{{ value }}</span>
-                        {% else %}
-                            <span class="Fail">{{ value }}</span>
-                        {% endif %}
-                    {% endwith %}
-                </td>
+                {% with value=tests.total %}
+                    {% if value == topics|dict_get:prog|length %}
+                        <td class="Success">{{ value }}</td>
+                    {% elif value == 0 %}
+                        <td class="Empty">{{ value }}</td>
+                    {% else %}
+                        <td class="Fail">{{ value }}</td>
+                    {% endif %}
+                {% endwith %}
                 </tr>
                 {% endif %}
             {% endfor %}
@@ -318,9 +306,10 @@
 
             data.push(rowData);
         });
-
-        var worksheet = XLSX.utils.aoa_to_sheet(data);
-        XLSX.utils.book_append_sheet(workbook, worksheet, potokName);
+        if(data[1]){
+            var worksheet = XLSX.utils.aoa_to_sheet(data);
+            XLSX.utils.book_append_sheet(workbook, worksheet, potokName);
+        }
     });
     
     var wbout = XLSX.write(workbook, { bookType: 'xlsx', type: 'binary' });
@@ -344,9 +333,10 @@
 
     document.addEventListener('DOMContentLoaded', () => {
         
-        const emailSpans = document.querySelectorAll('span.copy');
+        const emailSpans = document.querySelectorAll('.copy');
         emailSpans.forEach(span => {
             span.addEventListener('click', () => {
+                
                 navigator.clipboard.writeText(span.textContent)
                 span.classList.add('clicked');
                 setTimeout(() => {
@@ -360,15 +350,21 @@
         // Получаем все чекбоксы фильтра потоков
         const potokCheckboxes = document.querySelectorAll('input.toggle-potok');
 
-        // Функция для получения текущих активных фильтров статусов по колонкам
-        function getActiveColumnFilters() {
-            const active = new Set();
-            filters.forEach((filter, idx) => {
+        // Функция для получения текущих активных фильтров статусов по колонкам для каждой таблицы
+        function getActiveColumnFiltersByTable() {
+            const activeByTable = {};
+
+            filters.forEach((filter) => {
                 if (filter.checked) {
-                    active.add(idx);
+                    const tableId = 'table.'+filter.dataset.tableId; // id таблицы из data-атрибут
+                    if (!activeByTable[tableId]) {
+                        activeByTable[tableId] = new Set();
+                    }
+                    activeByTable[tableId].add(filter.dataset.colIndex);
                 }
             });
-            return active;
+
+            return activeByTable;
         }
 
         // Функция для проверки, скрыт ли поток по id (по чекбоксу)
@@ -379,47 +375,53 @@
 
         // Основная функция фильтрации строк с учётом всех фильтров
         function applyFilters() {
-            const activeFilters = getActiveColumnFilters();
+            const activeFiltersByTable = getActiveColumnFiltersByTable();
 
             const tables = document.querySelectorAll('table.custom-dashboard');
             tables.forEach(table => {
+                const tableId = table.id;
+                // Получаем активные фильтры именно для этой таблицы
+                const activeFilters = activeFiltersByTable[tableId] || new Set();
+
                 const rows = table.tBodies[0].rows;
 
                 for (let i = 0; i < rows.length; i++) {
                     const row = rows[i];
 
-                    // Пропускаем заголовочные строки потоков (с классом 'potok')
+                    // Пропускаем заголовочные строки потоков
                     if (row.classList.contains('potok')) {
                         continue;
                     }
 
-                    // Для остальных строк определим id потока из id строки (у вас id потока совпадает с id строки)
                     const potokId = row.id;
                     if (potokId && !isPotokVisible(potokId)) {
-                        // Если поток скрыт — скрываем строку
                         row.style.setProperty('display', 'none', 'important');
                         continue;
                     }
 
-                    // Проверяем фильтры по колонкам
-                    let shouldHide = false;
+                    // Если нет активных фильтров показываем все строки
+                    if (activeFilters.size === 0) {
+                        row.style.removeProperty('display');
+                        continue;
+                    }
+
+                    let shouldShow = false;
 
                     activeFilters.forEach(colIndex => {
-                        // +1 потому что первый столбец - имя
-                        const cell = row.cells[colIndex + 1];
+                        // Индексация столбцов +1, как было в исходном коде, предполагая первый столбец без фильтра
+                        const cell = row.cells[parseInt(colIndex) + 1];
                         if (!cell) return;
 
-                        const hasSuccess = cell.querySelector('span.Success');
-                        if (hasSuccess) {
-                            // Если есть успех по активному фильтру, строку надо скрыть
-                            shouldHide = true;
+                        const hasSuccess = cell.classList.contains('Success');
+                        if (!hasSuccess) {
+                            shouldShow = true;
                         }
                     });
 
-                    if (shouldHide) {
-                        row.style.display = 'none';
-                    } else {
+                    if (shouldShow) {
                         row.style.removeProperty('display');
+                    } else {
+                        row.style.display = 'none';
                     }
                 }
             });
@@ -440,6 +442,8 @@
 
         // Первоначальный запуск фильтрации
         applyFilters();
+
     })
-    </script>
+    
+</script>
 {% endblock %}
