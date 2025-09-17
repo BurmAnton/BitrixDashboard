@@ -1556,6 +1556,18 @@ def attestation_progress(request):
             'form': form
         }
     applications = AtlasApplication.objects.all()
+
+    selected_program = request.GET.get('program', '')
+    selected_potok = request.GET.get('potok', '')
+
+    if selected_program:
+        applications = applications.filter(program=selected_program)
+    if selected_potok:
+        applications = applications.filter(potok=selected_potok)
+
+    all_programs = sorted(set(app.program for app in AtlasApplication.objects.all() if app.program))
+    all_potoks = sorted(set(app.potok for app in AtlasApplication.objects.all() if app.potok and app.potok != "nan"))
+
     # try:
     for app in applications:
         index = 0
@@ -1597,7 +1609,11 @@ def attestation_progress(request):
     context = {
     'result': result,
     'topics': education_products,
-    'form': form
+    'form': form,
+    'all_programs': all_programs,
+    'all_potoks': all_potoks,
+    'selected_program': selected_program,
+    'selected_potok': selected_potok
     }
     # return JsonResponse({'result': result})
     return render(request, 'crm_connector/attestation-progress.html', context)
