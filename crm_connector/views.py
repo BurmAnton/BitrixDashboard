@@ -793,6 +793,7 @@ def import_atlas_applications(request):
     return render(request, 'crm_connector/import_atlas_applications.html', context)
 
 def import_not_atlas(request):
+    import re;
     if request.method == 'POST':
         form = LeadImportForm(request.POST, request.FILES)
         if form.is_valid():
@@ -916,7 +917,7 @@ def import_not_atlas(request):
     else:
         form = LeadImportForm()
 
-    return render(request, 'crm_connector/import_lids.html', {'form': form})
+    return render(request, 'crm_connector/import_not_atlas.html', {'form': form})
 
 from django.views.generic import ListView
 from django.contrib.auth.mixins import LoginRequiredMixin
@@ -1543,7 +1544,7 @@ def attestation_progress(request):
                     app.education_progress = progress
                     app.save()
                     amount_of_leads += 1
-                except AtlasApplication.DoesNotExist:
+                except:
                     failed_to_find +=1
                     pass
             
@@ -1576,7 +1577,15 @@ def attestation_progress(request):
             if program in education_products:
                 potok = app.potok
                 if potok == "nan":
-                    potok = "Поток неопределен"
+                    try:
+                        start = app.raw_data.get("Начало периода обучения")
+                        end = app.raw_data.get("Окончание периода обучения")
+                        if start != None and end != None:
+                            potok = f"{start}-{end}"
+                        else:
+                            potok = "Поток неопределен"
+                    except:
+                        potok = "Поток неопределен"
                 full_name = app.full_name
                 education_progress = app.education_progress
                 result.setdefault(program, {})

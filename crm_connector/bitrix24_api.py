@@ -496,6 +496,17 @@ class Bitrix24API:
         except Exception as e:
             print(f"❌ Ошибка при получении полей сделки: {str(e)}")
             return {} 
+        
+    def get_deal_field_list(self, ChoosenField):
+        """Получает лист 'items' у поля сделки."""
+        try:
+            fields = self.bitrix.get_all('crm.deal.fields')
+            items = fields[f"{ChoosenField}"].get("items",[])
+            fields = [(item["ID"],item["VALUE"]) for item in items]
+            return fields
+        except Exception as e:
+            print(f"❌ Ошибка при получении полей сделки: {str(e)}")
+            return {} 
 
     def find_contact_by_email(self, email):
         """Находит контакт по email"""

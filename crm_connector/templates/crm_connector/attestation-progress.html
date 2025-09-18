@@ -294,7 +294,7 @@
 {% endfor %}
 <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
 <script>
-  function exportTableToXLSX(ChoosenTable) {
+    function exportTableToXLSX(ChoosenTable) {
     var table = document.getElementById('table.' + ChoosenTable);
     if (!table) {
         console.error("Таблица не найдена");
@@ -379,22 +379,18 @@
     link.click();
     document.body.removeChild(link);
 }
-
+    const copyspan = document.querySelectorAll('.copy');
+    copyspan.forEach(span => {
+        span.addEventListener('click', () => {
+            navigator.clipboard.writeText(span.textContent)
+            span.classList.add('clicked');
+            setTimeout(() => {
+                span.classList.remove('clicked');
+            }, 800);
+        });
+    });
 
     document.addEventListener('DOMContentLoaded', () => {
-        
-        const emailSpans = document.querySelectorAll('.copy');
-        emailSpans.forEach(span => {
-            span.addEventListener('click', () => {
-                
-                navigator.clipboard.writeText(span.textContent)
-                span.classList.add('clicked');
-                setTimeout(() => {
-                    span.classList.remove('clicked');
-                }, 800);
-            });
-        });
-
         // Получаем все чекбоксы фильтров колонок
         const filters = document.querySelectorAll('input.filter-success');
         // Получаем все чекбоксы фильтра потоков

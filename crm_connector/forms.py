@@ -77,7 +77,7 @@ class LeadImportForm(forms.Form):
     excel_file = forms.FileField(label='Выберите Excel файл с лидами')
     training = forms.ChoiceField(
         label='Направление обучения',
-        #choices=api.get_deal_field_list('UF_CRM_1741091080288'),
+        choices=api.get_deal_field_list('UF_CRM_1741091080288'),
         widget=forms.Select(attrs={'class': 'form-control'})
     )
     
