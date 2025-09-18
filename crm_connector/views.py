@@ -1462,6 +1462,14 @@ def attestation_progress(request):
             4: "ИИ в исследовании и аналитике",
             5: "Виртуальные ассистенты и чат-боты в сфере культуры"
         },
+        'Специалист по эксплуатации беспилотных авиационных систем': {
+            1: "1.2 Правовое регулирование использования БАС",
+            2: "Введение в БАС. БАС в правовом поле(Аттестация)",
+            3: "2.2 Правовое регулирование",
+            4: "Обслуживание и ремонт БАС(Аттестация)",
+            5: "3.2 Составные части БПЛА",
+            6: "Основы управления и пилотрования БАС(Аттестация)"
+        },
         'Специалист по эксплуатации беспилотных авиационных систем в сфере лесного хозяйства': {
             1: "Введение в БАС. БАС в правовом поле(Аттестация)",
             2: "2.1 Техническое обслуживание БАС",
@@ -1528,22 +1536,21 @@ def attestation_progress(request):
                     last_active = datetime.strptime(last_active, "%d.%m.%Y")
                 elif isinstance(last_active, pd.Timestamp):
                     last_active = last_active.to_pydatetime()
-                # Пытаемся найти пользователя по email
-
-# for program_id, program_name in EDUCATION_PROGRAMM:
-                #     if program_name == program:
-                #         program = program_id
                 if isinstance(last_active, str):
                     dt = datetime.strptime(last_active, "%d.%m.%Y")
                     last_active = timezone.make_aware(dt, timezone.get_current_timezone())
                 try:
                     app = AtlasApplication.objects.filter(email=email).first()
-                    app.program = program
-                    app.potok = potok
-                    app.last_active = last_active
-                    app.education_progress = progress
-                    app.save()
-                    amount_of_leads += 1
+                    try:
+                        app.program = app.raw_data.get("Программа обучения")
+                    except:
+                        app.program = program
+                    if app.program == program:
+                        app.potok = potok
+                        app.last_active = last_active
+                        app.education_progress = progress
+                        app.save()
+                        amount_of_leads += 1
                 except:
                     failed_to_find +=1
                     pass
