@@ -335,6 +335,17 @@ class Contact(models.Model):
     def __str__(self):
         return f"{self.name} {self.last_name or ''} ({self.bitrix_id})"
 
+class AtlasProgram(models.Model):
+    """Модель для хранения программ из системы Атлас"""
+    program_id = models.CharField(max_length=255, unique=True, verbose_name="ID Программы")
+    title = models.CharField(max_length=255, verbose_name="Название программы")
+    short_title = models.CharField(max_length=255, verbose_name="Короткое название программы", blank=True, null=True)
+    section = JSONField(max_length=255, verbose_name="Разделы", blank=True, null=True)
+    topics = JSONField(max_length=255, verbose_name="Темы", blank=True, null=True)
+    class Meta:
+        verbose_name = 'Программу Атлас'
+        verbose_name_plural = 'Программы Атлас'
+
 class AtlasApplication(models.Model):
     """Модель для хранения заявок из системы Атлас"""
     # Основные поля из выгрузки

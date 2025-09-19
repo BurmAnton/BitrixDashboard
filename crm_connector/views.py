@@ -8,12 +8,11 @@ import openpyxl
 from .tasks import sync_leads, sync_deals, sync_contacts, sync_pipelines_task
 from .bitrix24_api import Bitrix24API
 from django.views.decorators.csrf import csrf_protect
-from .models import Lead, Deal, Contact, Pipeline, Stage, AtlasApplication, StageRule
-from django.db.models import Count, Sum, F, ExpressionWrapper, Avg, DurationField
-from .models import Lead, Deal, Contact, Pipeline, Stage, AtlasApplication, StageRule, Company
+from .models import Lead, Deal, Contact, Pipeline, Stage, AtlasApplication, StageRule, Company, AtlasProgram
 from django.db.models import Count, Sum, F, ExpressionWrapper, Avg, DurationField, Q
 from django.contrib import messages
 import logging
+import re
 import pandas as pd
 from .forms import ExcelImportForm, AtlasLeadImportForm, LeadImportForm
 from datetime import datetime, timedelta
@@ -793,7 +792,6 @@ def import_atlas_applications(request):
     return render(request, 'crm_connector/import_atlas_applications.html', context)
 
 def import_not_atlas(request):
-    import re;
     if request.method == 'POST':
         form = LeadImportForm(request.POST, request.FILES)
         if form.is_valid():
@@ -1454,46 +1452,10 @@ def atlas_dashboard(request):
 
 
 def attestation_progress(request):
-    education_products = {
-        'Инструменты искусственного интеллекта в сфере культуры': {
-            1: "Введение в ИИ в сфере культуры",
-            2: "Работа с большими языковыми моделями",
-            3: "Работа с диффузионными нейросетями",
-            4: "ИИ в исследовании и аналитике",
-            5: "Виртуальные ассистенты и чат-боты в сфере культуры"
-        },
-        'Специалист по эксплуатации беспилотных авиационных систем': {
-            1: "1.2 Правовое регулирование использования БАС",
-            2: "Введение в БАС. БАС в правовом поле(Аттестация)",
-            3: "2.2 Правовое регулирование",
-            4: "Обслуживание и ремонт БАС(Аттестация)",
-            5: "3.2 Составные части БПЛА",
-            6: "Основы управления и пилотрования БАС(Аттестация)"
-        },
-        'Специалист по эксплуатации беспилотных авиационных систем в сфере лесного хозяйства': {
-            1: "Введение в БАС. БАС в правовом поле(Аттестация)",
-            2: "2.1 Техническое обслуживание БАС",
-            3: "2.2 Диагностика и устранение неисправностей",
-            4: "2.3 Профилактика поломок и продление срока службы БАС",
-            5: "Обслуживание и ремонт БАС(Аттестация)",
-            6: "Основы управления и пилотрования БАС(Аттестация)",
-            7: "Применение БАС для решения задач в деятельности лесных хозяйств(Аттестация)"
-        },
-        'Оператор беспилотных авиационных систем (с максимальной взлетной массой 30 килограммов и менее)': {
-            1: "Правовое регулирование использования БАС",
-            2: "Введение в БАС. БАС в правовом поле(Аттестация)",
-            3: "Правовое регулирование",
-            4: "Обслуживание и ремонт БАС(Аттестация)",
-            5: "Составные части БПЛА",
-            6: "Основы управления и пилотрования БАС"
-        },
-        'Специалист по борьбе с беспилотными летательными аппаратами и защите объектов':{
-            1: "Введение в БАС. БАС в правовом поле",
-            2: "Связь и навигация",
-            3: "Основы радиоэлектронной борьбы (РЭБ)",
-            4: "Подготовка и применение средств радиоэлектронной борьбы"
-        }
-    }
+    ListOfPrograms = AtlasProgram.objects.all()
+    education_products = {}
+    for program in ListOfPrograms:
+        education_products.setdefault(program.title, program.section)
     context = {}
     result = {}
     if request.method == 'POST':
@@ -1501,10 +1463,11 @@ def attestation_progress(request):
         if form.is_valid():
             failed_to_find = 0
             file = form.cleaned_data['excel_file']
-        
             # Читаем Excel с пропуском первых 2 строк (номеруем с 0)
             df = pd.read_excel(file, header=None, engine='openpyxl')
-            amount_of_leads = 0
+            header_row = df.iloc[0]
+            listeners_updated = 0
+            listeners_created = 0
             for _, row in df.iterrows():
                 if _ < 2:  # пропускаем первые 3 строки
                     continue
@@ -1518,17 +1481,18 @@ def attestation_progress(request):
                 progress = ''
                 razdel = 1
                 while col_index + 4 < len(row):
-                    topic_theory = row.iloc[col_index]       # теория (не нужна)
-                    topic_testing = row.iloc[col_index + 1]  # тестирование (надо)
-                    topic_practice = row.iloc[col_index + 2] # практика (не нужна)
-                    topic_start = row.iloc[col_index + 3]    # дата старта (не нужна)
-                    topic_end = row.iloc[col_index + 4]      # дата окончания (не нужна)
-                    if pd.notna(topic_testing) and str(topic_testing).strip() != '':
-                        progress += f"{topic_testing},"
-                        if topic_testing > 60:
-                            test_count +=1
-                        razdel +=1
-                    
+                    header_value = str(header_row.iloc[col_index]).lower()
+                    if "аттестация" in header_value:
+                        topic_theory = row.iloc[col_index]       # теория (не нужна)
+                        topic_testing = row.iloc[col_index + 1]  # тестирование (надо)
+                        topic_practice = row.iloc[col_index + 2] # практика (не нужна)
+                        topic_start = row.iloc[col_index + 3]    # дата старта (не нужна)
+                        topic_end = row.iloc[col_index + 4]      # дата окончания (не нужна)
+                        if pd.notna(topic_testing) and str(topic_testing).strip() != '':
+                            progress += f"{topic_testing},"
+                            if topic_testing > 60:
+                                test_count +=1
+                            razdel +=1
                     col_index += 5
                 progress += f"{test_count}"
 
@@ -1546,16 +1510,21 @@ def attestation_progress(request):
                     except:
                         app.program = program
                     if app.program == program:
+                        app.last_sync = timezone.now()
                         app.potok = potok
                         app.last_active = last_active
+                        if app.education_progress:
+                            listeners_updated +=1
+                        else:
+                            listeners_created +=1
                         app.education_progress = progress
                         app.save()
-                        amount_of_leads += 1
                 except:
                     failed_to_find +=1
                     pass
-            
-            messages.success(request, f'Найдено: {amount_of_leads}')
+            messages.error(request,f'Не удалось найти: {failed_to_find}', extra_tags='false')
+            messages.success(request, f'Создано: {listeners_created}', extra_tags='succ')
+            messages.success(request, f'Обновлено: {listeners_updated}', extra_tags='succ')
                             
     
     else:
@@ -1575,15 +1544,18 @@ def attestation_progress(request):
 
     all_programs = sorted(set(app.program for app in AtlasApplication.objects.all() if app.program))
     all_potoks = sorted(set(app.potok for app in AtlasApplication.objects.all() if app.potok and app.potok != "nan"))
+    potoks_end_date = {}
+    for item in all_potoks:
+        potoks_end_date.setdefault(item, datetime.strptime(list(re.findall(r'\d{2}\.\d{2}\.\d{4}', item))[1], '%d.%m.%Y').date())
 
-    # try:
     for app in applications:
         index = 0
         try:
             program = app.program
             if program in education_products:
-                potok = app.potok
-                if potok == "nan":
+                try:
+                    potok = f"{app.potok} Последняя синхронизация: {app.last_sync.strftime("%H:%M %d/%m/%Y")}"
+                except:
                     try:
                         start = app.raw_data.get("Начало периода обучения")
                         end = app.raw_data.get("Окончание периода обучения")
@@ -1629,7 +1601,9 @@ def attestation_progress(request):
     'all_programs': all_programs,
     'all_potoks': all_potoks,
     'selected_program': selected_program,
-    'selected_potok': selected_potok
+    'selected_potok': selected_potok,
+    'potoks_end_date': potoks_end_date,
+    'today': timezone.now()
     }
-    # return JsonResponse({'result': result})
+    # return JsonResponse({'result': all_potoks})
     return render(request, 'crm_connector/attestation-progress.html', context)

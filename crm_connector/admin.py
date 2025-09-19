@@ -1,6 +1,5 @@
 from django.contrib import admin
-from .models import Pipeline, Stage, Deal, Lead, Contact, AtlasApplication, STAGE_TYPE_CHOICES, AtlasStatus, RRStatus, StageRule
-from .models import Pipeline, Stage, Deal, Company, Lead, Contact, AtlasApplication, STAGE_TYPE_CHOICES, AtlasStatus, RRStatus, StageRule
+from .models import Pipeline, Stage, Deal, Company, Lead, Contact, AtlasApplication, STAGE_TYPE_CHOICES, AtlasStatus, RRStatus, StageRule, AtlasProgram
 from django import forms
 from django.contrib import messages
 from django.utils.html import format_html
@@ -145,6 +144,12 @@ class ContactAdmin(admin.ModelAdmin):
     list_display = ('name', 'last_name', 'phone', 'email', 'bitrix_id')
     search_fields = ('name', 'last_name', 'phone', 'email')
     list_filter = ('created_at',)
+
+@admin.register(AtlasProgram)
+class AtlasProgramAdmin(admin.ModelAdmin):
+    list_display = ['program_id', 'title', 'short_title']
+    search_fields = ['program_id', 'title', 'short_title']
+    readonly_fields = ['section', 'topics']
 
 @admin.register(AtlasApplication)
 class AtlasApplicationAdmin(SimpleHistoryAdmin):

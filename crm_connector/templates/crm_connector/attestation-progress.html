@@ -3,6 +3,9 @@
 {% block content %}
 {% block extra_css %}
 <style>
+    .messages{
+        display: none;
+    }
     .legacy-form{ 
         text-align: left;
         padding: 8px;
@@ -163,6 +166,14 @@
                         </select>
                     </div>
                     
+                    <div class="mb-3">
+                        <input class="form-check-input" type="checkbox" value="1" id="today" name="today"
+                            {% if today %} checked {% endif %}>
+                        <label class="form-check-label" for="today">
+                            Не показывать завершенные
+                        </label>
+                    </div>
+
                     <div class="d-flex gap-2 mt-auto" style="justify-content: end;">
                         <a href="{% url 'crm_connector:attestation_progress' %}" class="btn btn-secondary">Сбросить</a>
                         <button type="submit" class="btn btn-primary">Применить</button>
@@ -181,6 +192,13 @@
                         <label for="id_excel_file" class="form-label">Выберите Excel файл с заявками:</label>
                         <input type="file" class="form-control" id="id_excel_file" name="excel_file" accept=".xlsx,.xls">
                     </div>
+                    {% for message in messages %}
+                        {% if message.extra_tags == 'succ' %}
+                            <div class="alert alert-success">{{ message }}</div>
+                        {% elif message.extra_tags == 'false' %}
+                            <div class="alert alert-danger">{{ message }}</div>
+                        {% endif %}
+                    {% endfor %}
                     <div class="d-flex justify-content-end mt-auto">
                         <input type="submit" class="btn btn-primary" value="Импортировать">
                     </div>
@@ -201,7 +219,6 @@
         {% for topic, value in topics.items %}
             {% if topic == prog %}
                 {% for index, name in value.items %}
-                
                     <th>
                         <label>
                             <input type="checkbox" class="filter-success" data-table-id="{{ prog }}" data-col-index="{{ forloop.counter0 }}">
@@ -216,84 +233,187 @@
     </thead>
     <tbody>
         {% for potok, listeners in potoki.items %}
-        <tr class="potok" id="{{ potok }}">
-            <td colspan="{{ topics|dict_get:prog|length|add:'2' }}" >
-                <label>
-                   <input type="checkbox" class="toggle-potok" data-potok-id="{{ potok }}"  checked>
-                    {{ potok }}
-                </label>
-            </td>
-        </tr>
-            {% for name, tests in listeners.items %}
-                {% if name == 'total' %}
-                <tr class="total-row">
-                <td >Общая сводка (не завершено)</td>
-                {% for educ,topic  in topics.items %}
-                    {% if educ == prog %}
-                        {% for index, name in topic.items %}
-                            <td >
-                                {{tests|dict_get:name}}
-                            </td>
-                        {% endfor %}
-                    {% endif %}
-                {% endfor %}
-                <td >
-                    {{tests.undone}}
-                    <br>
-                    <span style="font-size:smaller;opacity: 50%;">
-                        Всего: {{tests.total}}
-                    </span>
+            <tr class="potok" id="{{ potok }}">
+                <td colspan="{{ topics|dict_get:prog|length|add:'2' }}" >
+                    <label>
+                    <input type="checkbox" class="toggle-potok" data-potok-id="{{ potok }}"  checked>
+                        {{ potok }}
+                    </label>
                 </td>
-                </tr>
-                {% else %}
-                <tr id="{{ potok }}">
-                <td>
-                    <span>
-                        {{ name }}
-                    </span>
-                    <br>
-                    <span class="copy">{{ tests.email }}</span> / 
-                        {% if tests.phone %}
-                            <span class="copy">
-                               {{ tests.phone }}
-                            </span>
-                        {% else %}
-                            <span style="color: gray; font-size: smaller;">Нет телефона</span>
+            </tr>
+                {% for name, tests in listeners.items %}
+                    {% if name == 'total' %}
+                    <tr class="total-row">
+                    <td >
+                        Общая сводка (не завершено)
+                        {{ potok }}
+                    </td>
+                    {% for educ,topic  in topics.items %}
+                        {% if educ == prog %}
+                            {% for index, name in topic.items %}
+                                <td >
+                                    {{tests|dict_get:name}}
+                                </td>
+                            {% endfor %}
                         {% endif %}
-                </td>
-                {% for educ,topic  in topics.items %}
-                    {% if educ == prog %}
-                        {% for index, name in topic.items %}
-                                {% with value=tests|dict_get:name %}
-                                {% if value > 60 %}
-                                    <td class="Success">{{ value }}</td>
-                                {% elif value == 0 %}
-                                    <td class="Empty">{{ value }}</td>
-                                {% else %}
-                                    <td class="Fail">{{ value }}</td>
-                                {% endif %}
-                            {% endwith %}
-                        {% endfor %}
+                    {% endfor %}
+                    <td >
+                        {{tests.undone}}
+                        <br>
+                        <span style="font-size:smaller;opacity: 50%;">
+                            Всего: {{tests.total}}
+                        </span>
+                    </td>
+                    </tr>
+                    {% else %}
+                    <tr id="{{ potok }}">
+                    <td>
+                        <span>
+                            {{ name }}
+                        </span>
+                        <br>
+                        <span onclick="CopyText(this)" class="copy">{{ tests.email }}</span> / 
+                            {% if tests.phone %}
+                                <span onclick="CopyText(this)" class="copy">
+                                {{ tests.phone }}
+                                </span>
+                            {% else %}
+                                <span style="color: gray; font-size: smaller;">Нет телефона</span>
+                            {% endif %}
+                    </td>
+                    {% for educ,topic  in topics.items %}
+                        {% if educ == prog %}
+                            {% for index, name in topic.items %}
+                                    {% with value=tests|dict_get:name %}
+                                    {% if value > 60 %}
+                                        <td class="Success">{{ value }}</td>
+                                    {% elif value == 0 %}
+                                        <td class="Empty">{{ value }}</td>
+                                    {% else %}
+                                        <td class="Fail">{{ value }}</td>
+                                    {% endif %}
+                                {% endwith %}
+                            {% endfor %}
+                        {% endif %}
+                    {% endfor %}
+                    {% with value=tests.total %}
+                        {% if value == topics|dict_get:prog|length %}
+                            <td class="Success">{{ value }}</td>
+                        {% elif value == 0 %}
+                            <td class="Empty">{{ value }}</td>
+                        {% else %}
+                            <td class="Fail">{{ value }}</td>
+                        {% endif %}
+                    {% endwith %}
+                    </tr>
                     {% endif %}
                 {% endfor %}
-                {% with value=tests.total %}
-                    {% if value == topics|dict_get:prog|length %}
-                        <td class="Success">{{ value }}</td>
-                    {% elif value == 0 %}
-                        <td class="Empty">{{ value }}</td>
-                    {% else %}
-                        <td class="Fail">{{ value }}</td>
-                    {% endif %}
-                {% endwith %}
-                </tr>
-                {% endif %}
-            {% endfor %}
         {% endfor %}
     </tbody>
     </table>
 {% endfor %}
-<script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
 <script>
+    function CopyText(element){
+        navigator.clipboard.writeText(element.textContent)
+        element.classList.add('clicked');
+        setTimeout(() => {
+            element.classList.remove('clicked');
+        }, 800);
+    }
+    // Получаем все чекбоксы фильтров колонок
+    const filters = document.querySelectorAll('input.filter-success');
+    // Получаем все чекбоксы фильтра потоков
+    const potokCheckboxes = document.querySelectorAll('input.toggle-potok');
+
+    // Функция для получения текущих активных фильтров статусов по колонкам для каждой таблицы
+    function getActiveColumnFiltersByTable() {
+        const activeByTable = {};
+
+        filters.forEach((filter) => {
+            if (filter.checked) {
+                const tableId = 'table.'+filter.dataset.tableId; // id таблицы из data-атрибут
+                if (!activeByTable[tableId]) {
+                    activeByTable[tableId] = new Set();
+                }
+                activeByTable[tableId].add(filter.dataset.colIndex);
+            }
+        });
+
+        return activeByTable;
+    }
+
+    // Функция для проверки, скрыт ли поток по id (по чекбоксу)
+    function isPotokVisible(potokId) {
+        const potokCheckbox = Array.from(potokCheckboxes).find(cb => cb.dataset.potokId === potokId);
+        return potokCheckbox ? potokCheckbox.checked : true;
+    }
+
+    // Основная функция фильтрации строк с учётом всех фильтров
+    function applyFilters() {
+        const activeFiltersByTable = getActiveColumnFiltersByTable();
+
+        const tables = document.querySelectorAll('table.custom-dashboard');
+        tables.forEach(table => {
+            const tableId = table.id;
+            // Получаем активные фильтры именно для этой таблицы
+            const activeFilters = activeFiltersByTable[tableId] || new Set();
+
+            const rows = table.tBodies[0].rows;
+
+            for (let i = 0; i < rows.length; i++) {
+                const row = rows[i];
+
+                // Пропускаем заголовочные строки потоков
+                if (row.classList.contains('potok')) {
+                    continue;
+                }
+
+                const potokId = row.id;
+                if (potokId && !isPotokVisible(potokId)) {
+                    row.style.setProperty('display', 'none', 'important');
+                    continue;
+                }
+
+                // Если нет активных фильтров показываем все строки
+                if (activeFilters.size === 0) {
+                    row.style.removeProperty('display');
+                    continue;
+                }
+
+                let shouldShow = false;
+
+                activeFilters.forEach(colIndex => {
+                    // Индексация столбцов +1, как было в исходном коде, предполагая первый столбец без фильтра
+                    const cell = row.cells[parseInt(colIndex) + 1];
+                    if (!cell) return;
+
+                    const hasSuccess = cell.classList.contains('Success');
+                    if (!hasSuccess) {
+                        shouldShow = true;
+                    }
+                });
+
+                if (shouldShow) {
+                    row.style.removeProperty('display');
+                } else {
+                    row.style.display = 'none';
+                }
+            }
+        });
+    }
+
+    // События изменения фильтров
+    filters.forEach(filter => {
+        filter.addEventListener('change', () => {
+            applyFilters();
+        });
+    });
+
+    potokCheckboxes.forEach(checkbox => {
+        checkbox.addEventListener('change', () => {
+            applyFilters();
+        });
+    });
     function exportTableToXLSX(ChoosenTable) {
     var table = document.getElementById('table.' + ChoosenTable);
     if (!table) {
@@ -379,117 +499,8 @@
     link.click();
     document.body.removeChild(link);
 }
-    const copyspan = document.querySelectorAll('.copy');
-    copyspan.forEach(span => {
-        span.addEventListener('click', () => {
-            navigator.clipboard.writeText(span.textContent)
-            span.classList.add('clicked');
-            setTimeout(() => {
-                span.classList.remove('clicked');
-            }, 800);
-        });
-    });
-
-    document.addEventListener('DOMContentLoaded', () => {
-        // Получаем все чекбоксы фильтров колонок
-        const filters = document.querySelectorAll('input.filter-success');
-        // Получаем все чекбоксы фильтра потоков
-        const potokCheckboxes = document.querySelectorAll('input.toggle-potok');
-
-        // Функция для получения текущих активных фильтров статусов по колонкам для каждой таблицы
-        function getActiveColumnFiltersByTable() {
-            const activeByTable = {};
-
-            filters.forEach((filter) => {
-                if (filter.checked) {
-                    const tableId = 'table.'+filter.dataset.tableId; // id таблицы из data-атрибут
-                    if (!activeByTable[tableId]) {
-                        activeByTable[tableId] = new Set();
-                    }
-                    activeByTable[tableId].add(filter.dataset.colIndex);
-                }
-            });
-
-            return activeByTable;
-        }
-
-        // Функция для проверки, скрыт ли поток по id (по чекбоксу)
-        function isPotokVisible(potokId) {
-            const potokCheckbox = Array.from(potokCheckboxes).find(cb => cb.dataset.potokId === potokId);
-            return potokCheckbox ? potokCheckbox.checked : true;
-        }
-
-        // Основная функция фильтрации строк с учётом всех фильтров
-        function applyFilters() {
-            const activeFiltersByTable = getActiveColumnFiltersByTable();
-
-            const tables = document.querySelectorAll('table.custom-dashboard');
-            tables.forEach(table => {
-                const tableId = table.id;
-                // Получаем активные фильтры именно для этой таблицы
-                const activeFilters = activeFiltersByTable[tableId] || new Set();
-
-                const rows = table.tBodies[0].rows;
-
-                for (let i = 0; i < rows.length; i++) {
-                    const row = rows[i];
-
-                    // Пропускаем заголовочные строки потоков
-                    if (row.classList.contains('potok')) {
-                        continue;
-                    }
-
-                    const potokId = row.id;
-                    if (potokId && !isPotokVisible(potokId)) {
-                        row.style.setProperty('display', 'none', 'important');
-                        continue;
-                    }
-
-                    // Если нет активных фильтров показываем все строки
-                    if (activeFilters.size === 0) {
-                        row.style.removeProperty('display');
-                        continue;
-                    }
-
-                    let shouldShow = false;
-
-                    activeFilters.forEach(colIndex => {
-                        // Индексация столбцов +1, как было в исходном коде, предполагая первый столбец без фильтра
-                        const cell = row.cells[parseInt(colIndex) + 1];
-                        if (!cell) return;
-
-                        const hasSuccess = cell.classList.contains('Success');
-                        if (!hasSuccess) {
-                            shouldShow = true;
-                        }
-                    });
-
-                    if (shouldShow) {
-                        row.style.removeProperty('display');
-                    } else {
-                        row.style.display = 'none';
-                    }
-                }
-            });
-        }
-
-        // События изменения фильтров
-        filters.forEach(filter => {
-            filter.addEventListener('change', () => {
-                applyFilters();
-            });
-        });
-
-        potokCheckboxes.forEach(checkbox => {
-            checkbox.addEventListener('change', () => {
-                applyFilters();
-            });
-        });
-
-        // Первоначальный запуск фильтрации
-        applyFilters();
-
-    })
-    
+// Первоначальный запуск фильтрации
+applyFilters();
 </script>
+<script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
 {% endblock %}
