@@ -1506,7 +1506,10 @@ def attestation_progress(request):
                 try:
                     app = AtlasApplication.objects.filter(email=email).first()
                     try:
-                        app.program = app.raw_data.get("Программа обучения")
+                        if app.raw_data.get("Программа обучения"):
+                            app.program = app.raw_data.get("Программа обучения")
+                        else:
+                            app.program = program
                     except:
                         app.program = program
                     if app.program == program:
@@ -1536,11 +1539,23 @@ def attestation_progress(request):
 
     selected_program = request.GET.get('program', '')
     selected_potok = request.GET.get('potok', '')
+    hide_ended_potok = request.GET.get('hide_ended_potok', '')
 
     if selected_program:
         applications = applications.filter(program=selected_program)
     if selected_potok:
         applications = applications.filter(potok=selected_potok)
+    if hide_ended_potok:
+        for app in applications:
+            try:
+                end_date_str = app.potok.split('-')[-1]
+                end_date = datetime.strptime(end_date_str, "%d.%m.%Y")
+                today = datetime.today()
+                print(f"{end_date} / {today} / {end_date <= today}")
+                if end_date <= today:
+                    applications = applications.exclude(application_id = app.application_id)
+            except:
+                applications = applications.exclude(application_id = app.application_id)
 
     all_programs = sorted(set(app.program for app in AtlasApplication.objects.all() if app.program))
     all_potoks = sorted(set(app.potok for app in AtlasApplication.objects.all() if app.potok and app.potok != "nan"))
@@ -1553,18 +1568,21 @@ def attestation_progress(request):
         try:
             program = app.program
             if program in education_products:
-                try:
-                    potok = f"{app.potok} Последняя синхронизация: {app.last_sync.strftime("%H:%M %d/%m/%Y")}"
-                except:
+                if app.potok:
                     try:
-                        start = app.raw_data.get("Начало периода обучения")
-                        end = app.raw_data.get("Окончание периода обучения")
-                        if start != None and end != None:
-                            potok = f"{start}-{end}"
-                        else:
-                            potok = "Поток неопределен"
+                        potok = f"{app.potok} Последняя синхронизация: {app.last_sync.strftime("%H:%M %d/%m/%Y")}"
                     except:
-                        potok = "Поток неопределен"
+                        try:
+                            start = app.raw_data.get("Начало периода обучения")
+                            end = app.raw_data.get("Окончание периода обучения")
+                            if start != None and end != None:
+                                potok = f"{start}-{end}"
+                            else:
+                                potok = "Поток неопределен"
+                        except:
+                            potok = "Поток неопределен"
+                else:
+                    potok = "Поток неопределен"
                 full_name = app.full_name
                 education_progress = app.education_progress
                 result.setdefault(program, {})
@@ -1601,9 +1619,7 @@ def attestation_progress(request):
     'all_programs': all_programs,
     'all_potoks': all_potoks,
     'selected_program': selected_program,
-    'selected_potok': selected_potok,
-    'potoks_end_date': potoks_end_date,
-    'today': timezone.now()
+    'selected_potok': selected_potok
     }
-    # return JsonResponse({'result': all_potoks})
+    # return JsonResponse({'result': context})
     return render(request, 'crm_connector/attestation-progress.html', context)
