@@ -3,6 +3,19 @@
 {% block content %}
 {% block extra_css %}
 <style>
+    thead tr:first-child th:first-child {
+    border-top-left-radius: 20px;
+    }
+    thead tr:first-child th:last-child {
+    border-top-right-radius: 20px;
+    }
+    tbody tr:last-child td:first-child {
+    border-bottom-left-radius: 20px;
+    }
+    tbody tr:last-child td:last-child {
+    border-bottom-right-radius: 20px;
+    }
+
     .messages{
         display: none;
     }
@@ -70,25 +83,21 @@
         background-color: #fff3cd !important;
         color: rgba(0, 0, 0, 0.774);
     }
-    .total-row:hover{
-        background-color: #ffeaa7 !important; 
-    }
 
     table.custom-dashboard th:first-child{
         width: 18%;
     }
 
     table.custom-dashboard {
+    border: none;
     margin-bottom: 25px;
     width: 100%;
-    border-collapse: collapse;
     table-layout: fixed;
     word-wrap: break-word;
     font-size: 0.9rem;
-}
+    }
 
     table.custom-dashboard th, table.custom-dashboard td {
-    border: 1px solid #ddd;
     padding: 4px;
     text-align: center;
     vertical-align: middle;
@@ -107,7 +116,7 @@
     }
 
     table.custom-dashboard tr:hover {
-    background-color: #f1f1f1;
+        background-color: #f1f1f1;
     }
 
     table.custom-dashboard td {
@@ -246,7 +255,6 @@
                     <tr class="total-row">
                     <td >
                         Общая сводка (не завершено)
-                        {{ potok }}
                     </td>
                     {% for educ,topic  in topics.items %}
                         {% if educ == prog %}

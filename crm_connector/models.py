@@ -358,6 +358,7 @@ class AtlasApplication(models.Model):
     last_active = models.DateTimeField(null=True, blank=True, verbose_name="Последняя активность")
     potok = models.CharField(max_length=255, blank=True, null=True, verbose_name="Поток")
     education_progress = models.CharField(max_length=255, null=True, blank=True, verbose_name="Прогресс")
+    JSON_ed_progress = models.JSONField(max_length=1024, null=True, blank=True, verbose_name="Прогресс JSON")
     
     # Связь со сделкой в Bitrix24
     deal = models.ForeignKey(Deal, on_delete=models.SET_NULL, null=True, blank=True, 

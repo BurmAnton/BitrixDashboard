@@ -18,5 +18,6 @@ urlpatterns = [
     path('history/<str:model>/<int:pk>/', ObjectHistoryView.as_view(), name='object_history'),
     path('import-not-atlas/', views.import_not_atlas, name="import_not_atlas"),
     path('attestation-progress', views.attestation_progress, name="attestation_progress"),
-    path('lead-dashboard', views.lead_dashboard, name="lead-dashboard")
+    path('lead-dashboard', views.lead_dashboard, name="lead-dashboard"),
+    path('attestation-stats', views.attestation_stats, name="attestation-stats")
 ]

@@ -1478,23 +1478,29 @@ def attestation_progress(request):
                 potok = row.iloc[7]
                 col_index = 11
                 test_count = 0
-                progress = ''
-                razdel = 1
+                progress = {}
+                progress.setdefault('attestation', '')
+                progress.setdefault('statistic', {})
                 while col_index + 4 < len(row):
                     header_value = str(header_row.iloc[col_index]).lower()
+                    topic_theory = row.iloc[col_index]       # теория (не нужна)
+                    topic_testing = row.iloc[col_index + 1]  # тестирование (надо)
+                    topic_practice = row.iloc[col_index + 2] # практика (не нужна)
+                    topic_start = row.iloc[col_index + 3]    # дата старта (не нужна)
+                    topic_end = row.iloc[col_index + 4]      # дата окончания (не нужна)
                     if "аттестация" in header_value:
-                        topic_theory = row.iloc[col_index]       # теория (не нужна)
-                        topic_testing = row.iloc[col_index + 1]  # тестирование (надо)
-                        topic_practice = row.iloc[col_index + 2] # практика (не нужна)
-                        topic_start = row.iloc[col_index + 3]    # дата старта (не нужна)
-                        topic_end = row.iloc[col_index + 4]      # дата окончания (не нужна)
-                        if pd.notna(topic_testing) and str(topic_testing).strip() != '':
-                            progress += f"{topic_testing},"
-                            if topic_testing > 60:
-                                test_count +=1
-                            razdel +=1
+                        progress['attestation'] += f"{topic_testing},"
+                        if topic_testing > 60:
+                            test_count +=1
+                    progress['statistic'].setdefault(header_value[:3], {})
+                    if str(topic_theory) != 'nan':
+                        progress['statistic'][header_value[:3]].setdefault('theory', str(topic_theory))
+                    if str(topic_practice) != 'nan':
+                        progress['statistic'][header_value[:3]].setdefault('practice', str(topic_practice))
+                    if str(topic_testing) != 'nan':
+                        progress['statistic'][header_value[:3]].setdefault('test', str(topic_testing))
                     col_index += 5
-                progress += f"{test_count}"
+                progress['attestation'] += f"{test_count}"
 
                 if isinstance(last_active, str):
                     last_active = datetime.strptime(last_active, "%d.%m.%Y")
@@ -1520,7 +1526,9 @@ def attestation_progress(request):
                             listeners_updated +=1
                         else:
                             listeners_created +=1
-                        app.education_progress = progress
+                        print(email)
+                        print(progress)
+                        app.JSON_ed_progress = progress
                         app.save()
                 except:
                     failed_to_find +=1
@@ -1584,7 +1592,7 @@ def attestation_progress(request):
                 else:
                     potok = "Поток неопределен"
                 full_name = app.full_name
-                education_progress = app.education_progress
+                education_progress = app.JSON_ed_progress
                 result.setdefault(program, {})
                 result[program].setdefault(potok, {})
                 result[program][potok].setdefault('total', {topic: 0 for topic in education_products[program].values()})
@@ -1599,7 +1607,7 @@ def attestation_progress(request):
                     result[program] = {}
                 if potok not in result[program]:
                     result[program][potok] = {}
-                prog = education_progress.split(",")
+                prog = education_progress["attestation"].split(",")
                 for topic in education_products[program].values():
                     result[program][potok][full_name][topic] = int(prog[index])
                     if (prog[index] == '0'):
@@ -1610,7 +1618,6 @@ def attestation_progress(request):
                     result[program][potok]['total']['undone'] += 1
                 result[program][potok]['total']['total'] += 1
         except Exception as e:
-            print(f"Ошибка при формировании таблицы: {e}")
             pass
     context = {
     'result': result,
@@ -1623,3 +1630,148 @@ def attestation_progress(request):
     }
     # return JsonResponse({'result': context})
     return render(request, 'crm_connector/attestation-progress.html', context)
+
+def attestation_stats(request):
+    ListerensData = AtlasApplication.objects.filter(program = "Оператор беспилотных авиационных систем (с максимальной взлетной массой 30 килограммов и менее)")
+    summary = {}
+    ListOfPrograms = AtlasProgram.objects.all()
+    education_products = {}
+    for program in ListOfPrograms:
+        education_products.setdefault(program.title, program.section)
+    context = {}
+    result = {}
+    if request.method == 'POST':
+        form = AtlasLeadImportForm(request.POST, request.FILES)
+        if form.is_valid():
+            failed_to_find = 0
+            file = form.cleaned_data['excel_file']
+            # Читаем Excel с пропуском первых 2 строк (номеруем с 0)
+            df = pd.read_excel(file, header=None, engine='openpyxl')
+            header_row = df.iloc[0]
+            listeners_updated = 0
+            listeners_created = 0
+            for _, row in df.iterrows():
+                if _ < 2:  # пропускаем первые 3 строки
+                    continue
+                name = row.iloc[1]
+                program = row.iloc[0]
+                email = row.iloc[2]
+                last_active = row.iloc[5]
+                potok = row.iloc[7]
+                col_index = 11
+                test_count = 0
+                progress = {}
+                progress.setdefault('attestation', '')
+                progress.setdefault('statistic', {})
+                while col_index + 4 < len(row):
+                    header_value = str(header_row.iloc[col_index]).lower()
+                    topic_theory = row.iloc[col_index]       # теория (не нужна)
+                    topic_testing = row.iloc[col_index + 1]  # тестирование (надо)
+                    topic_practice = row.iloc[col_index + 2] # практика (не нужна)
+                    topic_start = row.iloc[col_index + 3]    # дата старта (не нужна)
+                    topic_end = row.iloc[col_index + 4]      # дата окончания (не нужна)
+                    if "аттестация" in header_value:
+                        progress['attestation'] += f"{topic_testing},"
+                        if topic_testing > 60:
+                            test_count +=1
+                    progress['statistic'].setdefault(header_value[:3], {})
+                    if str(topic_theory) != 'nan':
+                        progress['statistic'][header_value[:3]].setdefault('theory', str(topic_theory))
+                    if str(topic_practice) != 'nan':
+                        progress['statistic'][header_value[:3]].setdefault('practice', str(topic_practice))
+                    if str(topic_testing) != 'nan':
+                        progress['statistic'][header_value[:3]].setdefault('test', str(topic_testing))
+                    col_index += 5
+                progress['attestation'] += f"{test_count}"
+
+                if isinstance(last_active, str):
+                    last_active = datetime.strptime(last_active, "%d.%m.%Y")
+                elif isinstance(last_active, pd.Timestamp):
+                    last_active = last_active.to_pydatetime()
+                if isinstance(last_active, str):
+                    dt = datetime.strptime(last_active, "%d.%m.%Y")
+                    last_active = timezone.make_aware(dt, timezone.get_current_timezone())
+                try:
+                    app = AtlasApplication.objects.filter(email=email).first()
+                    try:
+                        if app.raw_data.get("Программа обучения"):
+                            app.program = app.raw_data.get("Программа обучения")
+                        else:
+                            app.program = program
+                    except:
+                        app.program = program
+                    if app.program == program:
+                        app.last_sync = timezone.now()
+                        app.potok = potok
+                        app.last_active = last_active
+                        if app.education_progress:
+                            listeners_updated +=1
+                        else:
+                            listeners_created +=1
+                        app.JSON_ed_progress = progress
+                        app.save()
+                except:
+                    failed_to_find +=1
+                    pass
+            messages.error(request,f'Не удалось найти: {failed_to_find}', extra_tags='false')
+            messages.success(request, f'Создано: {listeners_created}', extra_tags='succ')
+            messages.success(request, f'Обновлено: {listeners_updated}', extra_tags='succ')
+                            
+    
+    else:
+        form = AtlasLeadImportForm()
+        context = {
+            'form': form
+        }
+
+    for listener in ListerensData:
+        try:
+            data = listener.JSON_ed_progress["statistic"]
+            program = listener.program
+            potok = listener.potok
+            topics = AtlasProgram.objects.get(title = listener.program).topics
+            summary.setdefault(program, {})
+            summary[program].setdefault("topics", {topic:{"test":{"done":0, "total":0,}, "theory":{"done":0, "total":0,}, "practice": {"done":0, "total":0,}, "total": {"done":0,"total":0}} for topic in topics.values()})
+            summary[program].setdefault(potok, {})
+            summary[program][potok].setdefault("listeners", 0)
+            summary[program][potok]["listeners"] += 1
+            summary[program][potok].setdefault("theory",{"done":0, "total":0, "percent":0 })
+            summary[program][potok].setdefault("test",{"done":0, "total":0, "percent":0 })
+            summary[program][potok].setdefault("practice",{"done":0, "total":0, "percent":0 })
+            for topic in data:
+                if "test" in data[topic]:
+                    summary[program] ["topics"][topics[str(topic)]]["test"]["total"] += 1
+                    summary[program] ["topics"][topics[str(topic)]]["total"]["total"] += 1
+                    summary[program][potok]["test"]["total"] += 1 
+                    if int(data[topic]["test"]) > 60:
+                        summary[program] ["topics"][topics[str(topic)]]["test"]["done"] += 1
+                        summary[program] ["topics"][topics[str(topic)]]["total"]["done"] += 1
+                        summary[program][potok]["test"]["done"] += 1
+                    summary[program][potok]["test"]["percent"] = round((summary[program][potok]["test"]["done"] / summary[program][potok]["test"]["total"]) * 100 )
+                if "theory" in data[topic]:
+                    summary[program] ["topics"][topics[str(topic)]]["theory"]["total"] += 1
+                    summary[program] ["topics"][topics[str(topic)]]["total"]["total"] += 1
+                    summary[program][potok]["theory"]["total"] += 1 
+                    if int(data[topic]["theory"]) > 60:
+                        summary[program] ["topics"][topics[str(topic)]]["theory"]["done"] += 1
+                        summary[program] ["topics"][topics[str(topic)]]["total"]["done"] += 1
+                        summary[program][potok]["theory"]["done"] += 1
+                    summary[program][potok]["theory"]["percent"] = round((summary[program][potok]["theory"]["done"] / summary[program][potok]["theory"]["total"]) * 100 )
+                if "practice" in data[topic]:
+                    summary[program] ["topics"][topics[str(topic)]]["practice"]["total"] += 1
+                    summary[program] ["topics"][topics[str(topic)]]["total"]["total"] += 1
+                    summary[program][potok]["practice"]["total"] += 1 
+                    if int(data[topic]["practice"]) > 60:
+                        summary[program] ["topics"][topics[str(topic)]]["practice"]["done"] += 1
+                        summary[program] ["topics"][topics[str(topic)]]["total"]["done"] += 1
+                        summary[program][potok]["practice"]["done"] += 1
+                    summary[program][potok]["practice"]["percent"] = round((summary[program][potok]["practice"]["done"] / summary[program][potok]["practice"]["total"]) * 100 )
+        except Exception as e:
+            # pass
+            print(f"Ошибка 1661: {e}")
+    context = {
+        "statistic": summary,
+        'form': form
+    }
+    # return JsonResponse({"statistic": summary})
+    return render(request, 'crm_connector/attestation-stats.html', context)

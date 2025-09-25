@@ -156,11 +156,11 @@ class AtlasApplicationAdmin(SimpleHistoryAdmin):
     list_display = ['application_id', 'full_name', 'phone', 'email', 'region', 'deal_link', 'is_synced', 'last_sync', 'history_link']
     list_filter = ['is_synced', 'region', 'created_at', 'last_sync']
     search_fields = ['application_id', 'full_name', 'phone', 'email']
-    readonly_fields = ['created_at', 'updated_at', 'last_sync', 'raw_data_formatted', 'history_link']
+    readonly_fields = ['created_at', 'updated_at', 'last_sync', 'raw_data_formatted', 'history_link', 'JSON_ed_progress']
     
     fieldsets = (
         ('Основная информация', {
-            'fields': ('application_id', 'full_name', 'phone', 'email', 'region')
+            'fields': ('application_id', 'full_name', 'phone', 'email', 'region', 'JSON_ed_progress')
         }),
         ('Связь с Битрикс24', {
             'fields': ('deal', 'is_synced', 'sync_errors')
