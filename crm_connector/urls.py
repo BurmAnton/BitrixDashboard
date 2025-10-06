@@ -19,5 +19,6 @@ urlpatterns = [
     path('import-not-atlas/', views.import_not_atlas, name="import_not_atlas"),
     path('attestation-progress', views.attestation_progress, name="attestation_progress"),
     path('lead-dashboard', views.lead_dashboard, name="lead-dashboard"),
-    path('attestation-stats', views.attestation_stats, name="attestation-stats")
+    path('attestation-stats', views.attestation_stats, name="attestation-stats"),
+    path('contract-generation', views.contract_generation, name="contract_generation")
 ]

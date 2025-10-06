@@ -1,5 +1,5 @@
 from django.shortcuts import render, redirect
-from django.http import HttpResponseRedirect, JsonResponse, Http404
+from django.http import HttpResponseRedirect, JsonResponse, Http404, FileResponse
 from django.conf import settings
 from django.urls import reverse
 from django.utils import timezone
@@ -14,8 +14,9 @@ from django.contrib import messages
 import logging
 import re
 import pandas as pd
-from .forms import ExcelImportForm, AtlasLeadImportForm, LeadImportForm
+from .forms import ExcelImportForm, AtlasLeadImportForm, LeadImportForm, DocumentForm
 from datetime import datetime, timedelta
+from docxtpl import DocxTemplate
 
 logger = logging.getLogger(__name__)
 
@@ -1731,7 +1732,7 @@ def attestation_stats(request):
             potok = listener.potok
             topics = AtlasProgram.objects.get(title = listener.program).topics
             summary.setdefault(program, {})
-            summary[program].setdefault("topics", {topic:{"test":{"done":0, "total":0,}, "theory":{"done":0, "total":0,}, "practice": {"done":0, "total":0,}, "total": {"done":0,"total":0}} for topic in topics.values()})
+            summary[program].setdefault("topics", {topic:{"test":{"done":0, "total":0}, "theory":{"done":0, "total":0}, "practice": {"done":0, "total":0}, "total": {"done":0,"total":0}} for topic in topics.values()})
             summary[program].setdefault(potok, {})
             summary[program][potok].setdefault("listeners", 0)
             summary[program][potok]["listeners"] += 1
@@ -1748,6 +1749,7 @@ def attestation_stats(request):
                         summary[program] ["topics"][topics[str(topic)]]["total"]["done"] += 1
                         summary[program][potok]["test"]["done"] += 1
                     summary[program][potok]["test"]["percent"] = round((summary[program][potok]["test"]["done"] / summary[program][potok]["test"]["total"]) * 100 )
+                    summary[program]["topics"][topics[str(topic)]]["test"]["percent"] = round((summary[program] ["topics"][topics[str(topic)]]["test"]["done"] / summary[program] ["topics"][topics[str(topic)]]["test"]["total"]) * 100 )
                 if "theory" in data[topic]:
                     summary[program] ["topics"][topics[str(topic)]]["theory"]["total"] += 1
                     summary[program] ["topics"][topics[str(topic)]]["total"]["total"] += 1
@@ -1757,6 +1759,8 @@ def attestation_stats(request):
                         summary[program] ["topics"][topics[str(topic)]]["total"]["done"] += 1
                         summary[program][potok]["theory"]["done"] += 1
                     summary[program][potok]["theory"]["percent"] = round((summary[program][potok]["theory"]["done"] / summary[program][potok]["theory"]["total"]) * 100 )
+                    summary[program]["topics"][topics[str(topic)]]["theory"]["percent"] = round((summary[program] ["topics"][topics[str(topic)]]["theory"]["done"] / summary[program] ["topics"][topics[str(topic)]]["theory"]["total"]) * 100 )
+
                 if "practice" in data[topic]:
                     summary[program] ["topics"][topics[str(topic)]]["practice"]["total"] += 1
                     summary[program] ["topics"][topics[str(topic)]]["total"]["total"] += 1
@@ -1766,6 +1770,9 @@ def attestation_stats(request):
                         summary[program] ["topics"][topics[str(topic)]]["total"]["done"] += 1
                         summary[program][potok]["practice"]["done"] += 1
                     summary[program][potok]["practice"]["percent"] = round((summary[program][potok]["practice"]["done"] / summary[program][potok]["practice"]["total"]) * 100 )
+                    summary[program]["topics"][topics[str(topic)]]["practice"]["percent"] = round((summary[program] ["topics"][topics[str(topic)]]["practice"]["done"] / summary[program] ["topics"][topics[str(topic)]]["practice"]["total"]) * 100 )
+                summary[program]["topics"][topics[str(topic)]]["total"]["percent"] = round((summary[program] ["topics"][topics[str(topic)]]["total"]["done"] / summary[program] ["topics"][topics[str(topic)]]["total"]["total"]) * 100 )
+
         except Exception as e:
             # pass
             print(f"Ошибка 1661: {e}")
@@ -1775,3 +1782,39 @@ def attestation_stats(request):
     }
     # return JsonResponse({"statistic": summary})
     return render(request, 'crm_connector/attestation-stats.html', context)
+
+
+def contract_generation(request):
+    print(settings.DOCX_TEMPLATE_PATH)
+    import tempfile 
+    months = {
+        1: "января", 2: "февраля", 3: "марта", 4: "апреля", 5: "мая", 6: "июня", 7: "июля", 8: "августа", 9: "сентября", 10: "октября", 11: "ноября", 12: "декабря"
+    }
+    if request.method == "POST":
+        form = DocumentForm(request.POST)
+        if form.is_valid():
+            context = form.cleaned_data
+            # return JsonResponse({"result": context })
+            doc = DocxTemplate(settings.DOCX_TEMPLATE_PATH + f"/template_{context["template"]}.docx")
+            print(context["snils"])
+            listener = AtlasApplication.objects.filter(raw_data__СНИЛС=int(context["snils"])).first()
+            listener.postal_code = context["postal_code"]
+            listener.address  = context["address"]
+            context["fio"] = listener.full_name
+            context["passport_series_number"] = str(listener.raw_data["Серия паспорта"]) + " " + str(listener.raw_data["Номер паспорта"])
+            context["passport_issuer"] = listener.raw_data["Кем выдан паспорт"]
+            context["phone"] = listener.phone
+            context["email"] = listener.email
+            context["today_date"] = datetime.today().strftime("%d")
+            context["today_month"] = months[datetime.today().month]
+            listener.save()
+            doc.render(context)
+            tmp_docx = tempfile.NamedTemporaryFile(delete=False, suffix=".docx")
+            doc.save(tmp_docx.name)
+            tmp_docx.seek(0)
+            response = FileResponse(open(tmp_docx.name, "rb"), as_attachment=True, filename=f"{context["template"]}_{context["fio"]}_{datetime.today().strftime("%Y-%m-%d %H:%M:%S")}.docx")
+            return response
+    else:
+        form = DocumentForm()
+    
+    return render(request, "crm_connector/contract_generation.html", {"form": form})

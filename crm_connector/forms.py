@@ -100,3 +100,34 @@ class StageCheckForm(forms.Form):
         required=False,
         widget=forms.TextInput(attrs={'placeholder': 'Например: Допущен'})
     ) 
+
+
+class DocumentForm(forms.Form):
+    template = forms.ChoiceField(
+        label="Шаблон", 
+        choices=[
+            ('DPO', 'ДПО'),
+            ('PO', 'ПО')
+        ],
+        widget=forms.Select(attrs={'class': 'form-control'})
+    )
+    snils = forms.CharField(
+        label="СНИЛС",
+        max_length=11,
+        widget=forms.TextInput(attrs={'placeholder': '123456789',"inputmode": "numeric", 'class': 'form-control'})
+    )
+    postal_code = forms.CharField(
+        label="Почтовый индекс",
+        max_length=6,
+        widget=forms.TextInput(attrs={'placeholder': '445051',"inputmode": "numeric", 'class': 'form-control'})
+    )
+    region = forms.CharField(
+        label="Регион", 
+        max_length=255,
+        widget=forms.TextInput(attrs={'placeholder': 'Самарская область', 'class': 'form-control'})
+    )
+    address  = forms.CharField(
+        label="Адрес",
+        max_length=255,
+        widget=forms.TextInput(attrs={'placeholder': 'Населенный пункт, улица/другое, дом/другое, корпус/другое, квартира/другое', 'class': 'form-control'})
+    )

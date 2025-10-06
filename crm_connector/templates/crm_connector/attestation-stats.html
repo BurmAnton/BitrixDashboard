@@ -33,9 +33,9 @@
         background-color: lightgray;
         border-radius: 12px;
         padding: 20px;
-        display: flex;         /* включаем flexbox для родителя */
-        flex-wrap: wrap;       /* разрешаем перенос элементов на новую строку при нехватке места */
-        justify-content: center; /* по желанию центрируем дочерние элементы по горизонтали */
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: center; 
         gap: 10px; 
     }
 </style>
@@ -119,23 +119,35 @@
                         <tr>
                             <td>{{topic}}</td>
                             
-                            <td>
+                            <td >
                                 {% if material.theory.total != 0 %}
-                                <progress value="{{material.theory.done}}" max="{{material.theory.total}}"></progress>
+                                <div class="progress" style="height: 20px;">
+                                    <div class="progress-bar" role="progressbar" style="width: {{ material.theory.percent }}%">{{ material.theory.percent }}%</div>
+                                </div>
+                                {{material.theory.done}}/{{material.theory.total}}
                                 {% endif %}
                             </td>
-                            <td>
+                            <td >
                                 {% if material.practice.total != 0 %}
-                                <progress value="{{material.practice.done}}" max="{{material.practice.total}}"></progress>
+                                <div class="progress" style="height: 20px;">
+                                    <div class="progress-bar bg-warning" role="progressbar" style="width: {{ material.practice.percent }}%">{{ material.practice.percent }}%</div>
+                                </div>
+                                {{material.practice.done}}/{{material.practice.total}}
                                 {% endif %}
                             </td>
                             <td>
                                 {% if material.test.total != 0 %}
-                                <progress value="{{material.test.done}}" max="{{material.test.total}}"></progress>
+                                <div class="progress" style="height: 20px;">
+                                    <div class="progress-bar bg-success" role="progressbar" style="width: {{ material.test.percent }}%">{{ material.test.percent }}%</div>
+                                </div>
+                                {{material.test.done}}/{{material.test.total}}
                                 {% endif %}
                             </td>
                             <td>
-                                <progress value="{{material.total.done}}" max="{{material.total.total}}"></progress>
+                                <div class="progress" style="height: 20px;">
+                                    <div class="progress-bar bg-success" role="progressbar" style="width: {{ material.total.percent }}%">{{ material.total.percent }}%</div>
+                                </div>
+                                {{material.total.done}}/{{material.total.total}}
                             </td>
                         </tr>
                     {% endfor %}

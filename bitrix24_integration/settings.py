@@ -175,3 +175,5 @@ LOGIN_URL = '/admin/login/'  # Перенаправляем на стандар�
 LOGIN_REDIRECT_URL = '/crm/pipelines/'  # После входа перенаправляем обратно на страницу с воронками 
 
 DATA_UPLOAD_MAX_NUMBER_FIELDS = 100000
+
+DOCX_TEMPLATE_PATH = os.path.join(BASE_DIR, "templates", "docx")
