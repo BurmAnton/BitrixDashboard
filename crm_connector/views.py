@@ -8,7 +8,7 @@ import openpyxl
 from .tasks import sync_leads, sync_deals, sync_contacts, sync_pipelines_task
 from .bitrix24_api import Bitrix24API
 from django.views.decorators.csrf import csrf_protect
-from .models import Lead, Deal, Contact, Pipeline, Stage, AtlasApplication, StageRule, Company, AtlasProgram
+from .models import Lead, Deal, Contact, Pipeline, Stage, AtlasApplication, StageRule, Company, AtlasProgram, REGION_CHOICES
 from django.db.models import Count, Sum, F, ExpressionWrapper, Avg, DurationField, Q
 from django.contrib import messages
 import logging
@@ -1785,7 +1785,6 @@ def attestation_stats(request):
 
 
 def contract_generation(request):
-    print(settings.DOCX_TEMPLATE_PATH)
     import tempfile 
     months = {
         1: "января", 2: "февраля", 3: "марта", 4: "апреля", 5: "мая", 6: "июня", 7: "июля", 8: "августа", 9: "сентября", 10: "октября", 11: "ноября", 12: "декабря"
@@ -1793,27 +1792,33 @@ def contract_generation(request):
     if request.method == "POST":
         form = DocumentForm(request.POST)
         if form.is_valid():
-            context = form.cleaned_data
-            # return JsonResponse({"result": context })
-            doc = DocxTemplate(settings.DOCX_TEMPLATE_PATH + f"/template_{context["template"]}.docx")
-            print(context["snils"])
-            listener = AtlasApplication.objects.filter(raw_data__СНИЛС=int(context["snils"])).first()
-            listener.postal_code = context["postal_code"]
-            listener.address  = context["address"]
-            context["fio"] = listener.full_name
-            context["passport_series_number"] = str(listener.raw_data["Серия паспорта"]) + " " + str(listener.raw_data["Номер паспорта"])
-            context["passport_issuer"] = listener.raw_data["Кем выдан паспорт"]
-            context["phone"] = listener.phone
-            context["email"] = listener.email
-            context["today_date"] = datetime.today().strftime("%d")
-            context["today_month"] = months[datetime.today().month]
-            listener.save()
-            doc.render(context)
-            tmp_docx = tempfile.NamedTemporaryFile(delete=False, suffix=".docx")
-            doc.save(tmp_docx.name)
-            tmp_docx.seek(0)
-            response = FileResponse(open(tmp_docx.name, "rb"), as_attachment=True, filename=f"{context["template"]}_{context["fio"]}_{datetime.today().strftime("%Y-%m-%d %H:%M:%S")}.docx")
-            return response
+            try:
+                context = form.cleaned_data
+                doc = DocxTemplate(settings.DOCX_TEMPLATE_PATH + f"/template_{context["template"]}.docx")
+                listener = AtlasApplication.objects.filter(raw_data__СНИЛС=int(context["snils"])).first()
+                listener.postal_code = context["postal_code"]
+                listener.address  = context["address"]
+                for i,a in REGION_CHOICES:
+                    if context["region"] in i:
+                        context["region"] = a
+                context["fio"] = listener.full_name
+                context["passport_series_number"] = str(listener.raw_data["Серия паспорта"]) + " " + str(listener.raw_data["Номер паспорта"])
+                context["passport_issuer"] = listener.raw_data["Кем выдан паспорт"]
+                context["phone"] = listener.phone
+                context["email"] = listener.email
+                context["today_date"] = datetime.today().strftime("%d")
+                context["today_month"] = months[datetime.today().month]
+                listener.save()
+                doc.render(context)
+                tmp_docx = tempfile.NamedTemporaryFile(delete=False, suffix=".docx")
+                doc.save(tmp_docx.name)
+                tmp_docx.seek(0)
+                response = FileResponse(open(tmp_docx.name, "rb"), as_attachment=True, filename=f"{context["template"]}_{context["fio"]}_{datetime.today().strftime("%Y-%m-%d %H:%M:%S")}.docx")
+                return response
+            except AttributeError:
+                messages.error(request,"Не удалось найти СНИЛС")
+            except Exception as e:
+                messages.error(request,f"Не удалось создать док: {e}")
     else:
         form = DocumentForm()
     

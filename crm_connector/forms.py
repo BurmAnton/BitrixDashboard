@@ -1,6 +1,7 @@
 from django import forms
-from .models import Deal
+from .models import Deal, REGION_CHOICES
 from .bitrix24_api import Bitrix24API
+from django.core.validators import MinValueValidator, MaxValueValidator
 
 class ExcelImportForm(forms.Form):
     excel_file = forms.FileField(
@@ -111,20 +112,26 @@ class DocumentForm(forms.Form):
         ],
         widget=forms.Select(attrs={'class': 'form-control'})
     )
-    snils = forms.CharField(
+    snils = forms.IntegerField(
         label="СНИЛС",
-        max_length=11,
-        widget=forms.TextInput(attrs={'placeholder': '123456789',"inputmode": "numeric", 'class': 'form-control'})
+        validators=[
+            MinValueValidator(10000000000, message="Не верный формат СНИЛС"),
+            MaxValueValidator(99999999999, message="Не верный формат СНИЛС")
+        ],
+        widget=forms.TextInput(attrs={'placeholder': '123456789',"inputmode": "numeric", 'class': 'form-control', "maxlength": 11})
     )
-    postal_code = forms.CharField(
+    postal_code = forms.IntegerField(
         label="Почтовый индекс",
-        max_length=6,
-        widget=forms.TextInput(attrs={'placeholder': '445051',"inputmode": "numeric", 'class': 'form-control'})
+        validators=[
+            MinValueValidator(100000, message="Не верный формат почтового индекса"),
+            MaxValueValidator(999999, message="Не верный формат почтового индекса")
+        ],
+        widget=forms.TextInput(attrs={'placeholder': '445051',"inputmode": "numeric", 'class': 'form-control', "maxlength": 6})
     )
-    region = forms.CharField(
-        label="Регион", 
-        max_length=255,
-        widget=forms.TextInput(attrs={'placeholder': 'Самарская область', 'class': 'form-control'})
+    region = forms.ChoiceField(
+        label="Регион",
+        choices=REGION_CHOICES,
+        widget=forms.Select(attrs={'class': 'form-control'})
     )
     address  = forms.CharField(
         label="Адрес",
