@@ -1,6 +1,18 @@
 {% extends "base.html" %}
 {% load static %}
 {% block content %}
+{% block extra_css %}
+<style>
+    .select2-selection{
+        border-color: #dee2e6 !important;
+    }
+</style>
+{% endblock %}
+<head>
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    {{ form.media }}
+</head>
+<body>
 <div class="container mt-5 d-flex justify-content-center">
     <div class="card shadow-sm" style="width: 100%; max-width: 500px;"> 
         <div class="card-header bg-primary text-white">
@@ -10,12 +22,11 @@
 
         <form method="post">
             {% csrf_token %}
-            <div class="mb-3">
             {{ form.as_p }}
-            </div>
             <button class="btn btn-primary" type="submit">Отправить</button>
         </form>
         </div>
     </div>
 </div>
+</body>
 {% endblock %}

@@ -17,6 +17,7 @@ import pandas as pd
 from .forms import ExcelImportForm, AtlasLeadImportForm, LeadImportForm, DocumentForm
 from datetime import datetime, timedelta
 from docxtpl import DocxTemplate
+from dal import autocomplete
 
 logger = logging.getLogger(__name__)
 
@@ -1783,6 +1784,10 @@ def attestation_stats(request):
     # return JsonResponse({"statistic": summary})
     return render(request, 'crm_connector/attestation-stats.html', context)
 
+
+class RegionAutocomplete(autocomplete.Select2ListView):
+    def get_list(self):
+        return [(key, value) for key, value in REGION_CHOICES]
 
 def contract_generation(request):
     import tempfile 

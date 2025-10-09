@@ -17,6 +17,7 @@ click-repl==0.3.0
 cron-descriptor==1.4.5
 dj-database-url==2.3.0
 Django==4.2.19
+django-autocomplete-light==3.12.1
 django-celery-beat==2.7.0
 django-simple-history==3.10.1
 django-timezone-field==7.1

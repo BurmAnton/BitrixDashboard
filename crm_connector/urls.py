@@ -1,6 +1,6 @@
 from django.urls import path
 from . import views
-from .views import ObjectHistoryView
+from .views import ObjectHistoryView, RegionAutocomplete
 
 app_name = 'crm_connector'
 
@@ -20,5 +20,6 @@ urlpatterns = [
     path('attestation-progress', views.attestation_progress, name="attestation_progress"),
     path('lead-dashboard', views.lead_dashboard, name="lead-dashboard"),
     path('attestation-stats', views.attestation_stats, name="attestation-stats"),
+    path('region-autocomplete/', RegionAutocomplete.as_view(), name='region-autocomplete'),
     path('contract-generation', views.contract_generation, name="contract_generation")
 ]

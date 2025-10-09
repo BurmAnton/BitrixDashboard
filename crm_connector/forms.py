@@ -2,6 +2,7 @@ from django import forms
 from .models import Deal, REGION_CHOICES
 from .bitrix24_api import Bitrix24API
 from django.core.validators import MinValueValidator, MaxValueValidator
+from dal import autocomplete
 
 class ExcelImportForm(forms.Form):
     excel_file = forms.FileField(
@@ -110,7 +111,7 @@ class DocumentForm(forms.Form):
             ('DPO', 'ДПО'),
             ('PO', 'ПО')
         ],
-        widget=forms.Select(attrs={'class': 'form-control'})
+        widget=forms.Select(attrs={'class': 'form-control form-control-sm'})
     )
     snils = forms.IntegerField(
         label="СНИЛС",
@@ -118,7 +119,7 @@ class DocumentForm(forms.Form):
             MinValueValidator(10000000000, message="Не верный формат СНИЛС"),
             MaxValueValidator(99999999999, message="Не верный формат СНИЛС")
         ],
-        widget=forms.TextInput(attrs={'placeholder': '123456789',"inputmode": "numeric", 'class': 'form-control', "maxlength": 11})
+        widget=forms.TextInput(attrs={'placeholder': '123456789',"inputmode": "numeric", 'class': 'form-control form-control-sm', "maxlength": 11})
     )
     postal_code = forms.IntegerField(
         label="Почтовый индекс",
@@ -126,15 +127,15 @@ class DocumentForm(forms.Form):
             MinValueValidator(100000, message="Не верный формат почтового индекса"),
             MaxValueValidator(999999, message="Не верный формат почтового индекса")
         ],
-        widget=forms.TextInput(attrs={'placeholder': '445051',"inputmode": "numeric", 'class': 'form-control', "maxlength": 6})
+        widget=forms.TextInput(attrs={'placeholder': '445051',"inputmode": "numeric", 'class': 'form-control form-control-sm', "maxlength": 6})
     )
-    region = forms.ChoiceField(
+    region = autocomplete.Select2ListChoiceField(
         label="Регион",
-        choices=REGION_CHOICES,
-        widget=forms.Select(attrs={'class': 'form-control'})
+        choice_list=REGION_CHOICES,
+        widget = autocomplete.ListSelect2(url='crm_connector:region-autocomplete', attrs={'style':'width: 100%'})
     )
     address  = forms.CharField(
         label="Адрес",
         max_length=255,
-        widget=forms.TextInput(attrs={'placeholder': 'Населенный пункт, улица/другое, дом/другое, корпус/другое, квартира/другое', 'class': 'form-control'})
+        widget=forms.TextInput(attrs={'placeholder': 'Населенный пункт, улица/другое, дом/другое, корпус/другое, квартира/другое', 'class': 'form-control form-control-sm'})
     )
