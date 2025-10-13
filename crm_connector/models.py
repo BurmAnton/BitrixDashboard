@@ -369,6 +369,19 @@ class AtlasApplication(models.Model):
     # Дополнительные поля
     raw_data = JSONField(default=dict, verbose_name="Исходные данные из выгрузки")
     
+    # Поля адреса из формы
+    form_postal_code = models.CharField(max_length=10, blank=True, null=True, verbose_name="Почтовый индекс (из формы)")
+    form_region = models.CharField(max_length=255, blank=True, null=True, verbose_name="Регион (из формы)")
+    form_settlement = models.CharField(max_length=255, blank=True, null=True, verbose_name="Населенный пункт")
+    form_street = models.CharField(max_length=255, blank=True, null=True, verbose_name="Улица/другое")
+    form_house = models.CharField(max_length=50, blank=True, null=True, verbose_name="Дом/другое")
+    form_building = models.CharField(max_length=50, blank=True, null=True, verbose_name="Корпус/другое")
+    form_apartment = models.CharField(max_length=50, blank=True, null=True, verbose_name="Квартира/другое")
+    
+    # Файлы заявлений
+    generated_application = models.FileField(upload_to='applications/generated/', blank=True, null=True, verbose_name="Сгенерированное заявление")
+    signed_application = models.FileField(upload_to='applications/signed/', blank=True, null=True, verbose_name="Подписанное заявление")
+    
     # Статусы синхронизации
     is_synced = models.BooleanField(default=False, verbose_name="Синхронизировано с Bitrix24")
     sync_errors = models.TextField(blank=True, null=True, verbose_name="Ошибки синхронизации")

@@ -105,21 +105,13 @@ class StageCheckForm(forms.Form):
 
 
 class DocumentForm(forms.Form):
-    template = forms.ChoiceField(
-        label="Шаблон", 
-        choices=[
-            ('DPO', 'ДПО'),
-            ('PO', 'ПО')
-        ],
-        widget=forms.Select(attrs={'class': 'form-control form-control-sm'})
-    )
     snils = forms.IntegerField(
         label="СНИЛС",
         validators=[
-            MinValueValidator(10000000000, message="Не верный формат СНИЛС"),
+            MinValueValidator(1000000000, message="Не верный формат СНИЛС"),
             MaxValueValidator(99999999999, message="Не верный формат СНИЛС")
         ],
-        widget=forms.TextInput(attrs={'placeholder': '123456789',"inputmode": "numeric", 'class': 'form-control form-control-sm', "maxlength": 11})
+        widget=forms.TextInput(attrs={'placeholder': 'Укажите Ваш СНИЛС',"inputmode": "numeric", 'class': 'form-control form-control-sm', "maxlength": 11})
     )
     postal_code = forms.IntegerField(
         label="Почтовый индекс",
@@ -129,13 +121,53 @@ class DocumentForm(forms.Form):
         ],
         widget=forms.TextInput(attrs={'placeholder': '445051',"inputmode": "numeric", 'class': 'form-control form-control-sm', "maxlength": 6})
     )
-    region = autocomplete.Select2ListChoiceField(
+    region = forms.ChoiceField(
         label="Регион",
-        choice_list=REGION_CHOICES,
-        widget = autocomplete.ListSelect2(url='crm_connector:region-autocomplete', attrs={'style':'width: 100%'})
+        choices=[('', '-- Выберите регион --')] + list(REGION_CHOICES),
+        widget=forms.Select(attrs={
+            'class': 'form-control form-control-sm select2',
+            'style': 'width: 100%',
+            'data-placeholder': 'Начните вводить название региона...',
+            'data-allow-clear': 'true'
+        })
     )
-    address  = forms.CharField(
-        label="Адрес",
-        max_length=255,
-        widget=forms.TextInput(attrs={'placeholder': 'Населенный пункт, улица/другое, дом/другое, корпус/другое, квартира/другое', 'class': 'form-control form-control-sm'})
+    settlement = forms.CharField(
+        label="Населенный пункт",
+        widget=forms.TextInput(attrs={'placeholder': 'Город, село, деревня...', 'class': 'form-control form-control-sm'})
+    )
+    street = forms.CharField(
+        label="Улица/другое",
+        required=False,
+        widget=forms.TextInput(attrs={'placeholder': 'Улица, проспект, переулок...', 'class': 'form-control form-control-sm'})
+    )
+    house = forms.CharField(
+        label="Дом/другое",
+        required=False,
+        widget=forms.TextInput(attrs={'placeholder': 'Номер дома', 'class': 'form-control form-control-sm'})
+    )
+    building = forms.CharField(
+        label="Корпус/другое",
+        required=False,
+        widget=forms.TextInput(attrs={'placeholder': 'Корпус, строение...', 'class': 'form-control form-control-sm'})
+    )
+    apartment = forms.CharField(
+        label="Квартира/другое",
+        required=False,
+        widget=forms.TextInput(attrs={'placeholder': 'Номер квартиры', 'class': 'form-control form-control-sm'})
+    )
+
+
+class SignedApplicationForm(forms.Form):
+    snils = forms.IntegerField(
+        label="СНИЛС",
+        validators=[
+            MinValueValidator(1000000000, message="Не верный формат СНИЛС"),
+            MaxValueValidator(99999999999, message="Не верный формат СНИЛС")
+        ],
+        widget=forms.TextInput(attrs={'placeholder': 'Укажите Ваш СНИЛС',"inputmode": "numeric", 'class': 'form-control form-control-sm', "maxlength": 11})
+    )
+    signed_application = forms.FileField(
+        label="Подписанное заявление",
+        help_text="Загрузите скан или фото подписанного заявления",
+        widget=forms.FileInput(attrs={'class': 'form-control form-control-sm', 'accept': '.pdf,.jpg,.jpeg,.png'})
     )

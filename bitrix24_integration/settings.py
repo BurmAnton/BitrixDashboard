@@ -179,3 +179,7 @@ LOGIN_REDIRECT_URL = '/crm/pipelines/'  # После входа перенапр
 DATA_UPLOAD_MAX_NUMBER_FIELDS = 100000
 
 DOCX_TEMPLATE_PATH = os.path.join(BASE_DIR, "templates", "docx")
+
+# Настройки для медиа файлов
+MEDIA_URL = '/media/'
+MEDIA_ROOT = os.path.join(BASE_DIR, 'media')

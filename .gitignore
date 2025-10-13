@@ -55,3 +55,6 @@ dump.rdb
 # Celery
 celerybeat-schedule
 celerybeat.pid 
+
+# Cookies
+cookies.txt

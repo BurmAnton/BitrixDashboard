@@ -21,5 +21,6 @@ urlpatterns = [
     path('lead-dashboard', views.lead_dashboard, name="lead-dashboard"),
     path('attestation-stats', views.attestation_stats, name="attestation-stats"),
     path('region-autocomplete/', RegionAutocomplete.as_view(), name='region-autocomplete'),
-    path('contract-generation', views.contract_generation, name="contract_generation")
+    path('contract-generation/', views.contract_generation, name="contract_generation"),
+    path('applications-list/', views.applications_list, name="applications_list")
 ]

@@ -2,31 +2,309 @@
 {% load static %}
 {% block content %}
 {% block extra_css %}
+<link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
 <style>
     .select2-selection{
         border-color: #dee2e6 !important;
+    }
+    .select2-container--default .select2-selection--single {
+        height: 38px;
+        border: 1px solid #dee2e6;
+        border-radius: 0.375rem;
+    }
+    .select2-container--default .select2-selection--single .select2-selection__rendered {
+        line-height: 36px;
+        padding-left: 12px;
+    }
+    .select2-container--default .select2-selection--single .select2-selection__arrow {
+        height: 36px;
+    }
+    
+    /* Стили для адресной секции */
+    .address-section {
+        background-color: #f8f9fa;
+        border: 1px solid #e9ecef;
+        border-radius: 0.375rem;
+        padding: 1rem;
+        margin-top: 1rem;
+    }
+    
+    .address-section h6 {
+        color: #495057;
+        font-weight: 600;
+        margin-bottom: 1rem;
+    }
+    
+    .address-section .form-label {
+        font-weight: 500;
+        color: #495057;
+        margin-bottom: 0.5rem;
+    }
+    
+    .address-section .form-control {
+        border: 1px solid #ced4da;
+        border-radius: 0.25rem;
+    }
+    
+    .address-section .form-control:focus {
+        border-color: #80bdff;
+        box-shadow: 0 0 0 0.2rem rgba(0, 123, 255, 0.25);
+    }
+    
+    /* Стили для вкладок */
+    .nav-tabs .nav-link {
+        color: #495057;
+        border: 1px solid transparent;
+        border-top-left-radius: 0.375rem;
+        border-top-right-radius: 0.375rem;
+    }
+    
+    .nav-tabs .nav-link:hover {
+        border-color: #e9ecef #e9ecef #dee2e6;
+    }
+    
+    .nav-tabs .nav-link.active {
+        color: #495057;
+        background-color: #fff;
+        border-color: #dee2e6 #dee2e6 #fff;
+    }
+    
+    .tab-content {
+        border: 1px solid #dee2e6;
+        border-top: none;
+        border-radius: 0 0 0.375rem 0.375rem;
+        padding: 1.5rem;
+        background-color: #fff;
+    }
+    
+    .instruction-box {
+        background-color: #e7f3ff;
+        border: 1px solid #b3d9ff;
+        border-radius: 0.375rem;
+        padding: 1rem;
+        margin-bottom: 1.5rem;
+    }
+    
+    .instruction-box .instruction-text {
+        color: #0066cc;
+        font-weight: 500;
+        margin: 0;
     }
 </style>
 {% endblock %}
 <head>
 <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/i18n/ru.js"></script>
     {{ form.media }}
 </head>
 <body>
-<div class="container mt-5 d-flex justify-content-center">
-    <div class="card shadow-sm" style="width: 100%; max-width: 500px;"> 
+<div class="container mt-5">
+    <div class="row justify-content-center">
+        <div class="col-12 col-lg-8">
+            <div class="card shadow-sm">
         <div class="card-header bg-primary text-white">
-            <h4>Заполнение шаблона заявки</h4>
-        </div>
-        <div class="card-body">
+                    <h4 class="mb-0">Работа с заявлениями</h4>
+                </div>
+                <div class="card-body p-0">
+                    <!-- Вкладки -->
+                    <ul class="nav nav-tabs" id="applicationTabs" role="tablist">
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link {% if active_tab == 'generate' %}active{% endif %}" 
+                                    id="generate-tab" data-bs-toggle="tab" data-bs-target="#generate" 
+                                    type="button" role="tab" aria-controls="generate" 
+                                    aria-selected="{% if active_tab == 'generate' %}true{% else %}false{% endif %}">
+                                <i class="fas fa-file-alt me-2"></i>Генерация заявления
+                            </button>
+                        </li>
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link {% if active_tab == 'upload' %}active{% endif %}" 
+                                    id="upload-tab" data-bs-toggle="tab" data-bs-target="#upload" 
+                                    type="button" role="tab" aria-controls="upload" 
+                                    aria-selected="{% if active_tab == 'upload' %}true{% else %}false{% endif %}">
+                                <i class="fas fa-upload me-2"></i>Загрузка скана заявления
+                            </button>
+                        </li>
+                    </ul>
+                    
+                    <!-- Содержимое вкладок -->
+                    <div class="tab-content" id="applicationTabsContent">
+                        <!-- Вкладка генерации заявления -->
+                        <div class="tab-pane fade {% if active_tab == 'generate' %}show active{% endif %}" 
+                             id="generate" role="tabpanel" aria-labelledby="generate-tab">
+                            
+                            <form method="post" enctype="multipart/form-data">
+                                {% csrf_token %}
+                                <input type="hidden" name="generate_form" value="1">
+                                
+                                <!-- Основные поля -->
+                                <div class="mb-3">
+                                    <label for="{{ form.snils.id_for_label }}" class="form-label">{{ form.snils.label }}</label>
+                                    {{ form.snils }}
+                                    {% if form.snils.errors %}
+                                        <div class="text-danger">{{ form.snils.errors }}</div>
+                                    {% endif %}
+                                </div>
+                                
+                                <!-- Адресные поля с визуальным разделением -->
+                                <div class="address-section mb-4">
+                                    <h6 class="text-muted mb-3 border-bottom pb-2">
+                                        <i class="fas fa-map-marker-alt me-2"></i>Адрес
+                                    </h6>
+                                    
+                                    <!-- Первая строка: Почтовый индекс и Регион -->
+                                    <div class="row mb-3">
+                                        <div class="col-md-4">
+                                            <label for="{{ form.postal_code.id_for_label }}" class="form-label">{{ form.postal_code.label }}</label>
+                                            {{ form.postal_code }}
+                                            {% if form.postal_code.errors %}
+                                                <div class="text-danger">{{ form.postal_code.errors }}</div>
+                                            {% endif %}
+                                        </div>
+                                        <div class="col-md-8">
+                                            <label for="{{ form.region.id_for_label }}" class="form-label">{{ form.region.label }}</label>
+                                            {{ form.region }}
+                                            {% if form.region.errors %}
+                                                <div class="text-danger">{{ form.region.errors }}</div>
+                                            {% endif %}
+                                        </div>
+                                    </div>
+                                    
+                                    <!-- Вторая строка: Населенный пункт -->
+                                    <div class="row mb-3">
+                                        <div class="col-12">
+                                            <label for="{{ form.settlement.id_for_label }}" class="form-label">{{ form.settlement.label }}</label>
+                                            {{ form.settlement }}
+                                            {% if form.settlement.errors %}
+                                                <div class="text-danger">{{ form.settlement.errors }}</div>
+                                            {% endif %}
+                                        </div>
+                                    </div>
+                                    
+                                    <!-- Третья строка: Улица и Дом -->
+                                    <div class="row mb-3">
+                                        <div class="col-md-8">
+                                            <label for="{{ form.street.id_for_label }}" class="form-label">{{ form.street.label }}</label>
+                                            {{ form.street }}
+                                            {% if form.street.errors %}
+                                                <div class="text-danger">{{ form.street.errors }}</div>
+                                            {% endif %}
+                                        </div>
+                                        <div class="col-md-4">
+                                            <label for="{{ form.house.id_for_label }}" class="form-label">{{ form.house.label }}</label>
+                                            {{ form.house }}
+                                            {% if form.house.errors %}
+                                                <div class="text-danger">{{ form.house.errors }}</div>
+                                            {% endif %}
+                                        </div>
+                                    </div>
+                                    
+                                    <!-- Четвертая строка: Корпус и Квартира -->
+                                    <div class="row mb-3">
+                                        <div class="col-md-6">
+                                            <label for="{{ form.building.id_for_label }}" class="form-label">{{ form.building.label }}</label>
+                                            {{ form.building }}
+                                            {% if form.building.errors %}
+                                                <div class="text-danger">{{ form.building.errors }}</div>
+                                            {% endif %}
+                                        </div>
+                                        <div class="col-md-6">
+                                            <label for="{{ form.apartment.id_for_label }}" class="form-label">{{ form.apartment.label }}</label>
+                                            {{ form.apartment }}
+                                            {% if form.apartment.errors %}
+                                                <div class="text-danger">{{ form.apartment.errors }}</div>
+                                            {% endif %}
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <button class="btn btn-primary" type="submit" name="generate_document">
+                                    <i class="fas fa-file-download me-2"></i>Сгенерировать заявление
+                                </button>
+                            </form>
+                        </div>
+                        
+                        <!-- Вкладка загрузки скана -->
+                        <div class="tab-pane fade {% if active_tab == 'upload' %}show active{% endif %}" 
+                             id="upload" role="tabpanel" aria-labelledby="upload-tab">
+                            
+                            <div class="instruction-box">
+                                <p class="instruction-text">
+                                    <i class="fas fa-info-circle me-2"></i>
+                                    Сгенерированный документ распечатайте и подпишите, скан/фото прикрепите в форму.
+                                </p>
+                                {% if generated_file_url %}
+                                <div class="mt-3">
+                                    <a href="{{ generated_file_url }}" class="btn btn-primary" download>
+                                        <i class="fas fa-download me-2"></i>Скачать сгенерированное заявление
+                                    </a>
+                                </div>
+                                {% endif %}
+                            </div>
 
-        <form method="post">
+                            <form method="post" enctype="multipart/form-data">
             {% csrf_token %}
-            {{ form.as_p }}
-            <button class="btn btn-primary" type="submit">Отправить</button>
+                                <input type="hidden" name="upload_form" value="1">
+                                
+                                <div class="mb-3">
+                                    <label for="{{ upload_form.snils.id_for_label }}" class="form-label">{{ upload_form.snils.label }}</label>
+                                    {{ upload_form.snils }}
+                                    {% if upload_form.snils.errors %}
+                                        <div class="text-danger">{{ upload_form.snils.errors }}</div>
+                                    {% endif %}
+                                </div>
+                                
+                                <div class="mb-3">
+                                    <label for="{{ upload_form.signed_application.id_for_label }}" class="form-label">{{ upload_form.signed_application.label }}</label>
+                                    {{ upload_form.signed_application }}
+                                    {% if upload_form.signed_application.help_text %}
+                                        <div class="form-text">{{ upload_form.signed_application.help_text }}</div>
+                                    {% endif %}
+                                    {% if upload_form.signed_application.errors %}
+                                        <div class="text-danger">{{ upload_form.signed_application.errors }}</div>
+                                    {% endif %}
+                                </div>
+                                
+                                <button class="btn btn-success" type="submit" name="upload_signed">
+                                    <i class="fas fa-upload me-2"></i>Загрузить подписанное заявление
+                                </button>
         </form>
+                        </div>
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
 </div>
+
+<script>
+$(document).ready(function() {
+    $('.select2').select2({
+        placeholder: 'Начните вводить название региона...',
+        allowClear: true,
+        language: 'ru',
+        width: '100%'
+    });
+    
+    // Обработка переключения вкладок
+    $('#applicationTabs button[data-bs-toggle="tab"]').on('click', function (e) {
+        e.preventDefault();
+        var target = $(this).attr('data-bs-target');
+        
+        // Удаляем активный класс со всех вкладок и панелей
+        $('#applicationTabs .nav-link').removeClass('active');
+        $('.tab-pane').removeClass('show active');
+        
+        // Добавляем активный класс к выбранной вкладке и панели
+        $(this).addClass('active');
+        $(target).addClass('show active');
+    });
+    
+    // Автоматическое переключение на вкладку загрузки после успешной генерации
+    {% if active_tab == 'upload' %}
+        $('#upload-tab').click();
+    {% endif %}
+});
+</script>
 </body>
 {% endblock %}

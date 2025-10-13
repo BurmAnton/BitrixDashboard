@@ -14,7 +14,7 @@ from django.contrib import messages
 import logging
 import re
 import pandas as pd
-from .forms import ExcelImportForm, AtlasLeadImportForm, LeadImportForm, DocumentForm
+from .forms import ExcelImportForm, AtlasLeadImportForm, LeadImportForm, DocumentForm, SignedApplicationForm
 from datetime import datetime, timedelta
 from docxtpl import DocxTemplate
 from dal import autocomplete
@@ -1790,41 +1790,366 @@ class RegionAutocomplete(autocomplete.Select2ListView):
         return [(key, value) for key, value in REGION_CHOICES]
 
 def contract_generation(request):
-    import tempfile 
-    months = {
-        1: "января", 2: "февраля", 3: "марта", 4: "апреля", 5: "мая", 6: "июня", 7: "июля", 8: "августа", 9: "сентября", 10: "октября", 11: "ноября", 12: "декабря"
-    }
-    if request.method == "POST":
-        form = DocumentForm(request.POST)
-        if form.is_valid():
-            try:
-                context = form.cleaned_data
-                doc = DocxTemplate(settings.DOCX_TEMPLATE_PATH + f"/template_{context["template"]}.docx")
-                listener = AtlasApplication.objects.filter(raw_data__СНИЛС=int(context["snils"])).first()
-                listener.postal_code = context["postal_code"]
-                listener.address  = context["address"]
-                for i,a in REGION_CHOICES:
-                    if context["region"] in i:
-                        context["region"] = a
-                context["fio"] = listener.full_name
-                context["passport_series_number"] = str(listener.raw_data["Серия паспорта"]) + " " + str(listener.raw_data["Номер паспорта"])
-                context["passport_issuer"] = listener.raw_data["Кем выдан паспорт"]
-                context["phone"] = listener.phone
-                context["email"] = listener.email
-                context["today_date"] = datetime.today().strftime("%d")
-                context["today_month"] = months[datetime.today().month]
-                listener.save()
-                doc.render(context)
-                tmp_docx = tempfile.NamedTemporaryFile(delete=False, suffix=".docx")
-                doc.save(tmp_docx.name)
-                tmp_docx.seek(0)
-                response = FileResponse(open(tmp_docx.name, "rb"), as_attachment=True, filename=f"{context["template"]}_{context["fio"]}_{datetime.today().strftime("%Y-%m-%d %H:%M:%S")}.docx")
-                return response
-            except AttributeError:
-                messages.error(request,"Не удалось найти СНИЛС")
-            except Exception as e:
-                messages.error(request,f"Не удалось создать док: {e}")
-    else:
-        form = DocumentForm()
+    import tempfile
+    import os
+    from django.contrib import messages
+    from django.core.files import File
+    from education_planner.models import EducationProgram
     
-    return render(request, "crm_connector/contract_generation.html", {"form": form})
+    months = {
+        1: "января", 2: "февраля", 3: "марта", 4: "апреля", 5: "мая", 6: "июня", 
+        7: "июля", 8: "августа", 9: "сентября", 10: "октября", 11: "ноября", 12: "декабря"
+    }
+    
+    # По умолчанию показываем вкладку генерации
+    active_tab = 'generate'
+    form = DocumentForm()
+    upload_form = SignedApplicationForm()
+    
+    if request.method == "POST":
+        # Проверяем какая форма отправлена
+        if 'upload_signed' in request.POST:
+            # Обработка загрузки подписанного документа
+            upload_form = SignedApplicationForm(request.POST, request.FILES)
+            if upload_form.is_valid():
+                try:
+                    snils = upload_form.cleaned_data['snils']
+                    signed_file = upload_form.cleaned_data['signed_application']
+                    
+                    listener = AtlasApplication.objects.filter(raw_data__СНИЛС=int(snils)).first()
+                    if not listener:
+                        messages.error(request, "Заявка с указанным СНИЛС не найдена")
+                    else:
+                        # Удаляем старый файл, если есть
+                        if listener.signed_application:
+                            try:
+                                if os.path.isfile(listener.signed_application.path):
+                                    os.remove(listener.signed_application.path)
+                            except:
+                                pass
+                        
+                        listener.signed_application = signed_file
+                        listener.save()
+                        messages.success(request, "Подписанное заявление успешно загружено!")
+                        active_tab = 'upload'
+                except Exception as e:
+                    messages.error(request, f"Ошибка при загрузке файла: {e}")
+                    active_tab = 'upload'
+            else:
+                active_tab = 'upload'
+                
+        else:
+            # Обработка генерации документа
+            form = DocumentForm(request.POST)
+            if form.is_valid():
+                try:
+                    context = form.cleaned_data
+                    listener = AtlasApplication.objects.filter(raw_data__СНИЛС=int(context["snils"])).first()
+                    
+                    if not listener:
+                        raise AttributeError("Не удалось найти заявку с указанным СНИЛС")
+                    
+                    # Получаем программу из raw_data
+                    program = listener.raw_data.get('Программа обучения', '') if listener.raw_data else ''
+                    
+                    # Определяем тип шаблона по программе
+                    template = "PO"  # По умолчанию ПО
+                    if program:
+                        program_data = EducationProgram.objects.filter(name=program).first()
+                        if program_data and program_data.program_type == "ADV":
+                            template = "DPO"
+                    
+                    # Формируем адрес
+                    address_parts = []
+                    if context.get("settlement"):
+                        address_parts.append(context["settlement"])
+                    if context.get("street"):
+                        address_parts.append(context["street"])
+                    if context.get("house"):
+                        address_parts.append(f"д. {context['house']}")
+                    if context.get("building"):
+                        address_parts.append(f"корп. {context['building']}")
+                    if context.get("apartment"):
+                        address_parts.append(f"кв. {context['apartment']}")
+                    address = ", ".join(address_parts)
+                    
+                    # Сохраняем данные формы в модель
+                    listener.form_postal_code = context.get("postal_code")
+                    listener.form_region = context.get("region")
+                    listener.form_settlement = context.get("settlement")
+                    listener.form_street = context.get("street")
+                    listener.form_house = context.get("house")
+                    listener.form_building = context.get("building")
+                    listener.form_apartment = context.get("apartment")
+                    listener.save()
+                    
+                    # Подготовка контекста для шаблона
+                    for i, a in REGION_CHOICES:
+                        if context["region"] in i:
+                            context["region"] = a
+                    
+                    context["fio"] = listener.full_name
+                    context["passport_series_number"] = str(listener.raw_data["Серия паспорта"]) + " " + str(listener.raw_data["Номер паспорта"])
+                    context["passport_issuer"] = listener.raw_data["Кем выдан паспорт"]
+                    context["phone"] = listener.phone
+                    context["email"] = listener.email
+                    context["today_date"] = datetime.today().strftime("%d")
+                    context["today_month"] = months[datetime.today().month]
+                    context["address"] = address
+                    
+                    # Генерация документа
+                    doc = DocxTemplate(settings.DOCX_TEMPLATE_PATH + f"/template_{template}.docx")
+                    doc.render(context)
+                    tmp_docx = tempfile.NamedTemporaryFile(delete=False, suffix=".docx")
+                    doc.save(tmp_docx.name)
+                    tmp_docx.close()
+                    
+                    filename = f"{template}_{context['fio']}_{datetime.today().strftime('%Y-%m-%d_%H-%M-%S')}.docx"
+                    
+                    # Удаляем старый файл, если есть
+                    if listener.generated_application:
+                        try:
+                            if os.path.isfile(listener.generated_application.path):
+                                os.remove(listener.generated_application.path)
+                        except:
+                            pass
+                    
+                    # Сохраняем файл в модель
+                    with open(tmp_docx.name, 'rb') as f:
+                        listener.generated_application.save(filename, File(f), save=True)
+                    listener.save()
+                    
+                    # Удаляем временный файл
+                    os.unlink(tmp_docx.name)
+                    
+                    messages.success(request, "Заявление успешно сгенерировано! Скачайте документ, распечатайте, подпишите и загрузите скан на вкладке 'Загрузка скана'.")
+                    active_tab = 'upload'
+                    
+                    # Предзаполняем СНИЛС в форме загрузки
+                    upload_form = SignedApplicationForm(initial={'snils': context['snils']})
+                    
+                except AttributeError as e:
+                    messages.error(request, f"Ошибка: {e}")
+                except Exception as e:
+                    messages.error(request, f"Не удалось создать документ: {e}")
+    
+    return render(request, "crm_connector/contract_generation.html", {
+        "form": form,
+        "upload_form": upload_form,
+        "active_tab": active_tab
+    })
+
+
+
+def applications_list(request):
+    """Страница со списком заявок с фильтрами и экспортом"""
+    from django.db.models import Q
+    from datetime import datetime
+    import openpyxl
+    from django.http import HttpResponse
+    from io import BytesIO
+    from collections import defaultdict
+    from education_planner.models import EducationProgram
+    
+    # Получаем воронку "Заявки (граждане)"
+    pipeline = Pipeline.objects.filter(name='Заявки (граждане)').first()
+    
+    # Получаем заявки из воронки, исключая стадии и статусы (как на atlas-dashboard)
+    if pipeline:
+        # Исключаем стадии, которые скрываются на дашборде
+        excluded_stages = ['1. Необработанная заявка', '2. Направлена инструкция по РвР']
+        
+        # Получаем сделки из воронки
+        deals = Deal.objects.select_related('stage').filter(pipeline=pipeline).exclude(
+            stage__name__in=excluded_stages
+        )
+        
+        # Создаем словарь заявок по deal_id (как на atlas-dashboard)
+        atlas_apps_dict = {}
+        atlas_apps = AtlasApplication.objects.select_related('deal').filter(deal__pipeline=pipeline)
+        for app in atlas_apps:
+            atlas_apps_dict[app.deal_id] = app
+        
+        # Получаем список ID заявок
+        app_ids = []
+        for deal in deals:
+            if deal.id in atlas_apps_dict:
+                app = atlas_apps_dict[deal.id]
+                if app.raw_data and app.raw_data.get('Статус заявки в РР') == 'Услуга прекращена':
+                    continue
+                app_ids.append(app.id)
+        
+        applications = AtlasApplication.objects.filter(id__in=app_ids)
+    else:
+        applications = AtlasApplication.objects.exclude(
+            raw_data__contains={'Статус заявки в РР': 'Услуга прекращена'}
+        )
+    
+    # Фильтры
+    program_filter = request.GET.get('program', '')
+    period_filter = request.GET.get('period', '')
+    has_address = request.GET.get('has_address', '')
+    has_scan = request.GET.get('has_scan', '')
+    search_query = request.GET.get('search', '')
+    
+    # Применяем фильтры
+    if program_filter:
+        applications = applications.filter(raw_data__contains={'Программа обучения': program_filter})
+    
+    if period_filter:
+        try:
+            dates = period_filter.split(' - ')
+            if len(dates) == 2:
+                start_date, end_date = dates
+                applications = applications.filter(
+                    Q(raw_data__contains={'Начало периода обучения': start_date}) &
+                    Q(raw_data__contains={'Окончание периода обучения': end_date})
+                )
+        except:
+            pass
+    
+    if has_address == 'yes':
+        applications = applications.exclude(Q(form_settlement__isnull=True) | Q(form_settlement=''))
+    elif has_address == 'no':
+        applications = applications.filter(Q(form_settlement__isnull=True) | Q(form_settlement=''))
+    
+    if has_scan == 'yes':
+        applications = applications.exclude(Q(signed_application__isnull=True) | Q(signed_application=''))
+    elif has_scan == 'no':
+        applications = applications.filter(Q(signed_application__isnull=True) | Q(signed_application=''))
+    
+    # Поиск
+    if search_query:
+        applications = applications.filter(
+            Q(full_name__icontains=search_query) |
+            Q(email__icontains=search_query) |
+            Q(phone__icontains=search_query) |
+            Q(raw_data__СНИЛС__icontains=search_query)
+        )
+    
+    # Получаем список программ и периодов для фильтров
+    program_periods_dict = defaultdict(set)
+    programs_set = set()
+    for app in AtlasApplication.objects.filter(raw_data__isnull=False):
+        if app.raw_data:
+            program = app.raw_data.get('Программа обучения', '')
+            start = app.raw_data.get('Начало периода обучения', '')
+            end = app.raw_data.get('Окончание периода обучения', '')
+            if program:
+                programs_set.add(program)
+                if start and end:
+                    period = f"{start} - {end}"
+                    program_periods_dict[program].add(period)
+    
+    programs = sorted(list(programs_set))
+    program_periods = {prog: sorted(list(periods)) for prog, periods in program_periods_dict.items()}
+    
+    # Экспорт в Excel
+    if request.GET.get('export') == 'excel':
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = "Заявки"
+        
+        # Заголовки
+        headers = ['ФИО', 'Телефон', 'Email', 'СНИЛС', 'Программа', 'Индекс', 'Адрес']
+        for col_num, header in enumerate(headers, 1):
+            ws.cell(row=1, column=col_num, value=header)
+        
+        # Данные
+        region_dict = dict(REGION_CHOICES)
+        existing_programs = set(EducationProgram.objects.values_list('name', flat=True))
+        
+        for row_num, app in enumerate(applications, 2):
+            # Программа
+            program_name = ''
+            if app.raw_data:
+                program_name = app.raw_data.get('Программа обучения', '')
+            
+            # Регион
+            region_name = ''
+            if app.form_region:
+                region_name = region_dict.get(app.form_region, app.form_region)
+            
+            # Полный адрес
+            address_parts = []
+            if app.form_postal_code:
+                address_parts.append(app.form_postal_code)
+            if region_name and region_name != '':
+                address_parts.append(region_name)
+            if app.form_settlement:
+                address_parts.append(app.form_settlement)
+            if app.form_street:
+                address_parts.append(app.form_street)
+            if app.form_house:
+                address_parts.append(f"д. {app.form_house}")
+            if app.form_building:
+                address_parts.append(f"корп. {app.form_building}")
+            if app.form_apartment:
+                address_parts.append(f"кв. {app.form_apartment}")
+            full_address = ", ".join(address_parts)
+            
+            # СНИЛС
+            snils = ''
+            if app.raw_data and 'СНИЛС' in app.raw_data:
+                snils = str(app.raw_data['СНИЛС'])
+            
+            ws.cell(row=row_num, column=1, value=app.full_name or '')
+            ws.cell(row=row_num, column=2, value=app.phone or '')
+            ws.cell(row=row_num, column=3, value=app.email or '')
+            ws.cell(row=row_num, column=4, value=snils)
+            ws.cell(row=row_num, column=5, value=program_name if program_name and program_name != '0' else '')
+            ws.cell(row=row_num, column=6, value=app.form_postal_code or '')
+            ws.cell(row=row_num, column=7, value=full_address)
+        
+        # Сохраняем в BytesIO
+        excel_file = BytesIO()
+        wb.save(excel_file)
+        excel_file.seek(0)
+        
+        response = HttpResponse(
+            excel_file.read(),
+            content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        )
+        response['Content-Disposition'] = f'attachment; filename=applications_{datetime.now().strftime("%Y%m%d_%H%M%S")}.xlsx'
+        return response
+    
+    # Добавляем дополнительные данные к заявкам
+    region_dict = dict(REGION_CHOICES)
+    existing_programs = set(EducationProgram.objects.values_list('name', flat=True))
+    
+    for app in applications:
+        # Регион как название
+        if app.form_region:
+            app.region_name = region_dict.get(app.form_region, app.form_region)
+        else:
+            app.region_name = ''
+        
+        # Проверка существования программы
+        if app.raw_data:
+            program = app.raw_data.get('Программа обучения', '')
+            app.program_exists = program in existing_programs if program else True
+        else:
+            app.program_exists = True
+    
+    # Подсчет статистики
+    with_generated = applications.filter(generated_application__isnull=False).exclude(generated_application='').count()
+    with_signed = applications.filter(signed_application__isnull=False).exclude(signed_application='').count()
+    
+    import json
+    context = {
+        'applications': applications,
+        'programs': programs,
+        'program_periods_json': json.dumps(program_periods, ensure_ascii=False),
+        'current_filters': {
+            'program': program_filter,
+            'period': period_filter,
+            'has_address': has_address,
+            'has_scan': has_scan,
+            'search': search_query,
+        },
+        'total_count': applications.count(),
+        'with_generated_count': with_generated,
+        'with_signed_count': with_signed,
+    }
+    
+    return render(request, 'crm_connector/applications_list.html', context)

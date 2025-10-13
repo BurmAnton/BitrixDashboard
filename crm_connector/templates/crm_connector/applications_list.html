@@ -1,0 +1,418 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block extra_css %}
+<style>
+    .filter-section {
+        background-color: #f8f9fa;
+        border: 1px solid #e9ecef;
+        border-radius: 0.375rem;
+        padding: 1.5rem;
+        margin-bottom: 2rem;
+    }
+    
+    .filter-row {
+        margin-bottom: 1rem;
+    }
+    
+    .filter-row:last-child {
+        margin-bottom: 0;
+    }
+    
+    .table-responsive {
+        border-radius: 0.375rem;
+        overflow-x: auto;
+        overflow-y: visible;
+        max-height: calc(100vh - 400px);
+        position: relative;
+    }
+    
+    .table {
+        min-width: 1600px;
+    }
+    
+    .table thead {
+        position: sticky;
+        top: 0;
+        z-index: 100;
+    }
+    
+    .table th {
+        background-color: #e9ecef;
+        border-top: none;
+        font-weight: 600;
+        color: #495057;
+        position: sticky;
+        top: 0;
+        z-index: 100;
+        box-shadow: 0 2px 2px -1px rgba(0, 0, 0, 0.1);
+    }
+    
+    .table td {
+        vertical-align: middle;
+    }
+    
+    .badge-status {
+        font-size: 0.75rem;
+    }
+    
+    .btn-export {
+        background-color: #28a745;
+        border-color: #28a745;
+    }
+    
+    .btn-export:hover {
+        background-color: #218838;
+        border-color: #1e7e34;
+    }
+    
+    .search-box {
+        position: relative;
+    }
+    
+    .search-box .form-control {
+        padding-right: 2.5rem;
+    }
+    
+    .search-icon {
+        position: absolute;
+        right: 0.75rem;
+        top: 50%;
+        transform: translateY(-50%);
+        color: #6c757d;
+    }
+    
+    .file-link {
+        color: #007bff;
+        text-decoration: none;
+    }
+    
+    .file-link:hover {
+        color: #0056b3;
+        text-decoration: underline;
+    }
+    
+    .no-data {
+        text-align: center;
+        padding: 3rem;
+        color: #6c757d;
+    }
+    
+    .stats-card {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        border-radius: 0.5rem;
+        padding: 1.5rem;
+        margin-bottom: 1.5rem;
+    }
+    
+    .stats-number {
+        font-size: 2rem;
+        font-weight: bold;
+        margin-bottom: 0.5rem;
+    }
+    
+    .stats-label {
+        font-size: 0.9rem;
+        opacity: 0.9;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-4">
+    <div class="row">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h2><i class="fas fa-list-alt me-2"></i>Список заявок</h2>
+                <div>
+                    <a href="?export=excel{% for key, value in current_filters.items %}{% if value %}&{{ key }}={{ value }}{% endif %}{% endfor %}" 
+                       class="btn btn-export">
+                        <i class="fas fa-file-excel me-2"></i>Экспорт в Excel
+                    </a>
+                </div>
+            </div>
+            
+            <!-- Статистика -->
+            <div class="row mb-4">
+                <div class="col-md-3">
+                    <div class="stats-card">
+                        <div class="stats-number">{{ applications.count }}</div>
+                        <div class="stats-label">Всего заявок</div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="stats-card">
+                        <div class="stats-number">{{ applications|length }}</div>
+                        <div class="stats-label">Показано</div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="stats-card">
+                        <div class="stats-number">{{ with_generated_count }}</div>
+                        <div class="stats-label">С заявлениями</div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="stats-card">
+                        <div class="stats-number">{{ with_signed_count }}</div>
+                        <div class="stats-label">С подписями</div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Фильтры -->
+            <div class="filter-section">
+                <form method="get" class="row g-3">
+                    <div class="col-md-3">
+                        <label for="search" class="form-label">Поиск</label>
+                        <div class="search-box">
+                            <input type="text" class="form-control" id="search" name="search" 
+                                   value="{{ current_filters.search }}" 
+                                   placeholder="ФИО, email, телефон, СНИЛС">
+                            <i class="fas fa-search search-icon"></i>
+                        </div>
+                    </div>
+                    
+                    <div class="col-md-3">
+                        <label for="program" class="form-label">Программа</label>
+                        <select class="form-select" id="program" name="program">
+                            <option value="">Все программы</option>
+                            {% for program in programs %}
+                                <option value="{{ program }}" {% if current_filters.program == program %}selected{% endif %}>
+                                    {{ program }}
+                                </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    
+                    <div class="col-md-3">
+                        <label for="period" class="form-label">Период обучения</label>
+                        <select class="form-select" id="period" name="period">
+                            <option value="">Все периоды</option>
+                        </select>
+                    </div>
+                    
+                    <div class="col-md-2">
+                        <label for="has_address" class="form-label">Адрес</label>
+                        <select class="form-select" id="has_address" name="has_address">
+                            <option value="">Все</option>
+                            <option value="yes" {% if current_filters.has_address == 'yes' %}selected{% endif %}>Заполнен</option>
+                            <option value="no" {% if current_filters.has_address == 'no' %}selected{% endif %}>Не заполнен</option>
+                        </select>
+                    </div>
+                    
+                    <div class="col-md-2">
+                        <label for="has_scan" class="form-label">Скан</label>
+                        <select class="form-select" id="has_scan" name="has_scan">
+                            <option value="">Все</option>
+                            <option value="yes" {% if current_filters.has_scan == 'yes' %}selected{% endif %}>Есть</option>
+                            <option value="no" {% if current_filters.has_scan == 'no' %}selected{% endif %}>Нет</option>
+                        </select>
+                    </div>
+                    
+                    <div class="col-12">
+                        <button type="submit" class="btn btn-primary me-2">
+                            <i class="fas fa-filter me-1"></i>Применить фильтры
+                        </button>
+                        <a href="{% url 'crm_connector:applications_list' %}" class="btn btn-outline-secondary">
+                            <i class="fas fa-times me-1"></i>Сбросить
+                        </a>
+                    </div>
+                </form>
+            </div>
+            
+            <!-- Таблица заявок -->
+            <div class="card">
+                <div class="card-body p-0">
+                    {% if applications %}
+                        <div class="table-responsive">
+                            <table class="table table-hover mb-0">
+                                <thead>
+                                    <tr>
+                                        <th>ФИО</th>
+                                        <th>Контакты</th>
+                                        <th>СНИЛС</th>
+                                        <th>Программа</th>
+                                        <th>Адрес</th>
+                                        <th>Дата создания</th>
+                                        <th>Заявления</th>
+                                        <th>Действия</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for app in applications %}
+                                        <tr>
+                                            <td>
+                                                <strong>{{ app.full_name }}</strong>
+                                            </td>
+                                            <td>
+                                                {% if app.phone %}
+                                                    <div><i class="fas fa-phone me-1"></i>{{ app.phone }}</div>
+                                                {% else %}
+                                                    <span class="text-muted">0</span>
+                                                {% endif %}
+                                                {% if app.email %}
+                                                    <div><i class="fas fa-envelope me-1"></i>{{ app.email }}</div>
+                                                {% else %}
+                                                    <span class="text-muted">0</span>
+                                                {% endif %}
+                                            </td>
+                                            <td>
+                                                {% if app.raw_data and app.raw_data.СНИЛС %}
+                                                    {{ app.raw_data.СНИЛС }}
+                                                {% else %}
+                                                    <span class="text-muted">0</span>
+                                                {% endif %}
+                                            </td>
+                                            <td style="min-width: 300px; max-width: 400px;">
+                                                {% if app.display_program %}
+                                                    {% if app.program_exists %}
+                                                        <span class="badge bg-info" style="white-space: normal; padding: 0.5rem 0.75rem; box-shadow: 0 2px 4px rgba(0,0,0,0.1); line-height: 1.4;" title="{{ app.display_program }}">{{ app.display_program }}</span>
+                                                    {% else %}
+                                                        <span class="badge bg-warning text-dark" style="white-space: normal; padding: 0.5rem 0.75rem; box-shadow: 0 2px 4px rgba(0,0,0,0.15); line-height: 1.4;" title="Программа не найдена в EducationProgram: {{ app.display_program }}">{{ app.display_program }}</span>
+                                                    {% endif %}
+                                                {% else %}
+                                                    <span class="text-muted">—</span>
+                                                {% endif %}
+                                            </td>
+                                            <td style="min-width: 400px; max-width: 500px;">
+                                                {% if app.form_settlement or app.form_street or app.form_house or app.form_postal_code or app.form_region %}
+                                                    <div class="small">
+                                                        {% if app.form_postal_code %}<strong>{{ app.form_postal_code }}</strong>{% endif %}{% if app.region_name %}{% if app.form_postal_code %}, {% endif %}{{ app.region_name }}{% endif %}
+                                                        {% if app.form_settlement or app.form_street or app.form_house %}
+                                                            {% if app.form_postal_code or app.region_name %}<br>{% endif %}{% if app.form_settlement %}{{ app.form_settlement }}{% endif %}{% if app.form_street %}{% if app.form_settlement %}, {% endif %}{{ app.form_street }}{% endif %}{% if app.form_house %}, д. {{ app.form_house }}{% endif %}{% if app.form_building %}, к. {{ app.form_building }}{% endif %}{% if app.form_apartment %}, кв. {{ app.form_apartment }}{% endif %}
+                                                        {% endif %}
+                                                    </div>
+                                                {% else %}
+                                                    <span class="text-muted">—</span>
+                                                {% endif %}
+                                            </td>
+                                            <td>
+                                                <div class="small">
+                                                    {{ app.created_at|date:"d.m.Y" }}<br>
+                                                    <span class="text-muted">{{ app.created_at|time:"H:i" }}</span>
+                                                </div>
+                                            </td>
+                                            <td style="min-width: 120px;">
+                                                {% if app.generated_application %}
+                                                    <a href="{{ app.generated_application.url }}" 
+                                                       class="file-link small d-block mb-1" target="_blank">
+                                                        <i class="fas fa-file-alt me-1"></i>Заявление
+                                                    </a>
+                                                {% else %}
+                                                    <span class="text-muted small">—</span><br>
+                                                {% endif %}
+                                                
+                                                {% if app.signed_application %}
+                                                    <a href="{{ app.signed_application.url }}" 
+                                                       class="file-link small d-block" target="_blank">
+                                                        <i class="fas fa-file-signature me-1"></i>Подпись
+                                                    </a>
+                                                {% else %}
+                                                    <span class="text-muted small">—</span>
+                                                {% endif %}
+                                            </td>
+                                            <td style="min-width: 80px;">
+                                                <a href="{% url 'admin:crm_connector_atlasapplication_change' app.id %}" 
+                                                   class="btn btn-outline-primary btn-sm" target="_blank" title="Редактировать">
+                                                    <i class="fas fa-edit me-1"></i>Изменить
+                                                </a>
+                                            </td>
+                                        </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    {% else %}
+                        <div class="no-data">
+                            <i class="fas fa-inbox fa-3x mb-3"></i>
+                            <h5>Заявки не найдены</h5>
+                            <p>Попробуйте изменить параметры поиска или фильтры</p>
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Данные о периодах для каждой программы
+    const programPeriods = {{ program_periods_json|safe }};
+    const currentPeriod = "{{ current_filters.period }}";
+    
+    const programSelect = document.getElementById('program');
+    const periodSelect = document.getElementById('period');
+    const searchInput = document.getElementById('search');
+    
+    // Функция для обновления списка периодов
+    function updatePeriods() {
+        const selectedProgram = programSelect.value;
+        
+        // Очищаем список периодов
+        periodSelect.innerHTML = '<option value="">Все периоды</option>';
+        
+        // Если выбрана программа, добавляем её периоды
+        if (selectedProgram && programPeriods[selectedProgram]) {
+            const periods = programPeriods[selectedProgram];
+            periods.forEach(function(period) {
+                const option = document.createElement('option');
+                option.value = period;
+                option.textContent = period;
+                if (period === currentPeriod) {
+                    option.selected = true;
+                }
+                periodSelect.appendChild(option);
+            });
+        }
+        
+        // Если программа не выбрана, показываем все периоды
+        if (!selectedProgram) {
+            const allPeriods = new Set();
+            Object.values(programPeriods).forEach(function(periods) {
+                periods.forEach(function(period) {
+                    allPeriods.add(period);
+                });
+            });
+            
+            Array.from(allPeriods).sort().forEach(function(period) {
+                const option = document.createElement('option');
+                option.value = period;
+                option.textContent = period;
+                if (period === currentPeriod) {
+                    option.selected = true;
+                }
+                periodSelect.appendChild(option);
+            });
+        }
+    }
+    
+    // Инициализация при загрузке страницы
+    updatePeriods();
+    
+    // Обновление при изменении программы
+    programSelect.addEventListener('change', updatePeriods);
+    
+    // Автофокус на поле поиска
+    if (searchInput) {
+        searchInput.focus();
+    }
+    
+    // Очистка фильтров
+    const resetButton = document.querySelector('.btn-outline-secondary');
+    if (resetButton) {
+        resetButton.addEventListener('click', function(e) {
+            e.preventDefault();
+            document.querySelectorAll('input[type="text"], select').forEach(function(el) {
+                el.value = '';
+            });
+            window.location.href = resetButton.href;
+        });
+    }
+});
+</script>
+{% endblock %}

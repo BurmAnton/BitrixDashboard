@@ -156,11 +156,11 @@ class AtlasApplicationAdmin(SimpleHistoryAdmin):
     list_display = ['application_id', 'full_name', 'phone', 'email', 'region', 'deal_link', 'is_synced', 'last_sync', 'history_link']
     list_filter = ['is_synced', 'region', 'created_at', 'last_sync']
     search_fields = ['application_id', 'full_name', 'phone', 'email']
-    readonly_fields = ['created_at', 'updated_at', 'last_sync', 'raw_data_formatted', 'history_link', 'JSON_ed_progress']
+    readonly_fields = ['created_at', 'updated_at', 'last_sync', 'raw_data_formatted', 'history_link', 'JSON_ed_progress', 'generated_application_link', 'signed_application_link']
     
     fieldsets = (
         ('Основная информация', {
-            'fields': ('application_id', 'full_name', 'phone', 'email', 'region', 'JSON_ed_progress')
+            'fields': ('application_id', 'full_name', 'phone', 'email', 'region', 'postal_code', 'JSON_ed_progress')
         }),
         ('Связь с Битрикс24', {
             'fields': ('deal', 'is_synced', 'sync_errors')
@@ -171,6 +171,9 @@ class AtlasApplicationAdmin(SimpleHistoryAdmin):
         ('Исходные данные', {
             'fields': ('raw_data_formatted',),
             'classes': ('collapse',)
+        }),
+        ('Файлы', {
+            'fields': ('generated_application_link', 'signed_application_link')
         }),
         ('Системная информация', {
             'fields': ('created_at', 'updated_at', 'last_sync')
@@ -201,6 +204,24 @@ class AtlasApplicationAdmin(SimpleHistoryAdmin):
             return format_html('<pre style="white-space: pre-wrap;">{}</pre>', formatted)
         return '-'
     raw_data_formatted.short_description = 'Исходные данные'
+    
+    def generated_application_link(self, obj):
+        """Ссылка на сгенерированное заявление"""
+        if obj.generated_application:
+            url = obj.generated_application.url
+            filename = obj.generated_application.name.split('/')[-1]
+            return format_html('<a href="{}" target="_blank">📄 {}</a>', url, filename)
+        return '-'
+    generated_application_link.short_description = 'Сгенерированное заявление'
+    
+    def signed_application_link(self, obj):
+        """Ссылка на подписанное заявление"""
+        if obj.signed_application:
+            url = obj.signed_application.url
+            filename = obj.signed_application.name.split('/')[-1]
+            return format_html('<a href="{}" target="_blank">✍️ {}</a>', url, filename)
+        return '-'
+    signed_application_link.short_description = 'Подписанное заявление'
     
     actions = ['sync_with_bitrix', 'mark_as_synced']
     
