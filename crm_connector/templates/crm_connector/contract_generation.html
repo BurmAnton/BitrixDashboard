@@ -304,6 +304,23 @@ $(document).ready(function() {
     {% if active_tab == 'upload' %}
         $('#upload-tab').click();
     {% endif %}
+    
+    // Отладочная информация
+    console.log('Active tab:', '{{ active_tab }}');
+    console.log('Download URL:', '{{ download_url }}');
+    console.log('Generated file URL:', '{{ generated_file_url }}');
+    
+    // Автоматическое скачивание файла после генерации
+    {% if download_url %}
+        console.log('Starting automatic download...');
+        // Небольшая задержка для отображения сообщения
+        setTimeout(function() {
+            console.log('Downloading file...');
+            window.location.href = '{{ download_url }}';
+        }, 1000);
+    {% else %}
+        console.log('No download URL provided - using manual download button');
+    {% endif %}
 });
 </script>
 </body>

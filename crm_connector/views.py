@@ -1528,8 +1528,9 @@ def attestation_progress(request):
                             listeners_updated +=1
                         else:
                             listeners_created +=1
-                        print(email)
-                        print(progress)
+                        print(f"Email: {email}")
+                        print(f"Progress: {progress}")
+                        print(f"Attestation data: {progress.get('attestation', 'НЕТ ДАННЫХ')}")
                         app.JSON_ed_progress = progress
                         app.save()
                 except:
@@ -1573,11 +1574,22 @@ def attestation_progress(request):
     for item in all_potoks:
         potoks_end_date.setdefault(item, datetime.strptime(list(re.findall(r'\d{2}\.\d{2}\.\d{4}', item))[1], '%d.%m.%Y').date())
 
+    # Статистика для отладки
+    total_applications = applications.count()
+    applications_with_progress = 0
+    
     for app in applications:
         index = 0
         try:
             program = app.program
             if program in education_products:
+                # Проверяем наличие данных о прогрессе
+                education_progress = app.JSON_ed_progress
+                if not education_progress or not isinstance(education_progress, dict) or 'attestation' not in education_progress:
+                    continue
+                
+                applications_with_progress += 1
+                
                 if app.potok:
                     try:
                         potok = f"{app.potok} Последняя синхронизация: {app.last_sync.strftime("%H:%M %d/%m/%Y")}"
@@ -1594,7 +1606,6 @@ def attestation_progress(request):
                 else:
                     potok = "Поток неопределен"
                 full_name = app.full_name
-                education_progress = app.JSON_ed_progress
                 result.setdefault(program, {})
                 result[program].setdefault(potok, {})
                 result[program][potok].setdefault('total', {topic: 0 for topic in education_products[program].values()})
@@ -1605,10 +1616,6 @@ def attestation_progress(request):
                 result[program][potok][full_name].setdefault('email', app.email)
                 result[program][potok][full_name].setdefault('phone', app.phone)
                 
-                if program not in result:
-                    result[program] = {}
-                if potok not in result[program]:
-                    result[program][potok] = {}
                 prog = education_progress["attestation"].split(",")
                 for topic in education_products[program].values():
                     result[program][potok][full_name][topic] = int(prog[index])
@@ -1620,6 +1627,7 @@ def attestation_progress(request):
                     result[program][potok]['total']['undone'] += 1
                 result[program][potok]['total']['total'] += 1
         except Exception as e:
+            print(f"Ошибка обработки заявки {app.application_id} ({app.full_name}): {str(e)}")
             pass
     context = {
     'result': result,
@@ -1628,7 +1636,9 @@ def attestation_progress(request):
     'all_programs': all_programs,
     'all_potoks': all_potoks,
     'selected_program': selected_program,
-    'selected_potok': selected_potok
+    'selected_potok': selected_potok,
+    'total_applications': total_applications,
+    'applications_with_progress': applications_with_progress
     }
     # return JsonResponse({'result': context})
     return render(request, 'crm_connector/attestation-progress.html', context)
@@ -1792,9 +1802,12 @@ class RegionAutocomplete(autocomplete.Select2ListView):
 def contract_generation(request):
     import tempfile
     import os
+    import logging
     from django.contrib import messages
     from django.core.files import File
     from education_planner.models import EducationProgram
+    
+    logger = logging.getLogger(__name__)
     
     months = {
         1: "января", 2: "февраля", 3: "марта", 4: "апреля", 5: "мая", 6: "июня", 
@@ -1830,7 +1843,37 @@ def contract_generation(request):
                         
                         listener.signed_application = signed_file
                         listener.save()
-                        messages.success(request, "Подписанное заявление успешно загружено!")
+                        
+                        # Отправляем файл в Битрикс24, если есть связанная сделка
+                        if listener.deal and listener.deal.bitrix_id:
+                            try:
+                                from .bitrix24_api import Bitrix24API
+                                api = Bitrix24API()
+                                
+                                # Загружаем файл в Битрикс24
+                                file_uploaded = api.upload_file_to_deal(
+                                    deal_id=listener.deal.bitrix_id,
+                                    file_path=listener.signed_application.path,
+                                    field_name='UF_CRM_1734093216'  # Поле для подписанного заявления
+                                )
+                                
+                                if file_uploaded:
+                                    messages.success(request, "✅ Подписанное заявление успешно загружено! Пожалуйста, сохраните оригинал документа для дальнейшей отправки.")
+                                    listener.is_synced = True
+                                    listener.sync_errors = None
+                                    listener.save()
+                                else:
+                                    messages.warning(request, "⚠️ Заявление загружено локально, но не удалось отправить в Битрикс24. Проверьте логи.")
+                                    listener.sync_errors = "Ошибка при отправке файла в Битрикс24"
+                                    listener.save()
+                            except Exception as e:
+                                logger.error(f"Ошибка при отправке файла в Битрикс24: {e}")
+                                messages.warning(request, f"⚠️ Заявление загружено локально, но произошла ошибка при отправке в Битрикс24: {e}")
+                                listener.sync_errors = str(e)
+                                listener.save()
+                        else:
+                            messages.success(request, "✅ Подписанное заявление успешно загружено! (Сделка в Битрикс24 не найдена)")
+                        
                         active_tab = 'upload'
                 except Exception as e:
                     messages.error(request, f"Ошибка при загрузке файла: {e}")
@@ -1904,7 +1947,7 @@ def contract_generation(request):
                     doc.save(tmp_docx.name)
                     tmp_docx.close()
                     
-                    filename = f"{template}_{context['fio']}_{datetime.today().strftime('%Y-%m-%d_%H-%M-%S')}.docx"
+                    filename = f"{context['fio']}_заявление_на_отправку.docx"
                     
                     # Удаляем старый файл, если есть
                     if listener.generated_application:
@@ -1922,23 +1965,84 @@ def contract_generation(request):
                     # Удаляем временный файл
                     os.unlink(tmp_docx.name)
                     
-                    messages.success(request, "Заявление успешно сгенерировано! Скачайте документ, распечатайте, подпишите и загрузите скан на вкладке 'Загрузка скана'.")
+                    messages.success(request, "Заявление успешно сгенерировано! Документ будет автоматически скачан. Распечатайте его, подпишите и загрузите скан на вкладке 'Загрузка скана'.")
                     active_tab = 'upload'
                     
                     # Предзаполняем СНИЛС в форме загрузки
                     upload_form = SignedApplicationForm(initial={'snils': context['snils']})
+                    
+                    # Передаем URL для скачивания в контекст
+                    from django.urls import reverse
+                    download_url = reverse('crm_connector:download_generated_application', args=[context['snils']])
+                    logger.info(f"Generated download URL: {download_url} for SNILS: {context['snils']}")
                     
                 except AttributeError as e:
                     messages.error(request, f"Ошибка: {e}")
                 except Exception as e:
                     messages.error(request, f"Не удалось создать документ: {e}")
     
+    # Проверяем, есть ли сгенерированный файл для текущего СНИЛС (если заполнен в upload_form)
+    generated_file_url = None
+    snils_value = None
+    
+    if upload_form.initial and 'snils' in upload_form.initial:
+        snils_value = upload_form.initial['snils']
+    elif request.method == 'GET' and request.GET.get('snils'):
+        snils_value = request.GET.get('snils')
+    
+    if snils_value:
+        try:
+            listener = AtlasApplication.objects.filter(raw_data__СНИЛС=int(snils_value)).first()
+            if listener and listener.generated_application:
+                from django.urls import reverse
+                generated_file_url = reverse('crm_connector:download_generated_application', args=[snils_value])
+        except:
+            pass
+    
     return render(request, "crm_connector/contract_generation.html", {
         "form": form,
         "upload_form": upload_form,
-        "active_tab": active_tab
+        "active_tab": active_tab,
+        "generated_file_url": generated_file_url,
+        "download_url": locals().get('download_url', None)
     })
 
+
+def download_generated_application(request, snils):
+    """Скачивание сгенерированного заявления по СНИЛС"""
+    import os
+    from django.http import FileResponse, Http404
+    from django.contrib import messages
+    
+    try:
+        listener = AtlasApplication.objects.filter(raw_data__СНИЛС=int(snils)).first()
+        
+        if not listener:
+            raise Http404("Заявка с указанным СНИЛС не найдена")
+        
+        if not listener.generated_application:
+            raise Http404("Для этой заявки еще не сгенерировано заявление")
+        
+        if not os.path.exists(listener.generated_application.path):
+            raise Http404("Файл заявления не найден на сервере")
+        
+        # Возвращаем файл для скачивания с правильным именем
+        from urllib.parse import quote
+        
+        filename = os.path.basename(listener.generated_application.name)
+        encoded_filename = quote(filename.encode('utf-8'))
+        
+        response = FileResponse(
+            open(listener.generated_application.path, 'rb'),
+            content_type='application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+        )
+        response['Content-Disposition'] = f'attachment; filename*=UTF-8\'\'{encoded_filename}'
+        return response
+        
+    except ValueError:
+        raise Http404("Неверный формат СНИЛС")
+    except Exception as e:
+        raise Http404(f"Ошибка при скачивании файла: {e}")
 
 
 def applications_list(request):

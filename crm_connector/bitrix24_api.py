@@ -3,6 +3,10 @@ from django.conf import settings
 from .models import Pipeline, Stage
 from fast_bitrix24 import Bitrix
 import logging
+import nest_asyncio
+
+# Применяем патч для поддержки вложенных event loops
+nest_asyncio.apply()
 
 # Добавляем определение логгера
 logger = logging.getLogger(__name__)
@@ -686,4 +690,54 @@ class Bitrix24API:
                 ('C11:FINAL_INVOICE', 'Согласование списков'),
                 ('C11:WON', 'Списки согласованы'),
                 ('C11:LOSE', 'Сделка отменена')
-            ] 
+            ]
+    
+    def upload_file_to_deal(self, deal_id, file_path, field_name='UF_CRM_1234567890'):
+        """
+        Загружает файл к сделке в Битрикс24
+        
+        Args:
+            deal_id: ID сделки в Битрикс24
+            file_path: Путь к файлу для загрузки
+            field_name: Название поля для файла (опционально)
+            
+        Returns:
+            True если файл успешно загружен, False в случае ошибки
+        """
+        import base64
+        import os
+        
+        try:
+            # Проверяем существование файла
+            if not os.path.exists(file_path):
+                logger.error(f"Файл не найден: {file_path}")
+                return False
+            
+            # Читаем файл и кодируем в base64
+            with open(file_path, 'rb') as f:
+                file_content = f.read()
+                file_base64 = base64.b64encode(file_content).decode('utf-8')
+            
+            # Получаем имя файла
+            filename = os.path.basename(file_path)
+            
+            # Формируем данные для загрузки
+            # В Битрикс24 файлы передаются в формате массива с ключами fileData
+            file_data = {
+                'fileData': [filename, file_base64]
+            }
+            
+            # Обновляем сделку с прикрепленным файлом
+            result = self.call_method('crm.deal.update', {
+                'id': deal_id,
+                'fields': {
+                    field_name: file_data
+                }
+            })
+            
+            logger.info(f"✅ Файл {filename} успешно загружен к сделке {deal_id}")
+            return True
+            
+        except Exception as e:
+            logger.error(f"❌ Ошибка при загрузке файла к сделке {deal_id}: {str(e)}")
+            return False 

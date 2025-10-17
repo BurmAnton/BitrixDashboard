@@ -216,6 +216,26 @@
         </div>
     </div>
 </div>
+
+{% if not result %}
+<div class="alert alert-warning mt-3" role="alert">
+    <h4 class="alert-heading">Нет данных для отображения</h4>
+    <p><strong>Статистика:</strong></p>
+    <ul>
+        <li>Всего заявок (с учетом фильтров): {{ total_applications }}</li>
+        <li>Заявок с данными о прогрессе: {{ applications_with_progress }}</li>
+    </ul>
+    <p>Таблица пуста, потому что:</p>
+    <ul>
+        <li>У заявок не заполнено поле с данными о прогрессе обучения (JSON_ed_progress)</li>
+        <li>Нужно импортировать данные через форму выше</li>
+        <li>Или проверьте фильтры - возможно, они слишком строгие</li>
+    </ul>
+    <hr>
+    <p class="mb-0">Загрузите Excel файл с данными об аттестациях через форму "Импорт заявок из Excel"</p>
+</div>
+{% endif %}
+
 {% for prog, potoki in result.items %}
     <div class="tableTitle">
         <h3 style="text-align: left;"> Программа {{ prog }}</h3>

@@ -22,5 +22,6 @@ urlpatterns = [
     path('attestation-stats', views.attestation_stats, name="attestation-stats"),
     path('region-autocomplete/', RegionAutocomplete.as_view(), name='region-autocomplete'),
     path('contract-generation/', views.contract_generation, name="contract_generation"),
+    path('download-application/<str:snils>/', views.download_generated_application, name="download_generated_application"),
     path('applications-list/', views.applications_list, name="applications_list")
 ]
