@@ -125,6 +125,14 @@
                                 <i class="fas fa-upload me-2"></i>Загрузка скана заявления
                             </button>
                         </li>
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link {% if active_tab == 'doc' %}active{% endif %}" 
+                                    id="doc-tab" data-bs-toggle="tab" data-bs-target="#doc" 
+                                    type="button" role="tab" aria-controls="doc" 
+                                    aria-selected="{% if active_tab == 'doc' %}true{% else %}false{% endif %}">
+                                <i class="fas fa-file-alt me-2"></i>Генерация документа
+                            </button>
+                        </li>
                     </ul>
                     
                     <!-- Содержимое вкладок -->
@@ -270,6 +278,128 @@
                                 </button>
         </form>
                         </div>
+
+                        <!-- Вкладка генерации документа -->
+                        <div class="tab-pane fade {% if active_tab == 'doc' %}show active{% endif %}" 
+                             id="doc" role="tabpanel" aria-labelledby="doc-tab">
+                            
+                            <form method="post" enctype="multipart/form-data">
+                                {% csrf_token %}
+                                <input type="hidden" name="doc_form" value="1">
+                                <div class="mb-3">
+                                     <div class="form-group">
+                                        <label for="ChooseTemplate">Выбор шаблона</label>
+                                        <select class="form-control" id="ChooseTemplate" name="template">
+                                            <option value="ENTER_EDUC">Заявление на обучение</option>
+                                            <option value="APROVE">Согласие ПД</option>
+                                            <option value="CONTRACT">Договор на обучение</option>
+                                        </select>
+                                    </div>
+                                </div>
+                                <div class="alert alert-warning" role="alert" id="TemplateWarning">
+                                    <h4>Перед подписанием нужно САМОСТОЯТЕЛЬНО заполнить поля</h4>
+                                    <ol>
+                                        <li>
+                                            ФИО в дательном падеже (стр.1)
+                                        </li>
+                                        <li>
+                                            Образование. Полное наименование учебного заведения (стр.1)
+                                        </li>
+                                        <li>
+                                            Образование. Направление, специальность, профессия по диплому (стр.1)
+                                        </li>
+                                        <li>
+                                            Образование. Год окончания учебного заведения (стр.1)
+                                        </li>
+                                    </ol>
+                                </div>
+                                
+                                <!-- Основные поля -->
+                                <div class="mb-3">
+                                    <label for="{{ gen_form.snils.id_for_label }}" class="form-label">{{ gen_form.snils.label }}</label>
+                                    {{ gen_form.snils }}
+                                    {% if gen_form.snils.errors %}
+                                        <div class="text-danger">{{ gen_form.snils.errors }}</div>
+                                    {% endif %}
+                                </div>
+                                
+                                <!-- Адресные поля с визуальным разделением -->
+                                <div class="address-section mb-4">
+                                    <h6 class="text-muted mb-3 border-bottom pb-2">
+                                        <i class="fas fa-map-marker-alt me-2"></i>Адрес
+                                    </h6>
+                                    
+                                    <!-- Первая строка: Почтовый индекс и Регион -->
+                                    <div class="row mb-3">
+                                        <div class="col-md-4">
+                                            <label for="{{ gen_form.postal_code.id_for_label }}" class="form-label">{{ gen_form.postal_code.label }}</label>
+                                            {{ gen_form.postal_code }}
+                                            {% if gen_form.postal_code.errors %}
+                                                <div class="text-danger">{{ gen_form.postal_code.errors }}</div>
+                                            {% endif %}
+                                        </div>
+                                        <div class="col-md-8">
+                                            <label for="{{ gen_form.region.id_for_label }}" class="form-label">{{ gen_form.region.label }}</label>
+                                            {{ gen_form.region }}
+                                            {% if gen_form.region.errors %}
+                                                <div class="text-danger">{{ gen_form.region.errors }}</div>
+                                            {% endif %}
+                                        </div>
+                                    </div>
+                                    
+                                    <!-- Вторая строка: Населенный пункт -->
+                                    <div class="row mb-3">
+                                        <div class="col-12">
+                                            <label for="{{ gen_form.settlement.id_for_label }}" class="form-label">{{ gen_form.settlement.label }}</label>
+                                            {{ gen_form.settlement }}
+                                            {% if gen_form.settlement.errors %}
+                                                <div class="text-danger">{{ gen_form.settlement.errors }}</div>
+                                            {% endif %}
+                                        </div>
+                                    </div>
+                                    
+                                    <!-- Третья строка: Улица и Дом -->
+                                    <div class="row mb-3">
+                                        <div class="col-md-8">
+                                            <label for="{{ gen_form.street.id_for_label }}" class="form-label">{{ gen_form.street.label }}</label>
+                                            {{ gen_form.street }}
+                                            {% if gen_form.street.errors %}
+                                                <div class="text-danger">{{ gen_form.street.errors }}</div>
+                                            {% endif %}
+                                        </div>
+                                        <div class="col-md-4">
+                                            <label for="{{ gen_form.house.id_for_label }}" class="form-label">{{ gen_form.house.label }}</label>
+                                            {{ gen_form.house }}
+                                            {% if gen_form.house.errors %}
+                                                <div class="text-danger">{{ gen_form.house.errors }}</div>
+                                            {% endif %}
+                                        </div>
+                                    </div>
+                                    
+                                    <!-- Четвертая строка: Корпус и Квартира -->
+                                    <div class="row mb-3">
+                                        <div class="col-md-6">
+                                            <label for="{{ gen_form.building.id_for_label }}" class="form-label">{{ gen_form.building.label }}</label>
+                                            {{ gen_form.building }}
+                                            {% if gen_form.building.errors %}
+                                                <div class="text-danger">{{ gen_form.building.errors }}</div>
+                                            {% endif %}
+                                        </div>
+                                        <div class="col-md-6">
+                                            <label for="{{ gen_form.apartment.id_for_label }}" class="form-label">{{ gen_form.apartment.label }}</label>
+                                            {{ gen_form.apartment }}
+                                            {% if gen_form.apartment.errors %}
+                                                <div class="text-danger">{{ gen_form.apartment.errors }}</div>
+                                            {% endif %}
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <button class="btn btn-primary" type="submit" name="gen_doc">
+                                    <i class="fas fa-file-download me-2"></i>Сгенерировать заявление
+                                </button>
+                            </form>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -278,6 +408,47 @@
 </div>
 
 <script>
+const select = document.getElementById('ChooseTemplate');
+const warningDiv = document.getElementById('TemplateWarning');
+
+const messages = {
+    ENTER_EDUC: `<h4>Перед подписанием нужно САМОСТОЯТЕЛЬНО заполнить поля</h4>
+                                        <ol>
+                                            <li>
+                                                ФИО в дательном падеже (стр.1)
+                                            </li>
+                                            <li>
+                                                Образование. Полное наименование учебного заведения (стр.1)
+                                            </li>
+                                            <li>
+                                                Образование. Направление, специальность, профессия по диплому (стр.1)
+                                            </li>
+                                            <li>
+                                                Образование. Год окончания учебного заведения (стр.1)
+                                            </li>
+                                        </ol>`,
+    CONTRACT: `<h4>Перед подписанием нужно САМОСТОЯТЕЛЬНО заполнить поля</h4>
+                                        <ol>
+                                            <li>
+                                                Номер договора (стр.1)
+                                            </li>
+                                            <li>
+                                                Стоимость услуг  (стр.2)
+                                            </li>
+                                        </ol>`
+};
+
+select.addEventListener('change', function() {
+    const selectedValue = select.value;
+    if (messages[selectedValue]){
+        warningDiv.style.display = "block";
+        warningDiv.innerHTML = messages[selectedValue] || "Пожалуйста, выберите шаблон из списка.";
+    }
+    else{
+        warningDiv.style.display = "none";
+    }
+});
+
 $(document).ready(function() {
     $('.select2').select2({
         placeholder: 'Начните вводить название региона...',

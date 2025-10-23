@@ -1813,10 +1813,26 @@ def contract_generation(request):
         1: "января", 2: "февраля", 3: "марта", 4: "апреля", 5: "мая", 6: "июня", 
         7: "июля", 8: "августа", 9: "сентября", 10: "октября", 11: "ноября", 12: "декабря"
     }
+    progtype = {
+        'ADV': 'ДПО ПК',
+        'PROFP': 'ПО ПП',
+        'PROF': 'ПО',
+    }
+    studyform = {
+        'FT': 'Очная',
+        'PT': 'Очная-заочная',
+        'DIST': 'Заочная',
+    }
+    template_type = {
+        "ENTER_EDUC": "Заявление",
+        "CONTRACT": "Договор",
+        "APROVE": "Соглашение"
+    }
     
     # По умолчанию показываем вкладку генерации
     active_tab = 'generate'
     form = DocumentForm()
+    gen_form = DocumentForm()
     upload_form = SignedApplicationForm()
     
     if request.method == "POST":
@@ -1858,7 +1874,7 @@ def contract_generation(request):
                                 )
                                 
                                 if file_uploaded:
-                                    messages.success(request, "✅ Подписанное заявление успешно загружено! Пожалуйста, сохраните оригинал документа для дальнейшей отправки.")
+                                    messages.success(request,"✅ Подписанное заявление успешно загружено! Пожалуйста, сохраните оригинал документа для дальнейшей отправки.")
                                     listener.is_synced = True
                                     listener.sync_errors = None
                                     listener.save()
@@ -1872,7 +1888,7 @@ def contract_generation(request):
                                 listener.sync_errors = str(e)
                                 listener.save()
                         else:
-                            messages.success(request, "✅ Подписанное заявление успешно загружено! (Сделка в Битрикс24 не найдена)")
+                            messages.success(request,"✅ Подписанное заявление успешно загружено! (Сделка в Битрикс24 не найдена)")
                         
                         active_tab = 'upload'
                 except Exception as e:
@@ -1881,7 +1897,7 @@ def contract_generation(request):
             else:
                 active_tab = 'upload'
                 
-        else:
+        elif 'generate_document' in request.POST:
             # Обработка генерации документа
             form = DocumentForm(request.POST)
             if form.is_valid():
@@ -1965,7 +1981,7 @@ def contract_generation(request):
                     # Удаляем временный файл
                     os.unlink(tmp_docx.name)
                     
-                    messages.success(request, "Заявление успешно сгенерировано! Документ будет автоматически скачан. Распечатайте его, подпишите и загрузите скан на вкладке 'Загрузка скана'.")
+                    messages.success(request,  "Заявление успешно сгенерировано! Документ будет автоматически скачан. Распечатайте его, подпишите и загрузите скан на вкладке 'Загрузка скана'.")
                     active_tab = 'upload'
                     
                     # Предзаполняем СНИЛС в форме загрузки
@@ -1980,7 +1996,97 @@ def contract_generation(request):
                     messages.error(request, f"Ошибка: {e}")
                 except Exception as e:
                     messages.error(request, f"Не удалось создать документ: {e}")
-    
+
+        elif 'doc_form' in request.POST:
+            # Обработка генерации документа
+            gen_form = DocumentForm(request.POST)
+            active_tab = "doc"
+            if gen_form.is_valid():
+                try:
+                    context = gen_form.cleaned_data
+                    context.setdefault('template', request.POST['template'])
+                    listener = AtlasApplication.objects.filter(raw_data__СНИЛС=int(context["snils"])).first()
+                    
+                    if not listener:
+                        raise AttributeError("Не удалось найти заявку с указанным СНИЛС")
+                    
+                    # Получаем программу из raw_data
+                    program = listener.raw_data.get('Программа обучения', '') if listener.raw_data else ''
+                    
+                    # Определяем тип шаблона по программе
+                    try:
+                        template = context["template"]
+                    except:
+                        template = "CONTRACT"
+                    context["program"] = "Повышение квалификации"
+                    program_data = []
+                    if program:
+                        program_data = EducationProgram.objects.filter(name=program).first()
+                        if program_data and program_data.program_type == "ADV":
+                            context["program"] = "Дополнительного профессионального образования "
+                    context["program"] += f" «{program}»"
+                    # Формируем адрес
+                    address_parts = []
+                    if context.get("settlement"):
+                        address_parts.append(context["settlement"])
+                    if context.get("street"):
+                        address_parts.append(context["street"])
+                    if context.get("house"):
+                        address_parts.append(f"д. {context['house']}")
+                    if context.get("building"):
+                        address_parts.append(f"корп. {context['building']}")
+                    if context.get("apartment"):
+                        address_parts.append(f"кв. {context['apartment']}")
+                    address = ", ".join(address_parts)
+                    
+                    # Сохраняем данные формы в модель
+                    listener.form_postal_code = context.get("postal_code")
+                    listener.form_region = context.get("region")
+                    listener.form_settlement = context.get("settlement")
+                    listener.form_street = context.get("street")
+                    listener.form_house = context.get("house")
+                    listener.form_building = context.get("building")
+                    listener.form_apartment = context.get("apartment")
+                    listener.save()
+                    
+                    # Подготовка контекста для шаблона
+                    for i, a in REGION_CHOICES:
+                        if context["region"] in i:
+                            context["region"] = a
+                    
+                    context["fio"] = listener.full_name
+                    context["passport_series_number"] = str(listener.raw_data["Серия паспорта"]) + " " + str(listener.raw_data["Номер паспорта"])
+                    context["passport_issuer"] = listener.raw_data["Кем выдан паспорт"]
+
+                    context["sex"] = listener.raw_data["Пол"]
+                    context["date_of_birth"] = listener.raw_data["Дата рождения"]
+                    context["passport_country"] = listener.raw_data["Гражданство"]
+                    context["date_start"] = listener.raw_data["Начало периода обучения"]
+                    context["date_end"] = listener.raw_data["Окончание периода обучения"]
+                    context["today"] = f'"{datetime.now().day}" {months[datetime.today().month]} {datetime.today().year} г.'
+                    context["registration"] = listener.raw_data["Место регистрации"]
+                    context["initial"] = f"{listener.raw_data["Фамилия"]} {listener.raw_data["Имя"][0]}. {listener.raw_data["Отчество"][0]}."
+                    context["program_type"] = progtype[program_data.program_type]
+                    context["study_form"] = studyform[program_data.study_form]
+                    context["academic_hours"] = program_data.academic_hours
+
+                    context["phone"] = listener.phone
+                    context["email"] = listener.email
+                    context["today_date"] = datetime.today().strftime("%d")
+                    context["today_month"] = months[datetime.today().month]
+                    context["address"] = address
+                    # Генерация документа
+                    doc = DocxTemplate(settings.DOCX_TEMPLATE_PATH + f"/template_{template}.docx")
+                    doc.render(context)
+                    tmp_docx = tempfile.NamedTemporaryFile(delete=False, suffix=".docx")
+                    doc.save(tmp_docx.name)
+                    tmp_docx.seek(0)
+                    response = FileResponse(open(tmp_docx.name, "rb"), as_attachment=True, filename=f"{template_type[template]}_{context["fio"]}_{datetime.today().strftime("%Y-%m-%d %H:%M:%S")}.docx")
+                    return response
+                except AttributeError as e:
+                    messages.error(request, f"Ошибка: {e}")
+                except Exception as e:
+                    messages.error(request, f"Не удалось создать документ: {e}")
     # Проверяем, есть ли сгенерированный файл для текущего СНИЛС (если заполнен в upload_form)
     generated_file_url = None
     snils_value = None
@@ -1990,7 +2096,7 @@ def contract_generation(request):
     elif request.method == 'GET' and request.GET.get('snils'):
         snils_value = request.GET.get('snils')
     
-    if snils_value:
+    if snils_value: 
         try:
             listener = AtlasApplication.objects.filter(raw_data__СНИЛС=int(snils_value)).first()
             if listener and listener.generated_application:
@@ -2001,6 +2107,7 @@ def contract_generation(request):
     
     return render(request, "crm_connector/contract_generation.html", {
         "form": form,
+        "gen_form": gen_form,
         "upload_form": upload_form,
         "active_tab": active_tab,
         "generated_file_url": generated_file_url,
@@ -2257,3 +2364,12 @@ def applications_list(request):
     }
     
     return render(request, 'crm_connector/applications_list.html', context)
+
+class ListenerProgressViewSet(viewsets.ReadOnlyModelViewSet):
+    authentication_classes = [TokenAuthentication]
+    permission_classes = [IsAuthenticated]
+    filterset_class = ListenerProgressFilter
+    queryset = AtlasApplication.objects.all()
+    serializer_class = ListenerProgressSerializer
+    filter_backends = [DjangoFilterBackend]
+    filterset_fields = ['application_id', 'potok', 'program']
