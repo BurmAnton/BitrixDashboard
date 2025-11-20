@@ -3,6 +3,8 @@ from django.http import HttpResponseRedirect, JsonResponse, Http404, FileRespons
 from django.conf import settings
 from django.urls import reverse
 from django.utils import timezone
+from django_filters.rest_framework import DjangoFilterBackend
+from rest_framework import viewsets
 
 import openpyxl
 from .tasks import sync_leads, sync_deals, sync_contacts, sync_pipelines_task
@@ -2364,6 +2366,71 @@ def applications_list(request):
     }
     
     return render(request, 'crm_connector/applications_list.html', context)
+
+import django_filters
+from rest_framework import serializers
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.authentication import TokenAuthentication
+from rest_framework import viewsets
+
+def api_guide(request):
+    from django.contrib.auth.models import User
+    from rest_framework.authtoken.models import Token
+    import requests
+    import urllib.parse
+
+    if not request.user.is_authenticated:
+        messages.warning(request, 'Для получения токена необходимо войти в систему.')
+        return redirect(f'{settings.LOGIN_URL}?next={request.path}')
+    
+    login = User.objects.filter(username=request.user.username).first()
+    tkn = Token.objects.filter(user=login).first()
+    
+    url = 'https://bitrix24.tuna-edu.ru/api/user-progress'
+    headers = { 'Authorization': f'Token {tkn}' }
+
+    params = {}
+    for arg in request.POST.dict():
+        value = request.POST.dict().get(arg)
+        if arg != 'csrfmiddlewaretoken' and arg != 'apiLink' and value != '':
+            params.setdefault(arg, value)
+    print("Парам:" + str(params))
+
+    if request.method == 'POST':
+        response = requests.get(url,headers=headers, params=params)
+    else:
+        response = requests.get(url,headers=headers)
+
+    context={
+        'login': login,
+        'token': tkn,
+        'JsonReponse': response.json()[0:51],
+        'URL': str(urllib.parse.unquote(response.url))
+    }
+
+    return render(request, "crm_connector/api_form.html", context=context)
+
+class ListenerProgressSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = AtlasApplication
+        fields = ['application_id', 'full_name', 'potok', 'program', 'JSON_ed_progress']
+
+class ListenerProgressFilter(django_filters.FilterSet):
+    application_id = django_filters.CharFilter(field_name='application_id', lookup_expr='exact')
+    application_id__contains = django_filters.CharFilter(field_name='application_id', lookup_expr='contains')
+    
+    full_name = django_filters.CharFilter(field_name='full_name', lookup_expr='exact')
+    full_name__contains = django_filters.CharFilter(field_name='full_name', lookup_expr='contains')
+    
+    potok = django_filters.CharFilter(field_name='potok', lookup_expr='exact')
+    potok__contains = django_filters.CharFilter(field_name='potok', lookup_expr='contains')
+    
+    program = django_filters.CharFilter(field_name='program', lookup_expr='exact')
+    program__contains = django_filters.CharFilter(field_name='program', lookup_expr='contains')
+
+    class Meta:
+        model = AtlasApplication
+        fields = [] 
 
 class ListenerProgressViewSet(viewsets.ReadOnlyModelViewSet):
     authentication_classes = [TokenAuthentication]

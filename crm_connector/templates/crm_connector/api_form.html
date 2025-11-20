@@ -1,0 +1,650 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block extra_css %}
+    <style>
+        .messages{
+            display: none;
+        }
+        .container{
+            width: 95%; 
+            max-width: 95%;
+        }
+        label{
+            font-size: smaller;
+        }
+        .code-block{
+            background-color: #ebf2f3;
+            border-radius: 12px;
+            padding: 2%;
+        }
+    </style>
+{% endblock %}
+
+{% block content %}
+<title>Авторизация токена</title>
+<body>
+    <div class="row" style="height: 100%;">
+        <!-- Левая колонка: форма для тестов -->
+        <div class="col-md-6">
+            <div class="container-fluid">
+                <div class="card">
+                    <div class="card-header">
+                        <h5>Получение списков слушателей</h5>
+                    </div>
+                    <div class="card-body" style="height: 780px">
+                        <form method="post">
+                            {% csrf_token %}
+                            <div class="mb-3 position-relative">
+                                <label for="password" class="form-label">Токен</label>
+                                <div class="input-group">
+                                <input type="password" readonly class="form-control form-control-sm" id="password" value="{{ token }}">
+                                <button type="button" class="btn btn-outline-secondary btn-sm" id="togglePassword" style="width: 20%;">Показать</button>
+                                </div>
+                            </div>
+
+                            <div class="mb-3 d-flex align-items-center">
+                                <label for="requestIdInput" class="form-label me-2 mb-2 flex-grow-1">ID заявки</label>
+                                <input type="text" class="form-control form-control-sm me-2" name="application_id" id="requestIdInput" >
+                                <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="requestId">
+                                <label class="form-check-label" for="requestId">содержит</label>
+                                </div>
+                            </div>
+
+                            <div class="mb-3 d-flex align-items-center">
+                                <label for="FioInput" class="form-label me-2 mb-0 flex-grow-1">ФИО слушателя</label>
+                                <input type="text" class="form-control form-control-sm me-2" name="full_name" id="FioInput" >
+                                <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="Fio">
+                                <label class="form-check-label" for="Fio">содержит</label>
+                                </div>
+                            </div>
+
+                            <div class="mb-3 d-flex align-items-center">
+                                <label for="potokInput" class="form-label me-2 mb-0 flex-grow-1">Поток</label>
+                                <input type="text" class="form-control form-control-sm me-2" name="potok" id="potokInput" >
+                                <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="potok">
+                                <label class="form-check-label" for="potok">содержит</label>
+                                </div>
+                            </div>
+
+                            <div class="mb-3 d-flex align-items-center">
+                                <label for="programInput" class="form-label me-2 mb-0 flex-grow-1">Программа</label>
+                                    <input type="text" class="form-control form-control-sm me-2" name="program" id="programInput" >
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" id="program">
+                                    <label class="form-check-label" for="program">содержит</label>
+                                </div>
+                            </div>
+                            <div class="mb-3">
+                                <label for="apiLink" class="form-label">Ссылка API для fetch</label>
+                                <input type="text" readonly class="form-control form-control-sm" id="apiLink" name="apiLink" value="{{ URL|safe }}">
+                            </div>
+
+                            <button type="submit" class="btn btn-primary btn-sm">Отправить</button>
+                        </form>
+
+                        <div class="card" style="margin-top: 12px; padding: 1%; height: 45%; overflow-y: auto; font-size: small;" >
+                            <pre id="JsonResponse"></pre>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Правая колонка: контент документации -->
+        <div class="col-md-6">
+                <div class="container-fluid">
+                    <div class="card">
+                        <!-- Заголовок -->
+                        <div class="card-header">
+                        <h5>Документация REST API BitrixDashboard</h5>
+                        </div>
+
+                        <!-- Table of Contents -->
+                        <div class="card-body" style="max-height: 780px; overflow-y: auto;">
+                            <div class="toc">
+                                <h3>Содержание:</h3>
+                                <ul>
+                                    <li><a class="link-body-emphasis link-underline-opacity-0" href="#intro">Введение</a></li>
+                                    <li><a class="link-body-emphasis link-underline-opacity-0" href="#auth">1. Аутентификация</a></li>
+                                    <li><a class="link-body-emphasis link-underline-opacity-0" href="#endpoint">2. Основной эндпоинт</a></li>
+                                    <li><a class="link-body-emphasis link-underline-opacity-0" href="#filters">3. Фильтрация результатов</a></li>
+                                    <li><a class="link-body-emphasis link-underline-opacity-0" href="#response">4. Формат ответа</a></li>
+                                    <li><a class="link-body-emphasis link-underline-opacity-0" href="#errors">5. Коды ответов и ошибки</a></li>
+                                    <li><a class="link-body-emphasis link-underline-opacity-0" href="#recommendations">6. Рекомендации</a></li>
+                                </ul>
+                            </div>
+
+                            <!-- Введение -->
+                            <section id="intro">
+                                <h2>Введение</h2>
+                                <p>Добро пожаловать в документацию REST API для системы отслеживания прогресса слушателей. Этот API предоставляет возможность получения и анализа информации о прогрессе учащихся в различных программах обучения.</p>
+                                <div class="alert alert-warning">
+                                    <strong>Важно:</strong> Доступ к API требует аутентификации. Только суперпользователи проекта могут создавать и использовать токены доступа.
+                                </div>
+                            </section>
+
+                            <!-- Аутентификация -->
+                            <section id="auth">
+                                <h2>1. Аутентификация</h2>
+
+                                <h3>1.1 Получение токена доступа</h3>
+                                <p>Перед началом работы с API необходимо получить токен аутентификации.</p>
+
+                                <h4>Шаг 1: Перейдите на страницу получения токена</h4>
+                                <p>Откройте в браузере адрес для получения токена.</p>
+                                <div class="code-block">
+                                    <code>https://bitrix24.tuna-edu.ru/get-token/</code>
+                                </div>
+                                <h4>Шаг 2: Введите учетные данные</h4>
+                                <p>На странице получения токена введите:</p>
+                                <ul>
+                                    <li><strong>Логин:</strong> имя пользователя суперпользователя</li>
+                                    <li><strong>Пароль:</strong> пароль суперпользователя</li>
+                                </ul>
+
+                                <h4>Шаг 3: Скопируйте токен</h4>
+                                <p>После успешной аутентификации система вернет вам токен доступа.</p>
+
+                                <div class="alert alert-danger">
+                                    <strong>Важно:</strong>
+                                    <ul>
+                                        <li>Токены предоставляются только суперпользователям проекта</li>
+                                        <li>Не делитесь вашим токеном с другими пользователями</li>
+                                        <li>Если токен скомпрометирован, обратитесь к администратору проекта</li>
+                                    </ul>
+                                </div>
+
+                                <h3>1.2 Использование токена в запросах</h3>
+                                <p>Токен передается в заголовке <code>Authorization</code> каждого запроса к API.</p>
+                                <p><strong>Формат заголовка:</strong></p>
+                                <div class="code-block">
+                                    <code>Authorization: Token YOUR_TOKEN_HERE</code>
+                                </div>
+                            </section>
+
+                            <!-- Основной эндпоинт -->
+                            <section id="endpoint">
+                                <h2>2. Основной эндпоинт</h2>
+
+                                <h3>2.1 Получение данных о прогрессе пользователей</h3>
+                                <table class="table table-bordered">
+                                    <tr>
+                                        <td><strong>Эндпоинт:</strong></td>
+                                        <td><code>/api/user-progress/</code></td>
+                                    </tr>
+                                    <tr>
+                                        <td><strong>URL (локальная разработка):</strong></td>
+                                        <td><code>http://localhost:8000/api/user-progress/</code></td>
+                                    </tr>
+                                    <tr>
+                                        <td><strong>URL (production):</strong></td>
+                                        <td><code>https://bitrix24.tuna-edu.ru/api/user-progress/</code></td>
+                                    </tr>
+                                    <tr>
+                                        <td><strong>Метод HTTP:</strong></td>
+                                        <td>GET</td>
+                                    </tr>
+                                    <tr>
+                                        <td><strong>Аутентификация:</strong></td>
+                                        <td>Требуется (токен в заголовке Authorization)</td>
+                                    </tr>
+                                </table>
+
+                                <h3>2.2 Формат запроса</h3>
+                                <p><strong>Заголовки обязательные:</strong></p>
+                                <table class="table table-striped">
+                                    <thead>
+                                        <tr>
+                                            <th>Заголовок</th>
+                                            <th>Значение</th>
+                                            <th>Описание</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <tr>
+                                            <td><code>Authorization</code></td>
+                                            <td><code>Token YOUR_TOKEN</code></td>
+                                            <td>Токен аутентификации</td>
+                                        </tr>
+                                        <tr>
+                                            <td><code>Content-Type</code></td>
+                                            <td><code>application/json</code></td>
+                                            <td>Тип содержимого (рекомендуется)</td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+
+                                <h3>2.3 Примеры использования</h3>
+
+    <div class="">Пример 1: JavaScript (Fetch API)</div>
+    <div class="code-block">
+        <pre><code>// Получение всех данных о прогрессе
+fetch('https://bitrix24.tuna-edu.ru/api/user-progress/', {
+  method: 'GET',
+  headers: {
+    'Authorization': 'Token 4a8389aa7f015d3a68e44e3f4bae94d63c7ac097',
+    'Content-Type': 'application/json'
+  }
+})
+.then(response => response.json())
+.then(data => console.log(data))
+.catch(error => console.error('Ошибка:', error));</code></pre>
+    </div>
+
+    <div class="">Пример 2: cURL</div>
+    <div class="code-block">
+        <pre><code>curl -X GET 'https://bitrix24.tuna-edu.ru/api/user-progress/' \
+  -H 'Authorization: Token 4a8389aa7f015d3a68e44e3f4bae94d63c7ac097' \
+  -H 'Content-Type: application/json'</code></pre>
+    </div>
+
+    <div class="">Пример 3: Python (Requests)</div>
+    <div class="code-block">
+        <pre><code>import requests
+
+headers = {
+    'Authorization': 'Token 4a8389aa7f015d3a68e44e3f4bae94d63c7ac097',
+    'Content-Type': 'application/json'
+}
+
+response = requests.get('https://bitrix24.tuna-edu.ru/api/user-progress/', headers=headers)
+data = response.json()
+print(data)</code></pre>
+    </div>
+                            </section>
+
+                            <!-- Фильтрация -->
+                            <section id="filters">
+                                <h2>3. Фильтрация результатов</h2>
+                                <p>API поддерживает фильтрацию по различным параметрам для поиска конкретных данных пользователей.</p>
+
+                                <h3>3.1 Доступные фильтры</h3>
+                                <table class="table table-striped">
+                                    <thead>
+                                        <tr>
+                                            <th>Фильтр</th>
+                                            <th>Параметр в URL</th>
+                                            <th>Описание</th>
+                                            <th>Тип поиска</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <tr>
+                                            <td>ID заявки</td>
+                                            <td><code>application_id</code></td>
+                                            <td>Поиск по уникальному номеру заявки</td>
+                                            <td>Точное совпадение</td>
+                                        </tr>
+                                        <tr>
+                                            <td>ID заявки (содержит)</td>
+                                            <td><code>application_id__contains</code></td>
+                                            <td>Поиск по части номера заявки</td>
+                                            <td>Частичное совпадение</td>
+                                        </tr>
+                                        <tr>
+                                            <td>ФИО слушателя</td>
+                                            <td><code>full_name</code></td>
+                                            <td>Полное имя пользователя</td>
+                                            <td>Точное совпадение</td>
+                                        </tr>
+                                        <tr>
+                                            <td>ФИО слушателя (содержит)</td>
+                                            <td><code>full_name__contains</code></td>
+                                            <td>Поиск по части ФИО (без учета регистра)</td>
+                                            <td>Частичное совпадение</td>
+                                        </tr>
+                                        <tr>
+                                            <td>Поток</td>
+                                            <td><code>potok</code></td>
+                                            <td>Название потока обучения</td>
+                                            <td>Точное совпадение</td>
+                                        </tr>
+                                        <tr>
+                                            <td>Поток (содержит)</td>
+                                            <td><code>potok__contains</code></td>
+                                            <td>Поиск по части названия потока</td>
+                                            <td>Частичное совпадение</td>
+                                        </tr>
+                                        <tr>
+                                            <td>Программа</td>
+                                            <td><code>program</code></td>
+                                            <td>Название программы обучения</td>
+                                            <td>Точное совпадение</td>
+                                        </tr>
+                                        <tr>
+                                            <td>Программа (содержит)</td>
+                                            <td><code>program__contains</code></td>
+                                            <td>Поиск по части названия программы</td>
+                                            <td>Частичное совпадение</td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+
+                                <h3>3.2 Синтаксис фильтрации</h3>
+                                <p>Фильтры передаются как query-параметры в URL:</p>
+                                <div class="code-block">
+                                    <code>/api/user-progress/?filter1=value1&filter2=value2</code>
+                                </div>
+
+                                <h3>3.3 Примеры фильтрации</h3>
+
+                                <div class="">Пример 1: Поиск по точному ID заявки</div>
+                                <div class="code-block">
+                                    <code>https://bitrix24.tuna-edu.ru/api/user-progress/?application_id=124315555</code>
+                                </div>
+
+                                <div class="">Пример 2: Поиск по ФИО (частичное совпадение)</div>
+                                <div class="code-block">
+                                    <code>https://bitrix24.tuna-edu.ru/api/user-progress/?full_name__contains=ivan</code>
+                                </div>
+
+                                <div class="">Пример 3: Поиск по потоку</div>
+                                <div class="code-block">
+                                    <code>https://bitrix24.tuna-edu.ru/api/user-progress/?potok=11.02.2025-04.03.2025</code>
+                                </div>
+
+                                <div class="">Пример 4: Комбинированный поиск</div>
+                                <div class="code-block">
+                                    <code>https://bitrix24.tuna-edu.ru/api/user-progress/?application_id=124315555&potok__contains=02.2025&program__contains=беспилотных</code>
+                                </div>
+                            </section>
+
+                            <!-- Формат ответа -->
+                            <section id="response">
+                                <h2>4. Формат ответа</h2>
+
+                                <h3>4.1 Успешный ответ (HTTP 200 OK)</h3>
+                                <p>API возвращает двумерный массив данных о прогрессе пользователей.</p>
+
+                                <div class="code-block" style="height: 400px; overflow-y: auto; font-size: small;">
+        <pre><code>{
+    "application_id": "c2a61a51-86ac-4bec-bcbc-5b87b41f6983",
+    "full_name": "Иванов Иван Иванович",
+    "potok": "01.01.2025-01.02.2025",
+    "program": "Специалист по эксплуатации беспилотных авиационных систем в сфере лесного хозяйства",
+    "JSON_ed_progress": {
+      "statistic": {
+        "1.1": {
+          "theory": "100",
+          "practice": "100"
+        },
+        "1.2": {
+          "theory": "100"
+        },
+        "1.3": {
+          "test": "100",
+          "theory": "100"
+        },
+        "2.1": {
+          "test": "100",
+          "theory": "100"
+        },
+        "2.2": {
+          "test": "100",
+          "theory": "100"
+        },
+        "2.3": {
+          "test": "100",
+          "theory": "100"
+        },
+        "2.4": {
+          "test": "100",
+          "theory": "100"
+        },
+        "3.1": {
+          "theory": "100"
+        },
+        "3.2": {
+          "theory": "100",
+          "practice": "100"
+        },
+        "3.3": {
+          "theory": "100",
+          "practice": "100"
+        },
+        "3.4": {
+          "test": "100",
+          "theory": "100"
+        },
+        "4.1": {
+          "theory": "100"
+        },
+        "4.2": {
+          "theory": "100",
+          "practice": "100"
+        },
+        "4.3": {
+          "theory": "100"
+        },
+        "4.4": {
+          "test": "100",
+          "theory": "100"
+        },
+        "5.1": {
+          "theory": "100",
+          "practice": "100"
+        },
+        "6.1": {
+          "theory": "100",
+          "practice": "100"
+        }
+      },
+      "attestation": "100,100,100,100,100,5"
+    }
+  },</code></pre>
+    </div>
+
+                                <h3>4.2 Структура данных в ответе</h3>
+                                <table class="table table-striped">
+                                    <thead>
+                                        <tr>
+                                            <th>Поле</th>
+                                            <th>Тип</th>
+                                            <th>Описание</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <tr>
+                                            <td><code>application_id</code></td>
+                                            <td>String</td>
+                                            <td>Уникальный идентификатор заявки</td>
+                                        </tr>
+                                        <tr>
+                                            <td><code>full_name</code></td>
+                                            <td>String</td>
+                                            <td>Полное имя пользователя</td>
+                                        </tr>
+                                        <tr>
+                                            <td><code>potok</code></td>
+                                            <td>String</td>
+                                            <td>Название потока обучения</td>
+                                        </tr>
+                                        <tr>
+                                            <td><code>program</code></td>
+                                            <td>String</td>
+                                            <td>Название программы обучения</td>
+                                        </tr>
+                                        <tr>
+                                            <td><code>progress</code></td>
+                                            <td>JSON</td>
+                                            <td>Прогресс прохождения программы</td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </section>
+
+                            <!-- Коды ответов -->
+                            <section id="errors">
+                                <h2>5. Коды ответов и ошибки</h2>
+
+                                <h3>5.1 Успешные коды ответов</h3>
+                                <table class="table table-striped">
+                                    <thead>
+                                        <tr>
+                                            <th>Код</th>
+                                            <th>Описание</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <tr>
+                                            <td><code>200</code></td>
+                                            <td>OK — Запрос выполнен успешно</td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+
+                                <h3>5.2 Коды ошибок</h3>
+                                <table class="table table-striped">
+                                    <thead>
+                                        <tr>
+                                            <th>Код</th>
+                                            <th>Описание</th>
+                                            <th>Решение</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <tr>
+                                            <td><code>400</code></td>
+                                            <td>Bad Request — Неверный формат запроса</td>
+                                            <td>Проверьте синтаксис URL и параметры запроса</td>
+                                        </tr>
+                                        <tr>
+                                            <td><code>401</code></td>
+                                            <td>Unauthorized — Требуется аутентификация</td>
+                                            <td>Убедитесь, что вы передали корректный токен в заголовке Authorization</td>
+                                        </tr>
+                                        <tr>
+                                            <td><code>403</code></td>
+                                            <td>Forbidden — Доступ запрещен</td>
+                                            <td>Ваш токен не имеет необходимых прав. Используйте учетные данные суперпользователя</td>
+                                        </tr>
+                                        <tr>
+                                            <td><code>404</code></td>
+                                            <td>Not Found — Ресурс не найден</td>
+                                            <td>Проверьте правильность URL эндпоинта</td>
+                                        </tr>
+                                        <tr>
+                                            <td><code>500</code></td>
+                                            <td>Internal Server Error — Ошибка сервера</td>
+                                            <td>Попробуйте позже или обратитесь к администратору</td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+
+                                <h3>5.3 Примеры ошибок</h3>
+
+                                <div class="">Ошибка 401: Отсутствует токен</div>
+                                <div class="code-block">
+                                    <pre><code>{
+"detail": "Authentication credentials were not provided."
+}</code></pre></div>
+                                                        <p style="margin-top: 10px;"><strong>Решение:</strong> Добавьте заголовок Authorization с вашим токеном.</p>
+                                                    
+
+                                                    <div class="">Ошибка 403: Недостаточно прав</div>
+                                                    <div class="code-block">
+                                                        <pre><code>{
+"detail": "You do not have permission to perform this action."
+}</code></pre></div>
+                                    <p style="margin-top: 10px;"><strong>Решение:</strong> Используйте учетные данные суперпользователя для получения токена.</p>
+                            </section>
+
+                            <!-- Рекомендации -->
+                            <section id="recommendations">
+                                <h2>6. Рекомендации по использованию</h2>
+
+                                <h3>6.1 Безопасность</h3>
+                                <ul>
+                                    <li><strong>Никогда</strong> не передавайте токены в URL (используйте только заголовки)</li>
+                                    <li><strong>Никогда</strong> не публикуйте токены в исходном коде или GitHub</li>
+                                    <li>Используйте переменные окружения для хранения токенов</li>
+                                    <li>Регулярно проверяйте логи доступа к API</li>
+                                    <li>Если токен скомпрометирован, немедленно создайте новый в админ панели</li>
+                                </ul>
+
+                                <h3>6.2 Оптимизация запросов</h3>
+                                <ul>
+                                    <li>Используйте фильтры для снижения объема передаваемых данных</li>
+                                    <li>Для поиска по части значения используйте <code>__contains</code></li>
+                                    <li>Комбинируйте несколько фильтров для более точных результатов</li>
+                                    <li>Кэшируйте результаты на стороне клиента при возможности</li>
+                                </ul>
+
+                                <h3>6.3 Обработка ошибок</h3>
+                                <ul>
+                                    <li>Всегда проверяйте код статуса ответа (200, 401, 403 и т.д.)</li>
+                                    <li>Обрабатывайте исключения при сетевых ошибках</li>
+                                    <li>Логируйте все ошибки для отладки</li>
+                                </ul>
+                            </section>
+                        </div>
+                            
+                    </div>
+                </div>
+        </div>
+    </div>
+</body>
+
+<script>
+    document.getElementById('togglePassword').addEventListener('click', function () {
+    const passwordInput = document.getElementById('password');
+    const type = passwordInput.getAttribute('type') === 'password' ? 'text' : 'password';
+    passwordInput.setAttribute('type', type);
+    this.textContent = type === 'password' ? 'Показать' : 'Скрыть';
+    });
+    pre = document.getElementById('JsonResponse')
+    const jsonResponse = {{ JsonReponse|safe  }};
+    const formattedJson = JSON.stringify(jsonResponse, null, 2);
+    pre.textContent = formattedJson;
+
+    
+    function updateTextInputNames() {
+    // Получаем все чекбоксы на странице
+    const checkboxes = document.querySelectorAll('input[type="checkbox"]');
+
+    checkboxes.forEach(checkbox => {
+        // Получаем id чекбокса
+        const checkboxId = checkbox.id;
+
+        // Находим текстовый input, id которого содержит id чекбокса
+        // Используем атрибут селектор *= для проверки включения подстроки в id
+        const textInput = document.querySelector(`input[type="text"][id*="${checkboxId}"]`);
+
+        if (textInput) {
+            // Запоминаем базовый нейм (без приставки)
+            const baseName = textInput.getAttribute('data-base-name') || textInput.name.replace(/__contains$/, '');
+
+            // Сохраняем базовый нейм в data-атрибут для повторного использования
+            textInput.setAttribute('data-base-name', baseName);
+
+            if (checkbox.checked) {
+                // Добавляем приставку __contains, если ее еще нет
+                if (!textInput.name.endsWith('__contains')) {
+                    textInput.name = baseName + '__contains';
+                }
+            } else {
+                // Убираем приставку, если чекбокс не отмечен
+                textInput.name = baseName;
+            }
+        }
+    });
+}
+
+    const checkboxes = document.querySelectorAll('input[type="checkbox"]');
+
+    // Добавляем слушатель события change на каждый чекбокс
+    checkboxes.forEach(checkbox => {
+        checkbox.addEventListener('change', () => {
+            updateTextInputNames();
+        });
+    });
+
+    // Вызовем функцию один раз при загрузке страницы, чтобы синхронизировать имена
+    updateTextInputNames();
+
+</script>
+{% endblock %}

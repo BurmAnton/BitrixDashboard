@@ -1,8 +1,13 @@
-from django.urls import path
+from django.urls import path, include
 from . import views
-from .views import ObjectHistoryView, RegionAutocomplete
+from rest_framework.routers import DefaultRouter
+from rest_framework.authtoken import views as tokenviews
+from .views import ObjectHistoryView, RegionAutocomplete, ListenerProgressViewSet
 
 app_name = 'crm_connector'
+
+router = DefaultRouter()
+router.register(r'user-progress', ListenerProgressViewSet, basename='user-progress')
 
 urlpatterns = [
     path('', views.index, name='index'),
@@ -22,6 +27,9 @@ urlpatterns = [
     path('attestation-stats', views.attestation_stats, name="attestation-stats"),
     path('region-autocomplete/', RegionAutocomplete.as_view(), name='region-autocomplete'),
     path('contract-generation/', views.contract_generation, name="contract_generation"),
+    path('api/', include(router.urls)),
+    path('api-token-auth/', tokenviews.obtain_auth_token),
+    path('api-guide/', views.api_guide, name="api-guide"),
     path('download-application/<str:snils>/', views.download_generated_application, name="download_generated_application"),
     path('applications-list/', views.applications_list, name="applications_list")
 ]
