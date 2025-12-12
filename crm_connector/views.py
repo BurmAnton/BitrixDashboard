@@ -10,7 +10,7 @@ import openpyxl
 from .tasks import sync_leads, sync_deals, sync_contacts, sync_pipelines_task
 from .bitrix24_api import Bitrix24API
 from django.views.decorators.csrf import csrf_protect
-from .models import Lead, Deal, Contact, Pipeline, Stage, AtlasApplication, StageRule, Company, AtlasProgram, REGION_CHOICES
+from .models import Lead, Deal, Contact, Pipeline, Stage, AtlasApplication, StageRule, Company, AtlasProgram, REGION_CHOICES, EDUCATION_PROGRAMM
 from django.db.models import Count, Sum, F, ExpressionWrapper, Avg, DurationField, Q
 from django.contrib import messages
 import logging
@@ -999,7 +999,6 @@ def lead_dashboard(request):
         query |= Q(bitrix_id__icontains=code)
     # Загружаем стадии с такими кодами
     stages = Stage.objects.filter(query).order_by('bitrix_id')
-    stage_id_to_code = {stage.bitrix_id: stage.name for stage in stages}
     stage_code_to_name = {
         'NEW': '1. Необработанная заявка',
         'UC_OHS476': '2. Направлена инструкция по РвР',
@@ -1019,73 +1018,77 @@ def lead_dashboard(request):
 
     # Формируем словарь: {программа: {регион: {компания: {stage_code: count, ..., 'total': count}}}}
     data = {}
-    program_totals = {}
-    region_totals = {}
     total = {code:0 for code in needed_stage_codes}
     headcompanies = {}
 
     # Заполняем словарь родительских компаний
     for deal in deals:
-        head = deal.company.head
         try:
-            int(head)
-            Company.objects.get(bitrix_id = head).title
-        except:
-            head = ''
+            head = deal.company.head
+            dick = deal.company
+            str(head)
+            foundedhead = Company.objects.filter(bitrix_id = head).first().title
+        except AttributeError:
+            pass
+        except Exception as e:
+            deal.company.head = head = ''
         if head:
             try:
-                headcompanies[head] = Company.objects.get(bitrix_id = deal.company.head).title
+                foundedhead = Company.objects.filter(bitrix_id = head).first()
+                headcompanies[head] = foundedhead.title 
             except Exception as e:
+                deal.company.head = ''
+                head = deal.company.head
                 logger.error(f"Не удалось найти родительскую компаниню: {e}")
-
     for deal in deals:
-        prog = deal.get_program_display() if hasattr(deal, 'get_program_display') else deal.program
-        region = deal.get_region_display() if hasattr(deal, 'get_region_display') else deal.region
-        headid = deal.company.head
+        prog = dict(EDUCATION_PROGRAMM).get(deal.program)
+        region = dict(REGION_CHOICES).get(deal.region)
+        headid = ''
         try:
-            int(headid)
+            Company.objects.filter(bitrix_id = deal.company.head).first()
+            headid = str(deal.company.head)
         except:
             headid = ''
-        if prog and region != '':
+        if prog and region:
             company_name = deal.company.title if deal.company else 'Без компании'
             stage_code = deal.stage.bitrix_id
             for code in needed_stage_codes:
                 if code in stage_code:
                     stage_code = code
             
-            data.setdefault(prog, {})
-            data[prog].setdefault(region, {})
+            data.setdefault(prog, {code: 0 for code in needed_stage_codes})
+            data[prog].setdefault('total', 0 )
+            data[prog].setdefault('regions', {} )
+            data[prog]['regions'].setdefault(region, {code: 0 for code in needed_stage_codes})
+            data[prog]['regions'][region].setdefault('total', 0 )
             if headid:
-                data[prog][region].setdefault(headcompanies[headid], {code: 0 for code in needed_stage_codes})
-                data[prog][region][headcompanies[headid]].setdefault('total', 0)
-                data[prog][region][headcompanies[headid]].setdefault('child', {})
-                data[prog][region][headcompanies[headid]]['total'] +=1
-                data[prog][region][headcompanies[headid]][stage_code] +=1
-                data[prog][region][headcompanies[headid]]['child'].setdefault(company_name, {code:0 for code in needed_stage_codes})
-                data[prog][region][headcompanies[headid]]['child'][company_name].setdefault('total', 0)
-                data[prog][region][headcompanies[headid]]['child'][company_name][stage_code] += 1
-                data[prog][region][headcompanies[headid]]['child'][company_name]['total'] += 1
+                try:
+                    data[prog]['total'] += 1
+                    data[prog][stage_code] += 1
+                    data[prog]['regions'][region]['total'] += 1
+                    data[prog]['regions'][region][stage_code] += 1
+                    data[prog]['regions'][region].setdefault('companies', {})
+                    data[prog]['regions'][region]['companies'].setdefault(headcompanies[headid], {code: 0 for code in needed_stage_codes})
+                    data[prog]['regions'][region]['companies'][headcompanies[headid]].setdefault('total', 0)
+                    data[prog]['regions'][region]['companies'][headcompanies[headid]].setdefault('child', {})
+                    data[prog]['regions'][region]['companies'][headcompanies[headid]]['total'] +=1
+                    data[prog]['regions'][region]['companies'][headcompanies[headid]][stage_code] +=1
+                    data[prog]['regions'][region]['companies'][headcompanies[headid]]['child'].setdefault(company_name, {code:0 for code in needed_stage_codes})
+                    data[prog]['regions'][region]['companies'][headcompanies[headid]]['child'][company_name].setdefault('total', 0)
+                    data[prog]['regions'][region]['companies'][headcompanies[headid]]['child'][company_name][stage_code] += 1
+                    data[prog]['regions'][region]['companies'][headcompanies[headid]]['child'][company_name]['total'] += 1
+                except Exception as e:
+                    print(f"Траблы с заполнением дочерней компании: {e}")
             else:
-                data[prog][region].setdefault(company_name, {code:0 for code in needed_stage_codes})
-                data[prog][region][company_name].setdefault('total',0)
-                data[prog][region][company_name][stage_code] += 1
-                data[prog][region][company_name]['total'] += 1
-
-
-
-            # Подсчёт общего количества сделок по программе
-            program_totals.setdefault(prog, {code: 0 for code in needed_stage_codes})
-            program_totals[prog].setdefault('total', 0)
-            program_totals[prog][stage_code] += 1
-            program_totals[prog]['total'] += 1
-
-            # Подсчёт общего количества сделок по региону
-            # Можно считать отдельно по (программа, регион) для точности:
-            region_totals.setdefault(prog, {})
-            region_totals[prog].setdefault(region, {code: 0 for code in needed_stage_codes})
-            region_totals[prog][region].setdefault('total',0)
-            region_totals[prog][region]['total'] += 1
-            region_totals[prog][region][stage_code] += 1
+                data[prog][stage_code] += 1
+                data[prog]['total'] += 1
+                data[prog]['regions'][region][stage_code] += 1
+                data[prog]['regions'][region]['total'] += 1
+                data[prog]['regions'][region].setdefault('companies', {})
+                data[prog]['regions'][region]['companies'].setdefault(company_name, {code:0 for code in needed_stage_codes})
+                data[prog]['regions'][region]['companies'][company_name].setdefault('total',0)
+                data[prog]['regions'][region]['companies'][company_name][stage_code] += 1
+                data[prog]['regions'][region]['companies'][company_name]['total'] += 1
 
             total.setdefault('total',0)
             total['total'] +=1
@@ -1095,8 +1098,6 @@ def lead_dashboard(request):
         'data': data,
         'stage_codes': needed_stage_codes,
         'stage_code_to_name': stage_code_to_name,
-        'program_totals': program_totals,
-        'region_totals': region_totals,
         'total': total
     }
     # return JsonResponse({'result': context})
@@ -1810,7 +1811,6 @@ def contract_generation(request):
     from education_planner.models import EducationProgram
     
     logger = logging.getLogger(__name__)
-    
     months = {
         1: "января", 2: "февраля", 3: "марта", 4: "апреля", 5: "мая", 6: "июня", 
         7: "июля", 8: "августа", 9: "сентября", 10: "октября", 11: "ноября", 12: "декабря"
@@ -2373,6 +2373,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.authentication import TokenAuthentication
 from rest_framework import viewsets
 
+
 def api_guide(request):
     from django.contrib.auth.models import User
     from rest_framework.authtoken.models import Token
@@ -2386,7 +2387,7 @@ def api_guide(request):
     login = User.objects.filter(username=request.user.username).first()
     tkn = Token.objects.filter(user=login).first()
     
-    url = 'https://bitrix24.tuna-edu.ru/api/user-progress'
+    url = 'http://127.0.0.1:8000/api/user-progress'
     headers = { 'Authorization': f'Token {tkn}' }
 
     params = {}

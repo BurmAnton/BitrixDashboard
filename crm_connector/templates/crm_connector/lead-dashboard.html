@@ -1,0 +1,90 @@
+{% extends "base.html" %}
+{% load dict_filters %}
+{% block title %} Лид дашборд {% endblock %}
+{% block content %}
+{% block extra_css %}
+<style>
+    .container{
+        max-width: 95%;
+    }
+    td{
+        text-align: center;
+        vertical-align: middle;
+    }
+    td:first-child{
+        text-align: left;
+    }
+    .table-dark{
+        text-align: center;
+        vertical-align: middle;
+    }
+</style>
+{% endblock %}
+{% for program_name, program_data in data.items %}
+    <h3>{{ program_name }}</h3>
+    <table class="table table-hover table-sm">
+        <thead >
+            <tr class="table-dark">
+                <th scope="col">Наименование</th>
+                    {% for stage_code in stage_codes %}
+                        <th scope="col">{{ stage_code_to_name|dict_get:stage_code }}</th>
+                    {% endfor %}
+                <th scope="col">Всего</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr id="program {{ program_name }}" class="table-primary">
+                <td> Overall program </td>
+                    {% for stage_code in stage_codes %}
+                        <td>{{ program_data|dict_get:stage_code }}</td>
+                    {% endfor %}
+                <td> {{ program_data.total }} </td>
+            </tr>
+            {% for region_name, region_data in program_data.regions.items %}
+                <tr id="region {{region_name}}" class="table-info">
+                    <td> {{ region_name }}</td>
+                        {% for stage_code in stage_codes %}
+                            <td>{{ region_data|dict_get:stage_code }}</td>
+                        {% endfor %}
+                    <td> {{ region_data.total }} </td>
+                </tr>
+                {% for company_name, company_data in region_data.companies.items %}
+                    {% if company_data %}
+                        <tr class="simple-company">
+                            <td scope="row">{{ company_name }}</th>
+                                {% for stage_code in stage_codes %}
+                                    <td class="{% if company_data|dict_get:stage_code > 0%}active{% endif %}">
+                                        {{ company_data|dict_get:stage_code }}
+                                    </td>
+                                {% endfor %}
+                            <td class="total">{{ company_data.total }}</td>
+                        </tr>
+                    {% else %}
+                        <tr class="parent-company">
+                            <th scope="row">{{ company_name }}</th>
+                                {% for stage_code in stage_codes %}
+                                    <td class="{% if child_data|dict_get:stage_code > 0%}active{% endif %}">
+                                        {{ company_data|dict_get:stage_code }}
+                                    </td>
+                                {% endfor %}
+                            <td class="total">{{ company_data.total }}</td>
+                        </tr>
+                        {% for child_name, child_data in company_data.items %}
+                        
+                            <tr class="child-company">
+                                <td class="indent">└── {{ child_name }}</td>
+                                    {% for stage_code in stage_codes %}
+                                    <td class="{% if child_data|dict_get:stage_code > 0%}active{% endif %}">
+                                        {{ child_data|dict_get:stage_code }}
+                                    </td>
+                                    {% endfor %}
+                                <td class="total">{{ child_data.total }}</td>
+                            </tr>
+                        {% endfor %}
+                    {% endif %}
+                {% endfor %}
+            {% endfor %}
+        </tbody>
+    </table>
+{% endfor %}
+{% endblock %}
