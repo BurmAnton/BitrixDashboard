@@ -4,87 +4,369 @@
 {% block content %}
 {% block extra_css %}
 <style>
+    .stats-card {
+        background: white;
+        border-radius: 8px;
+        padding: 20px;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        margin-bottom: 20px;
+    }
+
     .container{
         max-width: 95%;
     }
+
     td{
         text-align: center;
         vertical-align: middle;
     }
+
     td:first-child{
         text-align: left;
     }
-    .table-dark{
+
+    tr{
         text-align: center;
         vertical-align: middle;
     }
+
+    .table-responsive{
+        max-height: 80vh;
+    }
+
+    .badge:hover {
+        transform: scale(1.1);
+        transition-duration: 0.15s;
+    }
+
+    thead{
+        position: sticky;
+        top: -1px;
+        z-index: 10;
+    }
+
+    tr:last-child{
+        position: sticky;
+        bottom: -2px;
+        z-index: 10;
+    }
 </style>
 {% endblock %}
+<h1>Дашборд лидов</h1>
 {% for program_name, program_data in data.items %}
-    <h3>{{ program_name }}</h3>
-    <table class="table table-hover table-sm">
-        <thead >
-            <tr class="table-dark">
-                <th scope="col">Наименование</th>
-                    {% for stage_code in stage_codes %}
-                        <th scope="col">{{ stage_code_to_name|dict_get:stage_code }}</th>
-                    {% endfor %}
-                <th scope="col">Всего</th>
-            </tr>
-        </thead>
-        <tbody>
-            <tr id="program {{ program_name }}" class="table-primary">
-                <td> Overall program </td>
-                    {% for stage_code in stage_codes %}
-                        <td>{{ program_data|dict_get:stage_code }}</td>
-                    {% endfor %}
-                <td> {{ program_data.total }} </td>
-            </tr>
-            {% for region_name, region_data in program_data.regions.items %}
-                <tr id="region {{region_name}}" class="table-info">
-                    <td> {{ region_name }}</td>
-                        {% for stage_code in stage_codes %}
-                            <td>{{ region_data|dict_get:stage_code }}</td>
-                        {% endfor %}
-                    <td> {{ region_data.total }} </td>
-                </tr>
-                {% for company_name, company_data in region_data.companies.items %}
-                    {% if company_data %}
-                        <tr class="simple-company">
-                            <td scope="row">{{ company_name }}</th>
-                                {% for stage_code in stage_codes %}
-                                    <td class="{% if company_data|dict_get:stage_code > 0%}active{% endif %}">
-                                        {{ company_data|dict_get:stage_code }}
-                                    </td>
-                                {% endfor %}
-                            <td class="total">{{ company_data.total }}</td>
-                        </tr>
-                    {% else %}
-                        <tr class="parent-company">
-                            <th scope="row">{{ company_name }}</th>
-                                {% for stage_code in stage_codes %}
-                                    <td class="{% if child_data|dict_get:stage_code > 0%}active{% endif %}">
-                                        {{ company_data|dict_get:stage_code }}
-                                    </td>
-                                {% endfor %}
-                            <td class="total">{{ company_data.total }}</td>
-                        </tr>
-                        {% for child_name, child_data in company_data.items %}
-                        
-                            <tr class="child-company">
-                                <td class="indent">└── {{ child_name }}</td>
-                                    {% for stage_code in stage_codes %}
-                                    <td class="{% if child_data|dict_get:stage_code > 0%}active{% endif %}">
-                                        {{ child_data|dict_get:stage_code }}
-                                    </td>
+<div class="row">
+    <div class="col-md-12">
+            <div class="stats-card">
+
+                <h3><i class="bi bi-mortarboard me-2"></i> {{ program_name }}</h3>
+
+                <div class="table-responsive">
+                        <table class="table table-striped table-hover table-bordered">
+                            <thead>
+                                <tr class="table-secondary">
+                                    <th scope="col" style="width: 30%;">Наименование</th>
+                                        {% for stage_code in stage_codes %}
+                                            {% if stage_code == "LOSE" %}
+                                            <th scope="col" class="table-danger" style="width: 7%;">{{ stage_code_to_name|dict_get:stage_code }}</th>
+                                            {% elif stage_code == "WON" %}
+                                            <th scope="col" class="table-success" style="width: 7%;">{{ stage_code_to_name|dict_get:stage_code }}</th>
+                                            {% else %}
+                                            <th scope="col" class="table-info" style="width: 7%;">{{ stage_code_to_name|dict_get:stage_code }}</th>
+                                            {% endif%} 
+                                        {% endfor %}
+                                    <th scope="col" style="width: 7%;">Всего</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for region_name, region_data in program_data.regions.items %}
+                                    <tr program="{{ program_name }}" id="region {{region_name}}" class="table-warning">
+                                        <td>
+                                            <svg activated="false" filter-region="{{ region_name }}"  xmlns="http://www.w3.org/2000/svg" height="24px" viewBox="0 -960 960 960" width="24px" fill="#1f1f1f"><path d="M480-345 240-585l56-56 184 183 184-183 56 56-240 240Z"/></svg>
+                                            <i class="bi bi-geo-alt me-2"></i>
+                                            {{ region_name }}
+                                        </td>
+                                            {% for stage_code in stage_codes %}
+                                                <td>
+                                                    {% with value=region_data|dict_get:stage_code %}
+                                                        {% if value == 0 %}
+                                                            {{ value }}
+                                                        {% else %}
+                                                            {% if stage_code == "LOSE" %}
+                                                                <span class="badge bg-danger fs-6">{{ value }}</span>
+                                                            {% elif stage_code == "WON" %}
+                                                                <span class="badge bg-success fs-6">{{ value }}</span>
+                                                            {% else %}
+                                                                <span class="badge bg-primary fs-6">{{ value }}</span>
+                                                            {% endif %}
+                                                        {% endif %}
+                                                    {% endwith %}
+                                                </td>
+                                            {% endfor %}
+                                        <td> <span class="badge bg-success fs-6"> {{ region_data.total }} </span> </td>
+                                    </tr>
+                                    {% for company_name, company_data in region_data.companies.items %}
+                                        {% if company_data.child %}
+                                            <tr program="{{ program_name }}"  region="{{ region_name }}" class="parent-company">
+                                                <td>
+                                                    <svg activated="false" filter-parent="{{ company_name }}" filter-region="{{ region_name }}" xmlns="http://www.w3.org/2000/svg" height="24px" viewBox="0 -960 960 960" width="24px" fill="#1f1f1f"><path d="M480-345 240-585l56-56 184 183 184-183 56 56-240 240Z"/></svg>
+                                                    <i class="bi bi-buildings"></i>
+                                                    {{ company_name }}
+                                                </td>
+                                                    {% for stage_code in stage_codes %}
+                                                        <td class="{% if child_data|dict_get:stage_code > 0%}active{% endif %}">
+                                                            {% with value=company_data|dict_get:stage_code %}
+                                                                {% if value == 0 %}
+                                                                    {{ value }}
+                                                                {% else %}
+                                                                    {% if stage_code == "LOSE" %}
+                                                                        <span class="badge bg-danger fs-6">{{ value }}</span>
+                                                                    {% elif stage_code == "WON" %}
+                                                                        <span class="badge bg-success fs-6">{{ value }}</span>
+                                                                    {% else %}
+                                                                        <span class="badge bg-primary fs-6">{{ value }}</span>
+                                                                    {% endif %}
+                                                                {% endif %}
+                                                            {% endwith %}
+                                                        </td>
+                                                    {% endfor %}
+                                                <td> <span class="badge bg-success fs-6"> {{ company_data.total }} </span> </td>
+                                            </tr>
+                                            {% for child_name, child_data in company_data.child.items %}
+                                                <tr program="{{ program_name }}" region="{{ region_name }}" parent="{{ company_name }}" class="child-company">
+                                                    <td class="indent">
+                                                        <i class="bi bi-arrow-return-right"></i>
+                                                        {{ child_name }}
+                                                    </td>
+                                                        {% for stage_code in stage_codes %}
+                                                            <td class="{% if child_data|dict_get:stage_code > 0%}active{% endif %}">
+                                                                {% with value=child_data|dict_get:stage_code %}
+                                                                    {% if value == 0 %}
+                                                                        {{ value }}
+                                                                    {% else %}
+                                                                        {% if stage_code == "LOSE" %}
+                                                                            <span class="badge bg-danger fs-6">{{ value }}</span>
+                                                                        {% elif stage_code == "WON" %}
+                                                                            <span class="badge bg-success fs-6">{{ value }}</span>
+                                                                        {% else %}
+                                                                            <span class="badge bg-info fs-6">{{ value }}</span>
+                                                                        {% endif %}
+                                                                    {% endif %}
+                                                                {% endwith %}
+                                                            </td>
+                                                        {% endfor %}
+                                                    <td> <span class="badge bg-success fs-6"> {{ child_data.total }}</span> </td>
+                                                </tr>
+                                            {% endfor %}
+                                        {% else %}
+                                            <tr program="{{ program_name }}" region="{{ region_name }}" class="simple-company">
+                                                <td scope="row">
+                                                    <i class="bi bi-building"></i>
+                                                    {{ company_name }}
+                                                </td>
+                                                    {% for stage_code in stage_codes %}
+                                                        <td class="{% if company_data|dict_get:stage_code > 0%}active{% endif %}">
+                                                            {% with value=company_data|dict_get:stage_code %}
+                                                                {% if value == 0 %}
+                                                                    {{ value }}
+                                                                {% else %}
+                                                                    {% if stage_code == "LOSE" %}
+                                                                        <span class="badge bg-danger fs-6">{{ value }}</span>
+                                                                    {% elif stage_code == "WON" %}
+                                                                        <span class="badge bg-success fs-6">{{ value }}</span>
+                                                                    {% else %}
+                                                                        <span class="badge bg-info fs-6">{{ value }}</span>
+                                                                    {% endif %}
+                                                                {% endif %}
+                                                            {% endwith %}
+                                                        </td>
+                                                    {% endfor %}
+                                                <td> <span class="badge bg-success fs-6"> {{ company_data.total }} </span> </td>
+                                            </tr>
+                                        {% endif %}
                                     {% endfor %}
-                                <td class="total">{{ child_data.total }}</td>
-                            </tr>
-                        {% endfor %}
-                    {% endif %}
-                {% endfor %}
-            {% endfor %}
-        </tbody>
-    </table>
+                                {% endfor %}
+                                <tr class="table-primary">
+                                    <td>
+                                        <i class="bi bi-calculator me-2"></i>
+                                        ИТОГО ПО ПРОГРАММЕ
+                                    </td>
+                                        {% for stage_code in stage_codes %}
+                                            <td>
+                                                {% with value=program_data|dict_get:stage_code %}
+                                                    {% if value == 0 %}
+                                                        {{ value }}
+                                                    {% else %}
+                                                        {% if stage_code == "LOSE" %}
+                                                            <span class="badge bg-danger fs-6">{{ value }}</span>
+                                                        {% elif stage_code == "WON" %}
+                                                            <span class="badge bg-success fs-6">{{ value }}</span>
+                                                        {% else %}
+                                                            <span class="badge bg-primary fs-6">{{ value }}</span>
+                                                        {% endif %}
+                                                    {% endif %}
+                                                {% endwith %}
+                                            </td>
+                                        {% endfor %}
+                                    <td> <span class="badge bg-success fs-6"> {{ program_data.total }} </span> </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                </div>
+            </div>
+    </div>
+</div>
 {% endfor %}
+{% endblock %}
+
+{% block extra_js %}
+<script>
+class TableFilter {
+    constructor() {
+        this.init();
+    }
+
+    init() {
+        // Находим все SVG иконки с фильтрами
+        document.querySelectorAll('svg[filter-region], svg[filter-parent]').forEach(svg => {
+            svg.addEventListener('click', (e) => this.handleFilterClick(e));
+        });
+    }
+
+    handleFilterClick(event) {
+        const svg = event.currentTarget;
+        
+        // Получаем текущее состояние activated
+        const currentActivated = svg.getAttribute('activated') === 'true';
+        
+        // Переворачиваем SVG на 180 градусов
+        this.toggleSvgRotation(svg);
+        
+        // Переключаем состояние activated
+        svg.setAttribute('activated', !currentActivated);
+        
+        // Применяем фильтрацию
+        this.applyFilters();
+    }
+
+    /**
+     * Получает все активированные фильтры из DOM
+     */
+    getActiveFilters() {
+        const activeFilters = {};
+        
+        document.querySelectorAll('svg[activated="true"]').forEach(svg => {
+            // Проверяем какие filter-* атрибуты есть у SVG
+            const program = svg.getAttribute('filter-program');
+            const region = svg.getAttribute('filter-region');
+            const company = svg.getAttribute('filter-parent');
+            
+            // Создаём уникальный ключ для этого набора фильтров
+            const key = `${program || 'all'}_${region || 'all'}_${company || 'all'}`;
+            
+            activeFilters[key] = {
+                program,
+                region,
+                company
+            };
+        });
+        
+        return activeFilters;
+    }
+
+    /**
+     * Применяет фильтры ко всем строкам таблицы
+     */
+    applyFilters() {
+        const activeFilters = this.getActiveFilters();
+        
+        // Если нет активных фильтров - показываем все
+        if (Object.keys(activeFilters).length === 0) {
+            document.querySelectorAll('tbody tr').forEach(row => {
+                row.style.display = '';
+            });
+            return;
+        }
+
+        // Проходим по всем строкам таблицы
+        document.querySelectorAll('tbody tr').forEach(row => {
+            const shouldHide = this.shouldHideRow(row, activeFilters);
+            row.style.display = shouldHide ? 'none' : '';
+        });
+    }
+
+    /**
+     * Проверяет, должна ли строка быть скрыта
+     * Логика: строка скрывается если она полностью совпадает со всеми активными фильтрами
+     */
+    shouldHideRow(row, activeFilters) {
+        const rowProgram = row.getAttribute('program');
+        const rowRegion = row.getAttribute('region');
+        const rowCompany = row.getAttribute('parent');
+        
+        // Проверяем каждый активный фильтр
+        for (const filterKey in activeFilters) {
+            const filter = activeFilters[filterKey];
+            
+            let matches = true;
+            
+            // Если в фильтре задана программа - проверяем совпадение
+            if (filter.program !== null && rowProgram !== filter.program) {
+                matches = false;
+            }
+            
+            // Если в фильтре задан регион - проверяем совпадение
+            if (filter.region !== null && rowRegion !== filter.region) {
+                matches = false;
+            }
+            
+            // Если в фильтре задана компания - проверяем совпадение
+            if (filter.company !== null && rowCompany !== filter.company) {
+                matches = false;
+            }
+            
+            // Если все условия фильтра совпали - скрываем строку
+            if (matches) {
+                return true;
+            }
+        }
+        
+        return false;
+    }
+
+    /**
+     * Переворачивает SVG на 180 градусов (toggle)
+     */
+    toggleSvgRotation(svg) {
+        const isRotated = svg.style.transform === 'rotate(180deg)';
+        
+        if (isRotated) {
+            svg.style.transform = 'rotate(0deg)';
+        } else {
+            svg.style.transform = 'rotate(180deg)';
+        }
+        
+        // Добавляем плавную анимацию
+        svg.style.transition = 'transform 0.3s ease';
+    }
+
+    /**
+     * Сбрасывает все фильтры
+     */
+    resetFilters() {
+        // Возвращаем все SVG в исходное состояние
+        document.querySelectorAll('svg[filter-region], svg[filter-parent]').forEach(svg => {
+            svg.setAttribute('activated', 'false');
+            svg.style.transform = 'rotate(0deg)';
+        });
+        
+        this.applyFilters();
+    }
+}
+
+// Инициализируем фильтрацию когда DOM загружен
+document.addEventListener('DOMContentLoaded', () => {
+    window.tableFilter = new TableFilter();
+});
+
+</script>
 {% endblock %}

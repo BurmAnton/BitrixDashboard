@@ -1000,15 +1000,15 @@ def lead_dashboard(request):
     # Загружаем стадии с такими кодами
     stages = Stage.objects.filter(query).order_by('bitrix_id')
     stage_code_to_name = {
-        'NEW': '1. Необработанная заявка',
-        'UC_OHS476': '2. Направлена инструкция по РвР',
-        'PREPARATION': '3. Подал заявки на РвР',
-        'EXECUTING': '4. Заявка на обучение одобрена',
-        'UC_6HMXDA': '5. Заключен 3-сторонний договор',
-        'UC_82NA5G': '6. Заключен договор на обучение',
-        'UC_WCW6RM': '7. Приступил к обучению',
-        'WON': '8. Прошел итоговую аттестацию',
-        'LOSE': '9. Отказ',
+        'NEW': 'Необработанная заявка',
+        'UC_OHS476': 'Направлена инструкция по РвР',
+        'PREPARATION': 'Подал заявки на РвР',
+        'EXECUTING': 'Заявка на обучение одобрена',
+        'UC_6HMXDA': 'Заключен 3-сторонний договор',
+        'UC_82NA5G': 'Заключен договор на обучение',
+        'UC_WCW6RM': 'Приступил к обучению',
+        'WON': 'Прошел итоговую аттестацию',
+        'LOSE': 'Отказы',
     }
     
     for stage in stages:
@@ -1050,7 +1050,10 @@ def lead_dashboard(request):
         except:
             headid = ''
         if prog and region:
-            company_name = deal.company.title if deal.company else 'Без компании'
+            if deal.company:
+                company_name = deal.company.title
+            else:
+                continue
             stage_code = deal.stage.bitrix_id
             for code in needed_stage_codes:
                 if code in stage_code:
@@ -1102,7 +1105,6 @@ def lead_dashboard(request):
     }
     # return JsonResponse({'result': context})
     return render(request, 'crm_connector/lead-dashboard.html', context)
-
 
 def atlas_dashboard(request):
     """Дашборд для заявок из Атласа с визуализацией по этапам, программам и регионам"""
