@@ -776,3 +776,30 @@ class Email(models.Model):
 
     def __str__(self):
         return f"{self.email} ({self.comment or 'без комментария'})"
+
+class HistoryROIV(models.Model):
+    """Модель для хранения истории статусов РОИВ"""
+    roiv = models.ForeignKey(ROIV,on_delete=models.CASCADE, related_name="history", verbose_name="РОИВ")
+    status = models.CharField(choices=[('active','Активный'),('closed','Закрыто'),('integrated','Интегрировано')], verbose_name="Статус")
+    integrated_to = models.ForeignKey(ROIV, on_delete=models.CASCADE, related_name="integrated", blank=True, null=True, verbose_name="Интегрировано в")
+    date = models.DateTimeField("Дата изменений", blank=True, null=True)
+    priority = models.BooleanField("Приоритет", default=True)
+
+    class Meta:
+        verbose_name = "запись"
+        verbose_name_plural = "История статусов РОИВ"
+
+    def __str__(self):
+        return str(self.date)
+
+class NameHistoryROIV(models.Model):
+    """Модель для хранения бывших названий РОИВ"""
+    roiv = models.ForeignKey(ROIV,on_delete=models.CASCADE, related_name="old_names", verbose_name="Названия")
+    name = models.CharField("Название", max_length=255)
+
+    class Meta:
+        verbose_name = "Название"
+        verbose_name_plural = "Названия"
+
+    def __str__(self):
+        return self.name

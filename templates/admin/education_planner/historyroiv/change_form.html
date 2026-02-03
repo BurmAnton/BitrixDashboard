@@ -1,0 +1,27 @@
+{% extends "admin/change_form.html" %}
+
+{% block admin_change_form_document_ready %}
+    {{ block.super }}
+    <script>
+        document.addEventListener("DOMContentLoaded", function () {
+            const statusField = document.getElementById("id_status");
+            const integratedToRow = document.getElementById("id_integrated_to")
+                ?.closest(".form-row");
+
+            function toggleIntegratedTo() {
+                if (!statusField || !integratedToRow) return;
+
+                if (statusField.value === "integrated") {
+                    integratedToRow.style.display = "";
+                } else {
+                    integratedToRow.style.display = "none";
+                }
+            }
+
+            if (statusField) {
+                statusField.addEventListener("change", toggleIntegratedTo);
+                toggleIntegratedTo();  // сразу применить при загрузке
+            }
+        });
+    </script>
+{% endblock %}

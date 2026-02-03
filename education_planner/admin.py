@@ -3,7 +3,8 @@ from .models import (
     ProfActivity, EducationProgram, ProgramSection,
     EduAgreement, Quota, Supplement, QuotaChange, Region, ROIV, AlternativeQuota,
     Phone, Email, Contact,
-    RegionAltNames
+    RegionAltNames,
+    HistoryROIV, NameHistoryROIV
 )
 
 @admin.register(ProfActivity)
@@ -192,14 +193,24 @@ class QuotaChangeAdmin(admin.ModelAdmin):
     def get_queryset(self, request):
         return super().get_queryset(request).select_related('supplement', 'supplement__agreement', 'education_program')
 
+class NamesROIV(admin.TabularInline):
+    model = NameHistoryROIV
+    extra = 1
+    fields = ("name",)
 
 @admin.register(ROIV)
 class ROIVAdmin(admin.ModelAdmin):
     list_display = ('name', 'region', 'is_active', 'created_at')
     list_filter = ('is_active', 'created_at')
-    search_fields = ('name', 'region__name')
+    search_fields = ('name', 'region__name', 'old_names__name')
     readonly_fields = ('created_at', 'updated_at')
+    inlines = [NamesROIV]
 
+@admin.register(HistoryROIV)
+class HistoryROIVAdmin(admin.ModelAdmin):
+    list_display = ('roiv', 'status', 'date', 'priority')
+    list_filter = ('date', 'roiv')
+    search_fields = ('roiv', 'old_names__name')
 
 @admin.register(AlternativeQuota)
 class AlternativeQuotaAdmin(admin.ModelAdmin):
