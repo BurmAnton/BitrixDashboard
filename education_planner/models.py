@@ -111,6 +111,17 @@ class Region(models.Model):
     def __str__(self):
         return self.name
 
+class RegionAltNames(models.Model):
+    region = models.ForeignKey(Region,on_delete=models.CASCADE,related_name="alt_names",verbose_name="Псевдонимы")
+    name = models.CharField("Псевдоним", max_length=255, unique=True)
+    
+    class Meta:
+        verbose_name = "Псевдоним"
+        verbose_name_plural = "Псевдонимы"
+
+    def __str__(self):
+        return self.name
+
 
 class EduAgreement(models.Model):
     """Модель для хранения договоров на обучение с федеральными операторами"""

@@ -2,7 +2,8 @@ from django.contrib import admin
 from .models import (
     ProfActivity, EducationProgram, ProgramSection,
     EduAgreement, Quota, Supplement, QuotaChange, Region, ROIV, AlternativeQuota,
-    Phone, Email, Contact
+    Phone, Email, Contact,
+    RegionAltNames
 )
 
 @admin.register(ProfActivity)
@@ -25,13 +26,19 @@ class ProgramSectionAdmin(admin.ModelAdmin):
     search_fields = ('name', 'description', 'program__name')
     readonly_fields = ('created_at', 'updated_at')
 
+class RegionAlternativeNames(admin.TabularInline):
+    model = RegionAltNames
+    extra = 1
+    fields = ("name",)
 
 @admin.register(Region)
 class RegionAdmin(admin.ModelAdmin):
     list_display = ('name', 'code', 'is_active', 'created_at')
     list_filter = ('is_active', 'created_at')
-    search_fields = ('name', 'code')
+    search_fields = ('name', 'code', 'alt_names__name')
     readonly_fields = ('created_at', 'updated_at')
+    inlines = [RegionAlternativeNames]
+    
 
 class PhoneInline(admin.TabularInline):
     model = Phone
