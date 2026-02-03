@@ -95,7 +95,6 @@ class ProgramSection(models.Model):
     def __str__(self):
         return f"{self.program.name} - {self.name}"
 
-
 class Region(models.Model):
     """Модель для хранения регионов реализации программ"""
     name = models.CharField(_('Название региона'), max_length=255, unique=True)
@@ -721,3 +720,48 @@ class QuotaDistribution(models.Model):
     
     def __str__(self):
         return f'{self.quota} - {self.region.name}: {self.allocated_quantity} мест'
+
+class Contact(models.Model):
+    """Модель для хранения контактов РОИВ"""
+    type = models.CharField(choices=[("department","Отдел"), ("human","Сотрудник")], verbose_name="Тип контакта")
+    department_name = models.CharField(max_length=255, blank=True, null=True, verbose_name="Название отдела")
+    human_name = models.CharField(max_length=255, blank=True, null=True, verbose_name="ФИО")
+    position = models.CharField(max_length=255, blank=True, null=True, verbose_name="Должность")
+    comment = models.TextField(blank=True, verbose_name="Комментарий")
+    actual = models.BooleanField(default=True, verbose_name="Актуальный")
+    roiv= models.ForeignKey(ROIV, on_delete=models.CASCADE,related_name="contacts",verbose_name="РОИВ")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        verbose_name = 'Контакт'
+        verbose_name_plural = 'Контакты'
+        
+    def __str__(self):
+        return f"{self.roiv} ({self.comment or 'без комментария'})"
+
+class Phone(models.Model):
+    contact = models.ForeignKey(Contact,on_delete=models.CASCADE,related_name="phones",verbose_name="Контакт",)
+    number = models.CharField("Телефон", max_length=30)
+    comment = models.CharField(blank=True, verbose_name="Комментарий")
+    is_active = models.BooleanField("Актуальный", default=True)
+
+    class Meta:
+        verbose_name = "Телефон"
+        verbose_name_plural = "Телефоны"
+
+    def __str__(self):
+        return f"{self.number} ({self.comment or 'без комментария'})"
+
+class Email(models.Model):
+    contact = models.ForeignKey(Contact,on_delete=models.CASCADE,related_name="emails",verbose_name="Контакт",)
+    email = models.EmailField("Email")
+    comment = models.CharField(blank=True, verbose_name="Комментарий")
+    is_active = models.BooleanField("Актуальный", default=True)
+
+    class Meta:
+        verbose_name = "Email"
+        verbose_name_plural = "Email‑адреса"
+
+    def __str__(self):
+        return f"{self.email} ({self.comment or 'без комментария'})"

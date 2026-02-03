@@ -1,7 +1,8 @@
 from django.contrib import admin
 from .models import (
     ProfActivity, EducationProgram, ProgramSection,
-    EduAgreement, Quota, Supplement, QuotaChange, Region, ROIV, AlternativeQuota
+    EduAgreement, Quota, Supplement, QuotaChange, Region, ROIV, AlternativeQuota,
+    Phone, Email, Contact
 )
 
 @admin.register(ProfActivity)
@@ -32,6 +33,44 @@ class RegionAdmin(admin.ModelAdmin):
     search_fields = ('name', 'code')
     readonly_fields = ('created_at', 'updated_at')
 
+class PhoneInline(admin.TabularInline):
+    model = Phone
+    extra = 1
+    fields = ("number", "comment", "is_active")
+
+class EmailInline(admin.TabularInline):
+    model = Email
+    extra = 1
+    fields = ("email", "comment", "is_active")
+
+@admin.register(Contact)
+class ContactAdmin(admin.ModelAdmin):
+    list_display = ("type", "comment", "actual", "roiv", "created_at", "updated_at")
+    list_filter = ("type", "created_at", "roiv")
+    search_fields = ("department_name", "human_name", "position", "roiv__name")
+    readonly_fields = ("created_at", "updated_at")
+    inlines = [PhoneInline, EmailInline]
+
+    def get_fields(self, request, obj=None):
+        fields = ["type", "department_name", "human_name", "position"]
+        endfields = ["actual", "roiv", "comment", "created_at", "updated_at"]
+
+        if obj is None:
+            return fields + endfields
+        
+        print(obj.type)
+        if obj.type == "department":
+            fields += ["department_name"] + endfields 
+        elif obj.type == "human":
+            fields += ["human_name", "position"] + endfields
+
+        return fields
+
+    def get_readonly_fields(self, request, obj=None):
+        # если объект уже создан, type нельзя менять
+        if obj is not None:
+            return self.readonly_fields + ("type",)
+        return self.readonly_fields
 
 # Inline для квот в договоре
 class QuotaInline(admin.TabularInline):
