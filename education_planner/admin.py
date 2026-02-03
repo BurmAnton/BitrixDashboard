@@ -59,11 +59,11 @@ class ContactAdmin(admin.ModelAdmin):
     inlines = [PhoneInline, EmailInline]
 
     def get_fields(self, request, obj=None):
-        fields = ["type", "department_name", "human_name", "position"]
+        fields = ["type"]
         endfields = ["actual", "roiv", "comment", "created_at", "updated_at"]
 
         if obj is None:
-            return fields + endfields
+            return fields + ["department_name", "human_name", "position"] + endfields
         
         print(obj.type)
         if obj.type == "department":
