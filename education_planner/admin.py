@@ -2,9 +2,7 @@ from django.contrib import admin
 from .models import (
     ProfActivity, EducationProgram, ProgramSection,
     EduAgreement, Quota, Supplement, QuotaChange, Region, ROIV, AlternativeQuota,
-    Phone, Email, Contact,
-    RegionAltNames,
-    HistoryROIV, NameHistoryROIV
+    RegionAltNames
 )
 
 @admin.register(ProfActivity)
@@ -40,46 +38,6 @@ class RegionAdmin(admin.ModelAdmin):
     readonly_fields = ('created_at', 'updated_at')
     inlines = [RegionAlternativeNames]
     
-
-class PhoneInline(admin.TabularInline):
-    model = Phone
-    extra = 1
-    fields = ("number", "comment", "is_active")
-
-class EmailInline(admin.TabularInline):
-    model = Email
-    extra = 1
-    fields = ("email", "comment", "is_active")
-
-@admin.register(Contact)
-class ContactAdmin(admin.ModelAdmin):
-    list_display = ("type", "comment", "actual", "roiv", "created_at", "updated_at")
-    list_filter = ("type", "created_at", "roiv")
-    search_fields = ("department_name", "human_name", "position", "roiv__name")
-    readonly_fields = ("created_at", "updated_at")
-    inlines = [PhoneInline, EmailInline]
-
-    def get_fields(self, request, obj=None):
-        fields = ["type"]
-        endfields = ["actual", "roiv", "comment", "created_at", "updated_at"]
-
-        if obj is None:
-            return fields + ["department_name", "human_name", "position"] + endfields
-        
-        print(obj.type)
-        if obj.type == "department":
-            fields += ["department_name"] + endfields 
-        elif obj.type == "human":
-            fields += ["human_name", "position"] + endfields
-
-        return fields
-
-    def get_readonly_fields(self, request, obj=None):
-        # если объект уже создан, type нельзя менять
-        if obj is not None:
-            return self.readonly_fields + ("type",)
-        return self.readonly_fields
-
 # Inline для квот в договоре
 class QuotaInline(admin.TabularInline):
     model = Quota
@@ -193,24 +151,14 @@ class QuotaChangeAdmin(admin.ModelAdmin):
     def get_queryset(self, request):
         return super().get_queryset(request).select_related('supplement', 'supplement__agreement', 'education_program')
 
-class NamesROIV(admin.TabularInline):
-    model = NameHistoryROIV
-    extra = 1
-    fields = ("name",)
-
 @admin.register(ROIV)
 class ROIVAdmin(admin.ModelAdmin):
     list_display = ('name', 'region', 'is_active', 'created_at')
     list_filter = ('is_active', 'created_at')
-    search_fields = ('name', 'region__name', 'old_names__name')
+    search_fields = ('name', 'region__name')
     readonly_fields = ('created_at', 'updated_at')
-    inlines = [NamesROIV]
+    filter_horizontal = ('prof_activity',)
 
-@admin.register(HistoryROIV)
-class HistoryROIVAdmin(admin.ModelAdmin):
-    list_display = ('roiv', 'status', 'date', 'priority')
-    list_filter = ('date', 'roiv')
-    search_fields = ('roiv', 'old_names__name')
 
 @admin.register(AlternativeQuota)
 class AlternativeQuotaAdmin(admin.ModelAdmin):

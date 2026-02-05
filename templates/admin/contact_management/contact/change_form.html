@@ -5,18 +5,24 @@
     <script>
         document.addEventListener("DOMContentLoaded", function () {
             const typeField = document.getElementById("id_type");
-            const humanFields = [
-                document.getElementById("id_human_name"),
-                document.getElementById("id_position")
+            const personFields = [
+                document.getElementById("id_first_name"),
+                document.getElementById("id_last_name"),
+                document.getElementById("id_middle_name"),
+                document.getElementById("id_first_name_dat"),
+                document.getElementById("id_last_name_dat"),
+                document.getElementById("id_middle_name_dat"),
+                document.getElementById("id_position"),
+                document.getElementById("id_position_dat")
             ];
             const departmentField = document.getElementById("id_department_name");
 
             function toggleFields() {
                 const typeValue = typeField.value;
 
-                humanFields.forEach(el => {
+                personFields.forEach(el => {
                     if (!el) return;
-                    el.closest(".form-row").style.display = typeValue === "human" ? "" : "none";
+                    el.closest(".form-row").style.display = typeValue === "person" ? "" : "none";
                 });
 
                 if (departmentField) {

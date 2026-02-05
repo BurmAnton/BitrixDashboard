@@ -445,16 +445,20 @@ class ROIV(models.Model):
         'Region',
         on_delete=models.CASCADE,
         related_name='roivs',
-        verbose_name='Регион'
+        verbose_name='Регион',
     )
     full_name = models.TextField(
         blank=True,
         verbose_name='Полное наименование'
     )
-    contact_info = models.TextField(
+
+    prof_activity = models.ManyToManyField(
+        ProfActivity,
+        related_name='ROIV',
+        verbose_name='Сфера деятельности',
         blank=True,
-        verbose_name='Контактная информация'
     )
+
     is_active = models.BooleanField(
         default=True,
         verbose_name='Активен'
@@ -732,74 +736,3 @@ class QuotaDistribution(models.Model):
     def __str__(self):
         return f'{self.quota} - {self.region.name}: {self.allocated_quantity} мест'
 
-class Contact(models.Model):
-    """Модель для хранения контактов РОИВ"""
-    type = models.CharField(choices=[("department","Отдел"), ("human","Сотрудник")], verbose_name="Тип контакта")
-    department_name = models.CharField(max_length=255, blank=True, null=True, verbose_name="Название отдела")
-    human_name = models.CharField(max_length=255, blank=True, null=True, verbose_name="ФИО")
-    position = models.CharField(max_length=255, blank=True, null=True, verbose_name="Должность")
-    comment = models.TextField(blank=True, verbose_name="Комментарий")
-    actual = models.BooleanField(default=True, verbose_name="Актуальный")
-    roiv= models.ForeignKey(ROIV, on_delete=models.CASCADE,related_name="contacts",verbose_name="РОИВ")
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
-    
-    class Meta:
-        verbose_name = 'Контакт'
-        verbose_name_plural = 'Контакты'
-        
-    def __str__(self):
-        return f"{self.roiv} ({self.comment or 'без комментария'})"
-
-class Phone(models.Model):
-    contact = models.ForeignKey(Contact,on_delete=models.CASCADE,related_name="phones",verbose_name="Контакт",)
-    number = models.CharField("Телефон", max_length=30)
-    comment = models.CharField(blank=True, verbose_name="Комментарий")
-    is_active = models.BooleanField("Актуальный", default=True)
-
-    class Meta:
-        verbose_name = "Телефон"
-        verbose_name_plural = "Телефоны"
-
-    def __str__(self):
-        return f"{self.number} ({self.comment or 'без комментария'})"
-
-class Email(models.Model):
-    contact = models.ForeignKey(Contact,on_delete=models.CASCADE,related_name="emails",verbose_name="Контакт",)
-    email = models.EmailField("Email")
-    comment = models.CharField(blank=True, verbose_name="Комментарий")
-    is_active = models.BooleanField("Актуальный", default=True)
-
-    class Meta:
-        verbose_name = "Email"
-        verbose_name_plural = "Email‑адреса"
-
-    def __str__(self):
-        return f"{self.email} ({self.comment or 'без комментария'})"
-
-class HistoryROIV(models.Model):
-    """Модель для хранения истории статусов РОИВ"""
-    roiv = models.ForeignKey(ROIV,on_delete=models.CASCADE, related_name="history", verbose_name="РОИВ")
-    status = models.CharField(choices=[('active','Активный'),('closed','Закрыто'),('integrated','Интегрировано')], verbose_name="Статус")
-    integrated_to = models.ForeignKey(ROIV, on_delete=models.CASCADE, related_name="integrated", blank=True, null=True, verbose_name="Интегрировано в")
-    date = models.DateTimeField("Дата изменений", blank=True, null=True)
-    priority = models.BooleanField("Приоритет", default=True)
-
-    class Meta:
-        verbose_name = "запись"
-        verbose_name_plural = "История статусов РОИВ"
-
-    def __str__(self):
-        return str(self.date)
-
-class NameHistoryROIV(models.Model):
-    """Модель для хранения бывших названий РОИВ"""
-    roiv = models.ForeignKey(ROIV,on_delete=models.CASCADE, related_name="old_names", verbose_name="Названия")
-    name = models.CharField("Название", max_length=255)
-
-    class Meta:
-        verbose_name = "Название"
-        verbose_name_plural = "Названия"
-
-    def __str__(self):
-        return self.name
