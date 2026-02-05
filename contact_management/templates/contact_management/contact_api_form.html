@@ -1,0 +1,707 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block extra_css %}
+    <style>
+        .col-sm-2{
+            text-align: right;
+        }
+        .messages{
+            display: none;
+        }
+        .container{
+            width: 95%; 
+            max-width: 95%;
+        }
+        label{
+            font-size: smaller;
+        }
+        .code-block{
+            background-color: #ebf2f3;
+            border-radius: 12px;
+            padding: 2%;
+        }
+    </style>
+{% endblock %}
+
+{% block content %}
+<title>Авторизация токена</title>
+<body>
+    <div class="row" style="height: 100%;">
+        <!-- Левая колонка: форма для тестов -->
+        <div class="col-md-6">
+            <div class="container-fluid">
+                <div class="card">
+                    <div class="card-header">
+                        <h5>Получение списков контактов</h5>
+                    </div>
+                    <div class="card-body" style="height: 780px">
+                        <form method="post">
+                            {% csrf_token %}
+
+                            <div class="mb-3 position-relative">
+                                <label for="password" class="form-label">Токен</label>
+                                <div class="input-group">
+                                    <input type="password" readonly class="form-control form-control-sm" id="password" value="{{ token }}">
+                                    <button type="button" class="btn btn-outline-secondary btn-sm" id="togglePassword" style="width: 20%;">Показать</button>
+                                </div>
+                            </div>
+
+                            <!-- Тип -->
+                            <div class="mb-3 d-flex align-items-center">
+                                <div class="col-sm-2">
+                                    <label for="typeInput" class="form-label me-2 mb-0">Тип</label>
+                                </div>
+                                <input type="text" class="form-control form-control-sm me-2" name="type" id="typeInput">
+                            </div>
+
+                            <!-- Подразделение -->
+                            <div class="mb-3 d-flex align-items-center">
+                                <div class="col-sm-2">
+                                    <label for="deartmentInput" class="form-label me-2 mb-0">Подразделение</label>
+                                </div>
+                                <input type="text" class="form-control form-control-sm me-2" name="department" id="departmentInput">
+                                <div class="form-check ms-3">
+                                    <input class="form-check-input" type="checkbox" id="department">
+                                    <label class="form-check-label" for="deartmentContains">содержит</label>
+                                </div>
+                            </div>
+
+                            <!-- Организация -->
+                            <div class="mb-3 d-flex align-items-center">
+                                <div class="col-sm-2">
+                                    <label for="organizationInput" class="form-label me-2 mb-0">Организация</label>
+                                </div>
+                                <input type="text" class="form-control form-control-sm me-2" name="organization" id="organizationInput">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" id="organization">
+                                    <label class="form-check-label" for="organizationContains">содержит</label>
+                                </div>
+                            </div>
+
+                            <!-- Менеджер -->
+                            <div class="mb-3 d-flex align-items-center">
+                                <div class="col-sm-2">
+                                <label class="form-label me-2">Менеджер</label>
+                                </div>
+                                <div class="form-check form-check-inline">
+                                    <input class="form-check-input" type="radio" name="manager" id="managerTrue" value="true">
+                                    <label class="form-check-label" for="managerTrue">Да</label>
+                                </div>
+                                <div class="form-check form-check-inline">
+                                    <input class="form-check-input" type="radio" name="manager" id="managerFalse" value="false">
+                                    <label class="form-check-label" for="managerFalse">Нет</label>
+                                </div>
+                                <div class="form-check form-check-inline ms-3">
+                                    <input class="form-check-input" type="radio" name="manager" id="managerAll" value="" checked>
+                                    <label class="form-check-label" for="managerAll">Все</label>
+                                </div>
+                            </div>
+
+
+                            <div class="mb-2">
+                                <label for="apiLink" class="form-label">Ссылка API для fetch</label>
+                                <input type="text" readonly class="form-control form-control-sm" id="apiLink" name="apiLink" value="{{ URL|safe }}">
+                            </div>
+
+
+                            <button type="submit" class="btn btn-primary btn-sm">Отправить</button>
+                        </form>
+
+
+
+                        <div class="card" style="margin-top: 12px; padding: 1%; height: 50%; overflow-y: auto; font-size: small;" >
+                            <pre id="JsonResponse"></pre>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Правая колонка: контент документации -->
+        <div class="col-md-6">
+            <div class="container-fluid">
+                <div class="card">
+                    <!-- Заголовок -->
+                    <div class="card-header">
+                        <h5>Документация REST API Contacts</h5>
+                    </div>
+
+                    <!-- Table of Contents -->
+                    <div class="card-body" style="max-height: 780px; overflow-y: auto;">
+                        <div class="toc">
+                            <h3>Содержание:</h3>
+                            <ul>
+                                <li><a class="link-body-emphasis link-underline-opacity-0" href="#intro">Введение</a></li>
+                                <li><a class="link-body-emphasis link-underline-opacity-0" href="#auth">1. Аутентификация</a></li>
+                                <li><a class="link-body-emphasis link-underline-opacity-0" href="#endpoint">2. Основной эндпоинт</a></li>
+                                <li><a class="link-body-emphasis link-underline-opacity-0" href="#types">3. Типы контактов</a></li>
+                                <li><a class="link-body-emphasis link-underline-opacity-0" href="#filters">4. Фильтрация результатов</a></li>
+                                <li><a class="link-body-emphasis link-underline-opacity-0" href="#response">5. Формат ответа</a></li>
+                                <li><a class="link-body-emphasis link-underline-opacity-0" href="#errors">6. Коды ответов и ошибки</a></li>
+                            </ul>
+                        </div>
+
+                        <!-- Введение -->
+                        <section id="intro">
+                            <h2>Введение</h2>
+                            <p>Добро пожаловать в документацию REST API для работы с контактами организаций. Этот API предоставляет доступ к контактным лицам и отделам, связанным с организациями.</p>
+                            <div class="alert alert-info">
+                                <strong>Особенности API:</strong> Поддерживает 4 типа контактов: физические лица, отделы, основной и другое. Физ лица и отделы предоставляют свои поля.
+                            </div>
+                        </section>
+
+                        <!-- Аутентификация -->
+                        <section id="auth">
+                            <h2>1. Аутентификация</h2>
+                            <p>Для доступа к API требуется токен.</p>
+
+                            <ol>
+                                <li>В админ‑панели Django перейдите в раздел "Токены".</li>
+                                <li>Создайте новый токен для нужного пользователя.</li>
+                                <li>Сохраните токен для будущего использования.</li>
+                            </ol>
+                        </section>
+
+                        <!-- Основной эндпоинт -->
+                        <section id="endpoint">
+                            <h2>2. Основной эндпоинт</h2>
+
+                            <h3>2.1 Получение данных о контактах</h3>
+                            <table class="table table-bordered">
+                                <tr>
+                                    <td><strong>Эндпоинт:</strong></td>
+                                    <td><code>/api/contacts/</code></td>
+                                </tr>
+                                <tr>
+                                    <td><strong>Метод HTTP:</strong></td>
+                                    <td>GET</td>
+                                </tr>
+                                <tr>
+                                    <td><strong>Аутентификация:</strong></td>
+                                    <td>Требуется (токен в заголовке Authorization)</td>
+                                </tr>
+                                <tr>
+                                    <td><strong>Пагинация:</strong></td>
+                                    <td>Поддерживается (стандартная Django REST)</td>
+                                </tr>
+                            </table>
+
+                            <h3>2.2 Формат запроса</h3>
+                            <p><strong>Заголовки обязательные:</strong></p>
+                            <table class="table table-striped">
+                                <thead>
+                                    <tr>
+                                        <th>Заголовок</th>
+                                        <th>Значение</th>
+                                        <th>Описание</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr>
+                                        <td><code>Authorization</code></td>
+                                        <td><code>Token YOUR_TOKEN</code></td>
+                                        <td>Токен аутентификации</td>
+                                    </tr>
+                                    <tr>
+                                        <td><code>Accept</code></td>
+                                        <td><code>application/json</code></td>
+                                        <td>Формат ответа (рекомендуется)</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+
+                            <h3>2.3 Примеры использования</h3>
+
+                            <div class="">Пример 1: JavaScript (Fetch API)</div>
+                            <div class="code-block">
+                                <pre><code>// Получение всех контактов
+fetch('https://bitrix24.tuna-edu.ru/api/contacts/', {
+    method: 'GET',
+    headers: {
+        'Authorization': 'Token 4a8389aa7f015d3a68e44e3f4bae94d63c7ac097',
+        'Accept': 'application/json'
+    }
+})
+.then(response => response.json())
+.then(data => console.log(data))
+.catch(error => console.error('Ошибка:', error));</code></pre>
+                            </div>
+
+                            <div class="">Пример 2: cURL</div>
+                            <div class="code-block">
+                                <pre><code>curl -X GET 'https://bitrix24.tuna-edu.ru/api/contacts/' \
+-H 'Authorization: Token 4a8389aa7f015d3a68e44e3f4bae94d63c7ac097' \
+-H 'Accept: application/json'</code></pre>
+                            </div>
+
+                            <div class="">Пример 3: Python (Requests)</div>
+                            <div class="code-block">
+                                <pre><code>import requests
+headers = {
+    'Authorization': 'Token 4a8389aa7f015d3a68e44e3f4bae94d63c7ac097',
+    'Accept': 'application/json'
+}
+response = requests.get('https://bitrix24.tuna-edu.ru/api/contacts/', headers=headers)
+data = response.json()
+print(data)</code></pre>
+                            </div>
+                        </section>
+
+                        <!-- Типы контактов -->
+                        <section id="types">
+                            <h2>3. Типы контактов</h2>
+                            <p>API поддерживает два отличительных типа контактов, которые определяют набор возвращаемых полей:</p>
+
+                            <h3>3.1 Тип "person" (физическое лицо)</h3>
+                            <p>Контактное лицо организации. Возвращает следующие поля:</p>
+                            <ul>
+                                <li><code>type</code> - тип контакта (всегда "person")</li>
+                                <li><code>comment</code> - комментарий</li>
+                                <li><code>current</code> - актуальность контакта</li>
+                                <li><code>organization</code> - название организации</li>
+                                <li><code>first_name</code> - имя</li>
+                                <li><code>last_name</code> - фамилия</li>
+                                <li><code>middle_name</code> - отчество</li>
+                                <li><code>position</code> - должность</li>
+                                <li><code>first_name_dat</code> - имя в дательном падеже</li>
+                                <li><code>last_name_dat</code> - фамилия в дательном падеже</li>
+                                <li><code>middle_name_dat</code> - отчество в дательном падеже</li>
+                                <li><code>position_dat</code> - должность в дательном падеже</li>
+                                <li><code>manager</code> - является ли руководителем</li>
+                            </ul>
+
+                            <h3>3.2 Тип "department" (подразделение)</h3>
+                            <p>Контактное подразделение организации. Возвращает следующие поля:</p>
+                            <ul>
+                                <li><code>type</code> - тип контакта (всегда "department")</li>
+                                <li><code>comment</code> - комментарий</li>
+                                <li><code>current</code> - актуальность контакта</li>
+                                <li><code>organization</code> - название организации</li>
+                                <li><code>department_name</code> - название отдела</li>
+                            </ul>
+
+                            <h3>3.2 Тип "main" и "other"</h3>
+                            <p>Главный и другие контакты. Возвращают следующие поля:</p>
+                            <ul>
+                                <li><code>type</code> - тип контакта (всегда "department")</li>
+                                <li><code>comment</code> - комментарий</li>
+                                <li><code>current</code> - актуальность контакта</li>
+                                <li><code>organization</code> - название организации</li>
+                            </ul>
+
+                            <div class="alert alert-info">
+                                <strong>Примечание:</strong> Для корректной фильтрации убедитесь, что используете правильные фильтры для соответствующего типа контакта.
+                            </div>
+                        </section>
+
+                        <!-- Фильтрация -->
+                        <section id="filters">
+                            <h2>4. Фильтрация результатов</h2>
+                            <p>API поддерживает фильтрацию контактов по различным параметрам.</p>
+
+                            <h3>4.1 Доступные фильтры</h3>
+                            <table class="table table-striped">
+                                <thead>
+                                    <tr>
+                                        <th>Фильтр</th>
+                                        <th>Параметр</th>
+                                        <th>Описание</th>
+                                        <th>Тип поиска</th>
+                                        <th>Примечание</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr>
+                                        <td>Организация</td>
+                                        <td><code>organization</code></td>
+                                        <td>Название организации</td>
+                                        <td>Точное совпадение</td>
+                                        <td>-</td>
+                                    </tr>
+                                    <tr>
+                                        <td>Организация (содержит)</td>
+                                        <td><code>organization__contains</code></td>
+                                        <td>Поиск по части названия организации</td>
+                                        <td>Частичное совпадение</td>
+                                        <td>-</td>
+                                    </tr>
+                                    <tr>
+                                        <td>Тип контакта</td>
+                                        <td><code>type</code></td>
+                                        <td>Тип контакта (person/department)</td>
+                                        <td>Точное совпадение</td>
+                                        <td>-</td>
+                                    </tr>
+                                    <tr>
+                                        <td>Подразделение</td>
+                                        <td><code>department</code></td>
+                                        <td>Название отдела</td>
+                                        <td>Точное совпадение</td>
+                                        <td>Только для отделов</td>
+                                    </tr>
+                                    <tr>
+                                        <td>Подразделение (содержит)</td>
+                                        <td><code>department__contains</code></td>
+                                        <td>Поиск по части названия отдела</td>
+                                        <td>Частичное совпадение</td>
+                                        <td>Только для отделов</td>
+                                    </tr>
+                                    <tr>
+                                        <td>Руководитель</td>
+                                        <td><code>manager</code></td>
+                                        <td>Фильтр по руководителям</td>
+                                        <td>Булевый</td>
+                                        <td>Только для физ.лиц</td>
+                                    </tr>
+                                    <tr>
+                                        <td>Актуальность</td>
+                                        <td><code>current</code></td>
+                                        <td>Фильтр по актуальным контактам</td>
+                                        <td>Булевый</td>
+                                        <td>true/false</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+
+                            <h3>4.2 Синтаксис фильтрации</h3>
+                            <p>Фильтры передаются как query-параметры в URL:</p>
+                            <div class="code-block">
+                                <code>/api/contacts/?filter1=value1&filter2=value2</code>
+                            </div>
+
+                            <h3>4.3 Примеры фильтрации</h3>
+
+                            <div class="">Пример 1: Все контакты организации</div>
+                            <div class="code-block">
+                                <code>https://bitrix24.tuna-edu.ru/api/contacts/?organization=Минобрнауки</code>
+                            </div>
+
+                            <div class="">Пример 2: Все физические лица (контактные лица)</div>
+                            <div class="code-block">
+                                <code>https://bitrix24.tuna-edu.ru/api/contacts/?type=person</code>
+                            </div>
+
+                            <div class="">Пример 3: Все руководители в организации</div>
+                            <div class="code-block">
+                                <code>https://bitrix24.tuna-edu.ru/api/contacts/?type=person&manager=true&organization__contains=образования</code>
+                            </div>
+
+                            <div class="">Пример 4: Отдела в организации</div>
+                            <div class="code-block">
+                                <code>https://bitrix24.tuna-edu.ru/api/contacts/?type=department&organization=Минобрнауки</code>
+                            </div>
+
+                            <div class="alert alert-warning mt-3">
+                                <strong>Обратите внимание:</strong>
+                                <ul>
+                                    <li>Фильтры <code>department</code> и <code>department__contains</code> работают только при <code>type=department</code></li>
+                                    <li>Фильтр <code>manager</code> работает только при <code>type=person</code></li>
+                                    <li>Фильтр <code>current</code> принимает значения true/false для фильтрации по актуальности</li>
+                                </ul>
+                            </div>
+                        </section>
+
+                        <!-- Формат ответа -->
+                        <section id="response">
+                            <h2>5. Формат ответа</h2>
+
+                            <h3>5.1 Успешный ответ (HTTP 200 OK)</h3>
+                            <p>API возвращает список контактов. Структура ответа зависит от типа контакта.</p>
+
+                            <div class="code-block" style="height: 400px; overflow-y: auto; font-size: small;">
+                                <pre><code>[
+// Пример контакта типа "person"
+{
+    "type": "person",
+    "comment": "Основной контакт по проекту",
+    "current": true,
+    "organization": "Минобрнауки",
+    "first_name": "Иван",
+    "last_name": "Иванов",
+    "middle_name": "Иванович",
+    "position": "Начальник отдела",
+    "first_name_dat": "Ивану",
+    "last_name_dat": "Иванову",
+    "middle_name_dat": "Ивановичу",
+    "position_dat": "Начальнику отдела",
+    "manager": true
+},
+// Пример контакта типа "department"
+{
+    "type": "department",
+    "comment": "Отдел цифровизации",
+    "current": true,
+    "organization": "Минобрнауки",
+    "department_name": "Отдел цифровой трансформации"
+},
+// Пример неактуального контакта
+{
+    "type": "person",
+    "comment": "Бывший сотрудник",
+    "current": false,
+    "organization": "ООО Рога и копыта",
+    "first_name": "Петр",
+    "last_name": "Петров",
+    "middle_name": "Петрович",
+    "position": "Бывший директор",
+    "first_name_dat": "Петру",
+    "last_name_dat": "Петрову",
+    "middle_name_dat": "Петровичу",
+    "position_dat": "Бывшему директору",
+    "manager": false
+}
+]</code></pre>
+                            </div>
+
+                            <h3>5.2 Структура данных в ответе (для типа "person")</h3>
+                            <table class="table table-striped">
+                                <thead>
+                                    <tr>
+                                        <th>Поле</th>
+                                        <th>Тип</th>
+                                        <th>Описание</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr>
+                                        <td><code>type</code></td>
+                                        <td>String</td>
+                                        <td>Тип контакта (всегда "person")</td>
+                                    </tr>
+                                    <tr>
+                                        <td><code>comment</code></td>
+                                        <td>String</td>
+                                        <td>Комментарий к контакту</td>
+                                    </tr>
+                                    <tr>
+                                        <td><code>current</code></td>
+                                        <td>Boolean</td>
+                                        <td>Актуальность контакта</td>
+                                    </tr>
+                                    <tr>
+                                        <td><code>organization</code></td>
+                                        <td>String</td>
+                                        <td>Название организации</td>
+                                    </tr>
+                                    <tr>
+                                        <td><code>first_name</code></td>
+                                        <td>String</td>
+                                        <td>Имя контактного лица</td>
+                                    </tr>
+                                    <tr>
+                                        <td><code>last_name</code></td>
+                                        <td>String</td>
+                                        <td>Фамилия контактного лица</td>
+                                    </tr>
+                                    <tr>
+                                        <td><code>middle_name</code></td>
+                                        <td>String</td>
+                                        <td>Отчество контактного лица</td>
+                                    </tr>
+                                    <tr>
+                                        <td><code>position</code></td>
+                                        <td>String</td>
+                                        <td>Должность</td>
+                                    </tr>
+                                    <tr>
+                                        <td><code>first_name_dat</code></td>
+                                        <td>String</td>
+                                        <td>Имя в дательном падеже</td>
+                                    </tr>
+                                    <tr>
+                                        <td><code>last_name_dat</code></td>
+                                        <td>String</td>
+                                        <td>Фамилия в дательном падеже</td>
+                                    </tr>
+                                    <tr>
+                                        <td><code>middle_name_dat</code></td>
+                                        <td>String</td>
+                                        <td>Отчество в дательном падеже</td>
+                                    </tr>
+                                    <tr>
+                                        <td><code>position_dat</code></td>
+                                        <td>String</td>
+                                        <td>Должность в дательном падеже</td>
+                                    </tr>
+                                    <tr>
+                                        <td><code>manager</code></td>
+                                        <td>Boolean</td>
+                                        <td>Является ли руководителем</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+
+                            <h3>5.3 Структура данных в ответе (для типа "department")</h3>
+                            <table class="table table-striped">
+                                <thead>
+                                    <tr>
+                                        <th>Поле</th>
+                                        <th>Тип</th>
+                                        <th>Описание</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr>
+                                        <td><code>type</code></td>
+                                        <td>String</td>
+                                        <td>Тип контакта (всегда "department")</td>
+                                    </tr>
+                                    <tr>
+                                        <td><code>comment</code></td>
+                                        <td>String</td>
+                                        <td>Комментарий к контакту</td>
+                                    </tr>
+                                    <tr>
+                                        <td><code>current</code></td>
+                                        <td>Boolean</td>
+                                        <td>Актуальность контакта</td>
+                                    </tr>
+                                    <tr>
+                                        <td><code>organization</code></td>
+                                        <td>String</td>
+                                        <td>Название организации</td>
+                                    </tr>
+                                    <tr>
+                                        <td><code>department_name</code></td>
+                                        <td>String</td>
+                                        <td>Название отдела</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </section>
+
+                        <!-- Коды ответов -->
+                        <section id="errors">
+                            <h2>6. Коды ответов и ошибки</h2>
+
+                            <h3>6.1 Успешные коды ответов</h3>
+                            <table class="table table-striped">
+                                <thead>
+                                    <tr>
+                                        <th>Код</th>
+                                        <th>Описание</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr>
+                                        <td><code>200</code></td>
+                                        <td>OK — Запрос выполнен успешно</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+
+                            <h3>6.2 Коды ошибок</h3>
+                            <table class="table table-striped">
+                                <thead>
+                                    <tr>
+                                        <th>Код</th>
+                                        <th>Описание</th>
+                                        <th>Решение</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr>
+                                        <td><code>400</code></td>
+                                        <td>Bad Request — Неверный формат запроса</td>
+                                        <td>Проверьте синтаксис URL и параметры фильтрации</td>
+                                    </tr>
+                                    <tr>
+                                        <td><code>401</code></td>
+                                        <td>Unauthorized — Требуется аутентификация</td>
+                                        <td>Убедитесь, что передали корректный токен</td>
+                                    </tr>
+                                    <tr>
+                                        <td><code>403</code></td>
+                                        <td>Forbidden — Доступ запрещен</td>
+                                        <td>Ваш токен не имеет прав на доступ к API</td>
+                                    </tr>
+                                    <tr>
+                                        <td><code>404</code></td>
+                                        <td>Not Found — Ресурс не найден</td>
+                                        <td>Проверьте правильность URL эндпоинта</td>
+                                    </tr>
+                                    <tr>
+                                        <td><code>500</code></td>
+                                        <td>Internal Server Error — Ошибка сервера</td>
+                                        <td>Попробуйте позже или обратитесь к администратору</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+
+                            <h3>6.3 Примеры ошибок</h3>
+
+                            <div class="">Ошибка 401: Отсутствует токен</div>
+                            <div class="code-block">
+                                <pre><code>{
+    "detail": "Authentication credentials were not provided."
+}</code></pre>
+                            </div>
+                            <p style="margin-top: 10px;"><strong>Решение:</strong> Добавьте заголовок Authorization с вашим токеном.</p>
+                        </section>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</body>
+
+<script>
+    document.getElementById('togglePassword').addEventListener('click', function () {
+        console.log("click")
+        const passwordInput = document.getElementById('password');
+        const type = passwordInput.getAttribute('type') === 'password' ? 'text' : 'password';
+        passwordInput.setAttribute('type', type);
+        this.textContent = type === 'password' ? 'Показать' : 'Скрыть';
+    });
+    pre = document.getElementById('JsonResponse')
+    const jsonResponse = {{ JsonReponse|safe  }};
+    const formattedJson = JSON.stringify(jsonResponse, null, 2);
+    pre.textContent = formattedJson;
+
+    
+    function updateTextInputNames() {
+    // Получаем все чекбоксы на странице
+    const checkboxes = document.querySelectorAll('input[type="checkbox"]');
+
+    checkboxes.forEach(checkbox => {
+        // Получаем id чекбокса
+        const checkboxId = checkbox.id;
+
+        // Находим текстовый input, id которого содержит id чекбокса
+        // Используем атрибут селектор *= для проверки включения подстроки в id
+        const textInput = document.querySelector(`input[type="text"][id*="${checkboxId}"]`);
+
+        if (textInput) {
+            // Запоминаем базовый нейм (без приставки)
+            const baseName = textInput.getAttribute('data-base-name') || textInput.name.replace(/__contains$/, '');
+
+            // Сохраняем базовый нейм в data-атрибут для повторного использования
+            textInput.setAttribute('data-base-name', baseName);
+
+            if (checkbox.checked) {
+                // Добавляем приставку __contains, если ее еще нет
+                if (!textInput.name.endsWith('__contains')) {
+                    textInput.name = baseName + '__contains';
+                }
+            } else {
+                // Убираем приставку, если чекбокс не отмечен
+                textInput.name = baseName;
+            }
+        }
+    });
+}
+
+    const checkboxes = document.querySelectorAll('input[type="checkbox"]');
+
+    checkboxes.forEach(checkbox => {
+        checkbox.addEventListener('change', () => {
+            updateTextInputNames();
+        });
+    });
+
+    // Вызовем функцию один раз при загрузке страницы, чтобы синхронизировать имена
+    updateTextInputNames();
+
+</script>
+{% endblock %}

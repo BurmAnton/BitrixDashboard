@@ -17,6 +17,9 @@
         .navbar {
             margin-bottom: 20px;
         }
+        .dropdown:hover .dropdown-menu{
+            display: block;
+        }
     </style>
     {% block extra_css %}{% endblock %}
 </head>
@@ -30,6 +33,15 @@
             </button>
             <div class="collapse navbar-collapse" id="navbarNav">
                 <ul class="navbar-nav">
+                    {% if user.is_superuser %}
+                        <li class="nav-item dropdown">
+                            <a class="nav-link dropdown-toggle active" href="/admin" aria-expanded="false" >REST API</a>
+                            <ul class="dropdown-menu" style="margin-top: 0;">
+                                <li><a class="dropdown-item" href="{% url 'contact_management:api-guide' %}">Организации</a></li>
+                                <li><a class="dropdown-item" href="{% url 'contact_management:api-guide' %}?contact">Контакты</a></li>
+                            </ul>
+                        </li>
+                    {% endif %}
                     <li class="nav-item">
                         <a class="nav-link" href="{% url 'crm_connector:atlas_dashboard' %}">Дашборд Атлас</a>
                     </li>

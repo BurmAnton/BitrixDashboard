@@ -8,6 +8,7 @@ urlpatterns = [
     path('', include('crm_connector.urls')),
     # path('bitrix24/', include('crm_connector.urls')),
     path('education/', include('education_planner.urls')),
+    path('contacts/', include('contact_management.urls')),
 ]
 
 # Добавляем отдачу статических файлов в development режиме

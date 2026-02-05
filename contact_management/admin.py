@@ -53,6 +53,9 @@ class ContactInline(admin.StackedInline):
     )
     inlines = [PhoneInline, EmailInline]
 
+class ProjectsInline(admin.TabularInline):
+    model = Projects.organizations.through
+    extra = 1
 
 @admin.register(Organization)
 class OrganizationAdmin(admin.ModelAdmin):
@@ -78,7 +81,7 @@ class OrganizationAdmin(admin.ModelAdmin):
         "history__name"
     )
     filter_horizontal = ("prof_activity",)
-    inlines = [ContactInline]
+    inlines = [ContactInline, ProjectsInline]
 
     def get_prof_activities(self, obj):
         return ", ".join(pa.name for pa in obj.prof_activity.all())
