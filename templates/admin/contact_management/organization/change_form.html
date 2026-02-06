@@ -1,0 +1,32 @@
+{% extends "admin/change_form.html" %}
+
+{% block admin_change_form_document_ready %}
+    {{ block.super }}
+    <script>
+        document.addEventListener("DOMContentLoaded", function () {
+            const typeField = document.getElementById("id_type");
+            const nameRow = document.getElementById("id_name")?.closest(".form-row");
+            const fullNameRow = document.getElementById("id_full_name")?.closest(".form-row");
+            const regionRow = document.getElementById("id_region")?.closest(".form-row");
+            const isActiveRow = document.getElementById("id_is_active")?.closest(".form-row");
+            const ROIVfield = document.getElementById("id_roiv")?.closest(".form-row");
+            ROIVfield.style.display = "none"
+
+            function toggleROIVFields() {
+                if (!typeField) return;
+                const isROIV =  typeField.options[typeField.value].textContent === "РОИВ";
+
+                if (nameRow) nameRow.style.display = isROIV ? "none" : "";
+                if (fullNameRow) fullNameRow.style.display = isROIV ? "none" : "";
+                if (regionRow) regionRow.style.display = isROIV ? "none" : "";
+                if (isActiveRow) isActiveRow.style.display = isROIV ? "none" : "";
+                if (ROIVfield) ROIVfield.style.display = isROIV ? "" : "none";
+            }
+
+            if (typeField) {
+                typeField.addEventListener("change", toggleROIVFields);
+                toggleROIVFields();  // применить при загрузке
+            }
+        });
+    </script>
+{% endblock %}

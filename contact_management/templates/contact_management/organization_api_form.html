@@ -1,6 +1,8 @@
 {% extends "base.html" %}
 {% load static %}
 
+{% block title %}REST API{% endblock %}
+
 {% block extra_css %}
     <style>
         .col-sm-2{
@@ -25,7 +27,6 @@
 {% endblock %}
 
 {% block content %}
-<title>Авторизация токена</title>
 <body>
     <div class="row" style="height: 100%;">
         <!-- Левая колонка: форма для тестов -->
@@ -51,7 +52,12 @@
                                 <div class="col-sm-2">
                                     <label for="typeInput" class="form-label me-2 mb-0">Тип</label>
                                 </div>
-                                <input type="text" class="form-control form-control-sm me-2" name="type" id="typeInput">
+                                <select class="form-control form-control-sm me-2" name="type">
+                                    <option selected value="">------------------</option>
+                                    {% for obj in ChoiseFields.type %}
+                                        <option value="{{ obj }}">{{ obj }}</option>
+                                    {% endfor %}
+                                </select>
                             </div>
 
                             <!-- Дата -->
@@ -71,11 +77,12 @@
                                 <div class="col-sm-2">
                                     <label for="profActivityInput" class="form-label me-2 mb-0 flex-grow-1">Сфера деятельности</label>
                                 </div>
-                                <input type="text" class="form-control form-control-sm me-2" name="prof_activity" id="prof_activityInput">
-                                <div class="form-check">
-                                    <input class="form-check-input" type="checkbox" id="prof_activity" >
-                                    <label class="form-check-label" for="prof_activity">содержит</label>
-                                </div>
+                                <select class="form-control form-control-sm me-2" name="prof_activity">
+                                    <option selected value="">------------------</option>
+                                    {% for obj in ChoiseFields.prof_activity %}
+                                        <option value="{{ obj }}">{{ obj }}</option>
+                                    {% endfor %}
+                                </select>
                             </div>
 
                             <!-- Проект -->
@@ -83,11 +90,12 @@
                                 <div class="col-sm-2">
                                     <label for="projectInput" class="form-label me-2 mb-0 flex-grow-1">Проект</label>
                                 </div>
-                                <input type="text" class="form-control form-control-sm me-2" name="project" id="projectInput">
-                                <div class="form-check">
-                                    <input class="form-check-input" type="checkbox" id="project">
-                                    <label class="form-check-label" for="project">содержит</label>
-                                </div>
+                                <select class="form-control form-control-sm me-2" name="project">
+                                    <option selected value="">------------------</option>
+                                    {% for obj in ChoiseFields.project %}
+                                        <option value="{{ obj }}">{{ obj }}</option>
+                                    {% endfor %}
+                                </select>
                             </div>
 
                             <!-- Регион -->
@@ -95,11 +103,12 @@
                                 <div class="col-sm-2">
                                     <label for="regionInput" class="form-label me-2 mb-0 flex-grow-1">Регион</label>
                                 </div>
-                                <input type="text" class="form-control form-control-sm me-2" name="region" id="regionInput">
-                                <div class="form-check">
-                                    <input class="form-check-input" type="checkbox" id="region">
-                                    <label class="form-check-label" for="region">содержит</label>
-                                </div>
+                                <select class="form-control form-control-sm me-2" name="region">
+                                    <option selected value="">------------------</option>
+                                    {% for obj in ChoiseFields.region %}
+                                        <option value="{{ obj }}">{{ obj }}</option>
+                                    {% endfor %}
+                                </select>
                             </div>
 
                             <!-- Федеральный округ -->
@@ -107,11 +116,12 @@
                                 <div class="col-sm-2">
                                     <label for="fedDistrictInput" class="form-label me-2 mb-0 flex-grow-1">Федеральный округ</label>
                                 </div>
-                                <input type="text" class="form-control form-control-sm me-2" name="fed_ditrict" id="fedDistrictInput">
-                                <div class="form-check">
-                                    <input class="form-check-input" type="checkbox" id="fedDistrict">
-                                    <label class="form-check-label" for="fedDistrict">содержит</label>
-                                </div>
+                                <select class="form-control form-control-sm me-2" name="fed_district">
+                                    <option selected value="">------------------</option>
+                                    {% for obj in ChoiseFields.fed_district %}
+                                        <option value="{{ obj }}">{{ obj }}</option>
+                                    {% endfor %}
+                                </select>
                             </div>
 
                             <!-- Федеральная компания -->
@@ -200,7 +210,7 @@
                             <table class="table table-bordered">
                                 <tr>
                                     <td><strong>Эндпоинт:</strong></td>
-                                    <td><code>/api/organizations/</code></td>
+                                    <td><code>/contacts/api/organizations/</code></td>
                                 </tr>
                                 <tr>
                                     <td><strong>Метод HTTP:</strong></td>
@@ -245,7 +255,7 @@
                             <div class="">Пример 1: JavaScript (Fetch API)</div>
                             <div class="code-block">
                                 <pre><code>// Получение всех организаций
-fetch('https://bitrix24.tuna-edu.ru/api/organizations/', {
+fetch('https://bitrix24.tuna-edu.ru/contacts/api/organizations/', {
     method: 'GET',
     headers: {
         'Authorization': 'Token 4a8389aa7f015d3a68e44e3f4bae94d63c7ac097',
@@ -259,7 +269,7 @@ fetch('https://bitrix24.tuna-edu.ru/api/organizations/', {
 
                             <div class="">Пример 2: cURL</div>
                             <div class="code-block">
-                                <pre><code>curl -X GET 'https://bitrix24.tuna-edu.ru/api/organizations/' \
+                                <pre><code>curl -X GET 'https://bitrix24.tuna-edu.ru/contacts/api/organizations/' \
             -H 'Authorization: Token 4a8389aa7f015d3a68e44e3f4bae94d63c7ac097' \
             -H 'Accept: application/json'</code></pre>
                             </div>
@@ -271,7 +281,7 @@ headers = {
     'Authorization': 'Token 4a8389aa7f015d3a68e44e3f4bae94d63c7ac097',
     'Accept': 'application/json'
 }
-response = requests.get('https://bitrix24.tuna-edu.ru/api/organizations/', headers=headers)
+response = requests.get('https://bitrix24.tuna-edu.ru/contacts/api/organizations/', headers=headers)
 data = response.json()
 print(data)</code></pre>
                             </div>
@@ -377,29 +387,29 @@ print(data)</code></pre>
                             <h3>3.2 Синтаксис фильтрации</h3>
                             <p>Фильтры передаются как query-параметры в URL:</p>
                             <div class="code-block">
-                                <code>/api/organizations/?filter1=value1&filter2=value2</code>
+                                <code>/contacts/api/organizations/?filter1=value1&filter2=value2</code>
                             </div>
 
                             <h3>3.3 Примеры фильтрации</h3>
 
                             <div class="">Пример 1: Поиск по типу организации</div>
                             <div class="code-block">
-                                <code>https://bitrix24.tuna-edu.ru/api/organizations/?type=РОИВ</code>
+                                <code>https://bitrix24.tuna-edu.ru/contacts/api/organizations/?type=РОИВ</code>
                             </div>
 
                             <div class="">Пример 2: Поиск по региону и федеральному статусу</div>
                             <div class="code-block">
-                                <code>https://bitrix24.tuna-edu.ru/api/organizations/?region__contains=Москва&federal=true</code>
+                                <code>https://bitrix24.tuna-edu.ru/contacts/api/organizations/?region__contains=Москва&federal=true</code>
                             </div>
 
                             <div class="">Пример 3: Поиск организаций с проектом</div>
                             <div class="code-block">
-                                <code>https://bitrix24.tuna-edu.ru/api/organizations/?project=Цифровая%20трансформация</code>
+                                <code>https://bitrix24.tuna-edu.ru/contacts/api/organizations/?project=Цифровая%20трансформация</code>
                             </div>
 
                             <div class="">Пример 4: Комбинированный поиск для РОИВ</div>
                             <div class="code-block">
-                                <code>https://bitrix24.tuna-edu.ru/api/organizations/?type=РОИВ&prof_activity__contains=образование&fed_district=Центральный</code>
+                                <code>https://bitrix24.tuna-edu.ru/contacts/api/organizations/?type=РОИВ&prof_activity__contains=образование&fed_district=Центральный</code>
                             </div>
 
                             <div class="alert alert-warning mt-3">

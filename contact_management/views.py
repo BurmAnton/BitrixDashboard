@@ -2,12 +2,16 @@ from django.shortcuts import render, redirect
 from django.contrib import messages
 from django.conf import settings
 import django_filters
+from rest_framework.decorators import action
+from rest_framework.views import APIView
+from rest_framework.response import Response
 from rest_framework import serializers
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.authentication import TokenAuthentication
 from rest_framework import viewsets
 from django_filters.rest_framework import DjangoFilterBackend
-from .models import Contact, Organization, Projects
+from .models import Contact, Organization, Projects, Region, FederalDistrict, OrganizationType
+from education_planner.models import ProfActivity
 
 def api_guide(request):
     from django.contrib.auth.models import User
@@ -18,8 +22,29 @@ def api_guide(request):
     if not request.user.is_authenticated:
         messages.warning(request, 'Для доступа к REST API необходимо войти в систему.')
         return redirect(f'{settings.LOGIN_URL}?next={request.path}')
+    if not request.user.is_staff and not request.user.is_superuser:
+        return redirect('/')
     
-    
+    ChoiseFields = {}
+
+    types = OrganizationType.objects.all()
+    ChoiseFields.setdefault('type', [obj.name for obj in types])
+
+    prof_activity = ProfActivity.objects.all()
+    ChoiseFields.setdefault('prof_activity', [obj.name for obj in prof_activity])
+
+    project = Projects.objects.all()
+    ChoiseFields.setdefault('project', [obj.name for obj in project])
+
+    region = Region.objects.all()
+    ChoiseFields.setdefault('region', [obj.name for obj in region])
+
+    fed_district = FederalDistrict.objects.all()
+    ChoiseFields.setdefault('fed_district', [obj.name for obj in fed_district])
+
+    organization = Organization.objects.all()
+    ChoiseFields.setdefault('organization', [obj.name for obj in organization])
+
     login = User.objects.filter(username=request.user.username).first()
     tkn = Token.objects.filter(user=login).first()
     group = 'organization'
@@ -27,6 +52,10 @@ def api_guide(request):
         group = 'contact'
     elif 'organization' in request.GET:
         group= 'organization'
+    elif 'get_all' in request.GET:
+        group= 'get_all'
+        if 'model' in request.POST.dict():
+            group = f'get_all/{request.POST.dict().get('model')}'
     url = f'http://{request.get_host()}/contacts/api/{group}' 
 
     headers = { 'Authorization': f'Token {tkn}' }
@@ -34,7 +63,7 @@ def api_guide(request):
     params = {}
     for arg in request.POST.dict():
         value = request.POST.dict().get(arg)
-        if arg != 'csrfmiddlewaretoken' and arg != 'apiLink' and value != '':
+        if arg != 'csrfmiddlewaretoken' and arg != 'apiLink' and value != '' and arg != 'model':
             params.setdefault(arg, value)
     
     if request.method == 'POST':
@@ -51,10 +80,10 @@ def api_guide(request):
         'login': login,
         'token': tkn,
         'JsonReponse': jsn,
-        'URL': str(urllib.parse.unquote(response.url))
+        'URL': str(urllib.parse.unquote(response.url)),
+        'ChoiseFields': ChoiseFields
     }
-
-    return render(request, f"contact_management/{group}_api_form.html", context=context)
+    return render(request, f"contact_management/{'get_all' if 'get_all' in group else group}_api_form.html", context=context)
 
 class ProjectsSerializer(serializers.ModelSerializer):
     class Meta:
@@ -215,3 +244,58 @@ class ContactViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = Contact.objects.all()
     serializer_class = ContactSerializer
     filter_backends = [DjangoFilterBackend]
+
+class RegionNameSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Region
+        fields = ["name", "code", "is_active"]
+
+class FederalDistrictWithRegionsSerializer(serializers.ModelSerializer):
+    region = RegionNameSerializer(many=True, read_only=True)
+    class Meta:
+        model = FederalDistrict
+        fields = ["name", "region"]
+
+class OrganizationTypeSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = OrganizationType
+        fields = "__all__"
+
+class GetAllSerializer(serializers.Serializer):
+    federal_districts = FederalDistrictWithRegionsSerializer(many=True, read_only=True)
+    regions = RegionNameSerializer(many=True, read_only=True)
+    organization_types = OrganizationTypeSerializer(many=True, read_only=True)
+
+class GetAllViewSet(viewsets.ViewSet):
+    authentication_classes = [TokenAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    def list(self, request):
+        return Response(
+            {
+                "message": "Выберите конкретный эндпоинт:",
+                "endpoints": {
+                    "Регионы": "/contacts/api/get_all/region/",
+                    "Типы организаций": "/contacts/api/get_all/organization_type/",
+                    "Федеральные округа": "/contacts/api/get_all/fed_district/",
+                },
+            }
+        )
+    
+    @action(detail=False, methods=["get"], url_path="region")
+    def regions(self, request):
+        regions = Region.objects.all()
+        serializer = RegionNameSerializer(regions, many=True)
+        return Response(serializer.data)
+
+    @action(detail=False, methods=["get"], url_path="organization_type")
+    def organization_types(self, request):
+        org_types = OrganizationType.objects.all()
+        serializer = OrganizationTypeSerializer(org_types, many=True)
+        return Response(serializer.data)
+    
+    @action(detail=False, methods=["get"], url_path="fed_district")
+    def federal_districts(self, request):
+        districts = FederalDistrict.objects.all()
+        serializer = FederalDistrictWithRegionsSerializer(districts, many=True)
+        return Response(serializer.data)

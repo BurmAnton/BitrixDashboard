@@ -1,0 +1,470 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}REST API{% endblock %}
+
+{% block extra_css %}
+    <style>
+        .col-sm-2{
+            text-align: right;
+        }
+        .messages{
+            display: none;
+        }
+        .container{
+            width: 95%; 
+            max-width: 95%;
+        }
+        label{
+            font-size: smaller;
+        }
+        .code-block{
+            background-color: #ebf2f3;
+            border-radius: 12px;
+            padding: 2%;
+        }
+    </style>
+{% endblock %}
+
+{% block content %}
+<body>
+    <div class="row" style="height: 100%;">
+        <!-- Левая колонка: форма для тестов -->
+        <div class="col-md-6">
+            <div class="container-fluid">
+                <div class="card">
+                    <div class="card-header">
+                        <h5>Получение всех обьектов модели</h5>
+                    </div>
+                    <div class="card-body" style="height: 780px">
+                        <form method="post">
+                            {% csrf_token %}
+
+                            <div class="mb-3 position-relative">
+                                <label for="password" class="form-label">Токен</label>
+                                <div class="input-group">
+                                    <input type="password" readonly class="form-control form-control-sm" id="password" value="{{ token }}">
+                                    <button type="button" class="btn btn-outline-secondary btn-sm" id="togglePassword" style="width: 20%;">Показать</button>
+                                </div>
+                            </div>
+
+                            <!-- Тип -->
+                            <div class="mb-3 d-flex align-items-center">
+                                <label for="model" class="form-label me-2 mb-0">Тип</label>
+                                <select class="form-select" aria-label="Default select example" name="model" id="model">
+                                    <option selected value="">------------------</option>
+                                    <option value="region" name="region">Регионы</option>
+                                    <option value="fed_district" name="fed_district">Федеральные округа</option>
+                                    <option value="organization_type" name="organization_type">Типы организаций</option>
+                                </select>
+                            </div>
+
+                            <div class="mb-2">
+                                <label for="apiLink" class="form-label">Ссылка API для fetch</label>
+                                <input type="text" readonly class="form-control form-control-sm" id="apiLink" name="apiLink" value="{{ URL|safe }}">
+                            </div>
+
+
+                            <button type="submit" class="btn btn-primary btn-sm">Отправить</button>
+                        </form>
+
+
+
+                        <div class="card" style="margin-top: 12px; padding: 1%; height: 67%; overflow-y: auto; font-size: small;" >
+                            <pre id="JsonResponse"></pre>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Правая колонка: контент документации -->
+        <div class="col-md-6">
+            <div class="container-fluid">
+                <div class="card">
+                    <!-- Заголовок -->
+                    <div class="card-header">
+                        <h5>Документация REST API get_all</h5>
+                    </div>
+
+                    <!-- Table of Contents -->
+                    <div class="card-body" style="max-height: 780px; overflow-y: auto;">
+                        <div class="toc">
+                            <h3>Содержание:</h3>
+                            <ul>
+                                <li><a class="link-body-emphasis link-underline-opacity-0" href="#intro">Введение</a></li>
+                                <li><a class="link-body-emphasis link-underline-opacity-0" href="#auth">1. Аутентификация</a></li>
+                                <li><a class="link-body-emphasis link-underline-opacity-0" href="#endpoints">2. Эндпоинты</a></li>
+                                <li><a class="link-body-emphasis link-underline-opacity-0" href="#response">3. Формат ответа</a></li>
+                                <li><a class="link-body-emphasis link-underline-opacity-0" href="#errors">4. Коды ответов и ошибки</a></li>
+                            </ul>
+                        </div>
+
+                        <!-- Введение -->
+                        <section id="intro">
+                            <h2>Введение</h2>
+                            <p>Добро пожаловать в документацию REST API для получения справочных данных системы. Этот API предоставляет доступ к федеральным округам, регионам и типам организаций.</p>
+                            <div class="alert alert-info">
+                                <strong>Особенности API:</strong> Все эндпоинты требуют аутентификации по токену. Данные возвращаются в формате JSON.
+                            </div>
+                        </section>
+
+                        <!-- Аутентификация -->
+                        <section id="auth">
+                            <h2>1. Аутентификация</h2>
+                            <p>Для доступа к API требуется токен.</p>
+
+                            <ol>
+                                <li>В админ‑панели Django перейдите в раздел "Токены".</li>
+                                <li>Создайте новый токен для нужного пользователя.</li>
+                                <li>Сохраните токен для будущего использования.</li>
+                            </ol>
+                        </section>
+
+                        <!-- Эндпоинты -->
+                        <section id="endpoints">
+                            <h2>2. Эндпоинты</h2>
+
+                            <h3>2.1 Получение всех федеральных округов с регионами</h3>
+                            <table class="table table-bordered">
+                                <tr>
+                                    <td><strong>Эндпоинт:</strong></td>
+                                    <td><code>/contacts/api/get_all/fed_district/</code></td>
+                                </tr>
+                                <tr>
+                                    <td><strong>Метод HTTP:</strong></td>
+                                    <td>GET</td>
+                                </tr>
+                                <tr>
+                                    <td><strong>Аутентификация:</strong></td>
+                                    <td>Требуется (токен в заголовке Authorization)</td>
+                                </tr>
+                                <tr>
+                                    <td><strong>Описание:</strong></td>
+                                    <td>Возвращает список всех федеральных округов с вложенными списками регионов</td>
+                                </tr>
+                            </table>
+
+                            <h3>2.2 Получение всех регионов</h3>
+                            <table class="table table-bordered">
+                                <tr>
+                                    <td><strong>Эндпоинт:</strong></td>
+                                    <td><code>/contacts/api/get_all/region/</code></td>
+                                </tr>
+                                <tr>
+                                    <td><strong>Метод HTTP:</strong></td>
+                                    <td>GET</td>
+                                </tr>
+                                <tr>
+                                    <td><strong>Аутентификация:</strong></td>
+                                    <td>Требуется (токен в заголовке Authorization)</td>
+                                </tr>
+                                <tr>
+                                    <td><strong>Описание:</strong></td>
+                                    <td>Возвращает список всех регионов</td>
+                                </tr>
+                            </table>
+
+                            <h3>2.3 Получение всех типов организаций</h3>
+                            <table class="table table-bordered">
+                                <tr>
+                                    <td><strong>Эндпоинт:</strong></td>
+                                    <td><code>/contacts/api/get_all/organization_type/</code></td>
+                                </tr>
+                                <tr>
+                                    <td><strong>Метод HTTP:</strong></td>
+                                    <td>GET</td>
+                                </tr>
+                                <tr>
+                                    <td><strong>Аутентификация:</strong></td>
+                                    <td>Требуется (токен в заголовке Authorization)</td>
+                                </tr>
+                                <tr>
+                                    <td><strong>Описание:</strong></td>
+                                    <td>Возвращает список всех типов организаций</td>
+                                </tr>
+                            </table>
+
+                            <h3>2.4 Формат запроса</h3>
+                            <p><strong>Заголовки обязательные:</strong></p>
+                            <table class="table table-striped">
+                                <thead>
+                                    <tr>
+                                        <th>Заголовок</th>
+                                        <th>Значение</th>
+                                        <th>Описание</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr>
+                                        <td><code>Authorization</code></td>
+                                        <td><code>Token YOUR_TOKEN</code></td>
+                                        <td>Токен аутентификации</td>
+                                    </tr>
+                                    <tr>
+                                        <td><code>Accept</code></td>
+                                        <td><code>application/json</code></td>
+                                        <td>Формат ответа (рекомендуется)</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+
+                            <h3>2.5 Примеры использования</h3>
+
+                            <div class="">Пример 1: JavaScript (Fetch API) - получение федеральных округов</div>
+                            <div class="code-block">
+                                <pre><code>fetch('https://bitrix24.tuna-edu.ru/contacts/api/get_all/fed_district/', {
+    method: 'GET',
+    headers: {
+        'Authorization': 'Token ваш_токен_здесь',
+        'Accept': 'application/json'
+    }
+})
+.then(response => response.json())
+.then(data => console.log(data))
+.catch(error => console.error('Ошибка:', error));</code></pre>
+                            </div>
+
+                            <div class="">Пример 2: cURL - получение регионов</div>
+                            <div class="code-block">
+                                <pre><code>curl -X GET 'https://bitrix24.tuna-edu.ru/contacts/api/get_all/region/' \
+-H 'Authorization: Token ваш_токен_здесь' \
+-H 'Accept: application/json'</code></pre>
+                            </div>
+
+                            <div class="">Пример 3: Python (Requests) - получение типов организаций</div>
+                            <div class="code-block">
+                                <pre><code>import requests
+headers = {
+    'Authorization': 'Token ваш_токен_здесь',
+    'Accept': 'application/json'
+}
+response = requests.get('https://bitrix24.tuna-edu.ru/contacts/api/get_all/organization_type/', headers=headers)
+data = response.json()
+print(data)</code></pre>
+                            </div>
+                        </section>
+
+                        <!-- Формат ответа -->
+                        <section id="response">
+                            <h2>3. Формат ответа</h2>
+
+                            <h3>3.1 Успешный ответ (HTTP 200 OK)</h3>
+                            <p>API возвращает данные в формате JSON. Структура ответа зависит от эндпоинта.</p>
+
+                            <h3>3.2 Федеральные округа с регионами</h3>
+                            <div class="code-block" style="overflow-y: auto; font-size: small;">
+                                <pre><code>[
+    {
+        "name": "Центральный федеральный округ",
+        "region": [
+            {"name": "Москва"},
+            {"name": "Московская область"},
+            {"name": "Белгородская область"}
+        ]
+    },
+    {
+        "name": "Северо-Западный федеральный округ",
+        "region": [
+            {"name": "Санкт-Петербург"},
+            {"name": "Ленинградская область"},
+            {"name": "Республика Карелия"}
+        ]
+    }
+]</code></pre>
+                            </div>
+
+                            <h3>3.3 Регионы</h3>
+                            <div class="code-block" style="overflow-y: auto; font-size: small;">
+                                <pre><code>[
+    {"name": "Москва"},
+    {"name": "Московская область"},
+    {"name": "Санкт-Петербург"},
+    {"name": "Ленинградская область"},
+    {"name": "Республика Татарстан"}
+]</code></pre>
+                            </div>
+
+                            <h3>3.4 Типы организаций</h3>
+                            <div class="code-block" style="overflow-y: auto; font-size: small;">
+                                <pre><code>[
+    {"name": "Государственное учреждение"},
+    {"name": "Частная компания"},
+    {"name": "Некоммерческая организация"},
+    {"name": "Образовательное учреждение"}
+]</code></pre>
+                            </div>
+
+                            <h3>3.5 Структура данных</h3>
+                            <table class="table table-striped">
+                                <thead>
+                                    <tr>
+                                        <th>Поле</th>
+                                        <th>Тип</th>
+                                        <th>Описание</th>
+                                        <th>Эндпоинт</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr>
+                                        <td><code>name</code></td>
+                                        <td>String</td>
+                                        <td>Название федерального округа</td>
+                                        <td>/fed_district/</td>
+                                    </tr>
+                                    <tr>
+                                        <td><code>region</code></td>
+                                        <td>Array</td>
+                                        <td>Список регионов в округе (массив объектов с полем name)</td>
+                                        <td>/fed_district/</td>
+                                    </tr>
+                                    <tr>
+                                        <td><code>name</code></td>
+                                        <td>String</td>
+                                        <td>Название региона</td>
+                                        <td>/region/</td>
+                                    </tr>
+                                    <tr>
+                                        <td><code>name</code></td>
+                                        <td>String</td>
+                                        <td>Название типа организации</td>
+                                        <td>/organization_type/</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </section>
+
+                        <!-- Коды ответов -->
+                        <section id="errors">
+                            <h2>4. Коды ответов и ошибки</h2>
+
+                            <h3>4.1 Успешные коды ответов</h3>
+                            <table class="table table-striped">
+                                <thead>
+                                    <tr>
+                                        <th>Код</th>
+                                        <th>Описание</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr>
+                                        <td><code>200</code></td>
+                                        <td>OK — Запрос выполнен успешно</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+
+                            <h3>4.2 Коды ошибок</h3>
+                            <table class="table table-striped">
+                                <thead>
+                                    <tr>
+                                        <th>Код</th>
+                                        <th>Описание</th>
+                                        <th>Решение</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr>
+                                        <td><code>400</code></td>
+                                        <td>Bad Request — Неверный формат запроса</td>
+                                        <td>Проверьте синтаксис URL</td>
+                                    </tr>
+                                    <tr>
+                                        <td><code>401</code></td>
+                                        <td>Unauthorized — Требуется аутентификация</td>
+                                        <td>Убедитесь, что передали корректный токен</td>
+                                    </tr>
+                                    <tr>
+                                        <td><code>403</code></td>
+                                        <td>Forbidden — Доступ запрещен</td>
+                                        <td>Ваш токен не имеет прав на доступ к API</td>
+                                    </tr>
+                                    <tr>
+                                        <td><code>404</code></td>
+                                        <td>Not Found — Ресурс не найден</td>
+                                        <td>Проверьте правильность URL эндпоинта</td>
+                                    </tr>
+                                    <tr>
+                                        <td><code>500</code></td>
+                                        <td>Internal Server Error — Ошибка сервера</td>
+                                        <td>Попробуйте позже или обратитесь к администратору</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+
+                            <h3>4.3 Примеры ошибок</h3>
+
+                            <div class="">Ошибка 401: Отсутствует токен</div>
+                            <div class="code-block">
+                                <pre><code>{
+    "detail": "Authentication credentials were not provided."
+}</code></pre>
+                            </div>
+                            <p style="margin-top: 10px;"><strong>Решение:</strong> Добавьте заголовок Authorization с вашим токеном.</p>
+                        </section>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</body>
+
+<script>
+    document.getElementById('togglePassword').addEventListener('click', function () {
+        console.log("click")
+        const passwordInput = document.getElementById('password');
+        const type = passwordInput.getAttribute('type') === 'password' ? 'text' : 'password';
+        passwordInput.setAttribute('type', type);
+        this.textContent = type === 'password' ? 'Показать' : 'Скрыть';
+    });
+    pre = document.getElementById('JsonResponse')
+    const jsonResponse = {{ JsonReponse|safe  }};
+    const formattedJson = JSON.stringify(jsonResponse, null, 2);
+    pre.textContent = formattedJson;
+
+    
+    function updateTextInputNames() {
+    // Получаем все чекбоксы на странице
+    const checkboxes = document.querySelectorAll('input[type="checkbox"]');
+
+    checkboxes.forEach(checkbox => {
+        // Получаем id чекбокса
+        const checkboxId = checkbox.id;
+
+        // Находим текстовый input, id которого содержит id чекбокса
+        // Используем атрибут селектор *= для проверки включения подстроки в id
+        const textInput = document.querySelector(`input[type="text"][id*="${checkboxId}"]`);
+
+        if (textInput) {
+            // Запоминаем базовый нейм (без приставки)
+            const baseName = textInput.getAttribute('data-base-name') || textInput.name.replace(/__contains$/, '');
+
+            // Сохраняем базовый нейм в data-атрибут для повторного использования
+            textInput.setAttribute('data-base-name', baseName);
+
+            if (checkbox.checked) {
+                // Добавляем приставку __contains, если ее еще нет
+                if (!textInput.name.endsWith('__contains')) {
+                    textInput.name = baseName + '__contains';
+                }
+            } else {
+                // Убираем приставку, если чекбокс не отмечен
+                textInput.name = baseName;
+            }
+        }
+    });
+}
+
+    const checkboxes = document.querySelectorAll('input[type="checkbox"]');
+
+    checkboxes.forEach(checkbox => {
+        checkbox.addEventListener('change', () => {
+            updateTextInputNames();
+        });
+    });
+
+    // Вызовем функцию один раз при загрузке страницы, чтобы синхронизировать имена
+    updateTextInputNames();
+
+</script>
+{% endblock %}

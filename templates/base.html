@@ -33,12 +33,13 @@
             </button>
             <div class="collapse navbar-collapse" id="navbarNav">
                 <ul class="navbar-nav">
-                    {% if user.is_superuser %}
+                    {% if user.is_superuser or user.is_staff %}
                         <li class="nav-item dropdown">
-                            <a class="nav-link dropdown-toggle active" href="/admin" aria-expanded="false" >REST API</a>
+                            <a class="nav-link dropdown-toggle active" href="{% url 'contact_management:api-guide' %}" aria-expanded="false" >REST API</a>
                             <ul class="dropdown-menu" style="margin-top: 0;">
                                 <li><a class="dropdown-item" href="{% url 'contact_management:api-guide' %}">Организации</a></li>
                                 <li><a class="dropdown-item" href="{% url 'contact_management:api-guide' %}?contact">Контакты</a></li>
+                                <li><a class="dropdown-item" href="{% url 'contact_management:api-guide' %}?get_all">Списки</a></li>
                             </ul>
                         </li>
                     {% endif %}

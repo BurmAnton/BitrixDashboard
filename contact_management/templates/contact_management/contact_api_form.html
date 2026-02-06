@@ -1,6 +1,8 @@
 {% extends "base.html" %}
 {% load static %}
 
+{% block title %}REST API{% endblock %}
+
 {% block extra_css %}
     <style>
         .col-sm-2{
@@ -25,7 +27,6 @@
 {% endblock %}
 
 {% block content %}
-<title>Авторизация токена</title>
 <body>
     <div class="row" style="height: 100%;">
         <!-- Левая колонка: форма для тестов -->
@@ -52,7 +53,13 @@
                                 <div class="col-sm-2">
                                     <label for="typeInput" class="form-label me-2 mb-0">Тип</label>
                                 </div>
-                                <input type="text" class="form-control form-control-sm me-2" name="type" id="typeInput">
+                                <select class="form-control form-control-sm me-2" name="type" id="typeInput">
+                                    <option selected value="">------------------</option>
+                                    <option value="department">Отдел</option>
+                                    <option value="person">Сотрудник</option>
+                                    <option value="main">Основной</option>
+                                    <option value="other">Другое</option>
+                                </select>
                             </div>
 
                             <!-- Подразделение -->
@@ -72,11 +79,17 @@
                                 <div class="col-sm-2">
                                     <label for="organizationInput" class="form-label me-2 mb-0">Организация</label>
                                 </div>
-                                <input type="text" class="form-control form-control-sm me-2" name="organization" id="organizationInput">
+                                <select class="form-control form-control-sm me-2" name="type" id="typeInput">
+                                    <option selected value="">------------------</option>
+                                    {% for obj in ChoiseFields.organization %}
+                                        <option value="{{ obj }}">{{ obj }}</option>
+                                    {% endfor %}
+                                </select>
+                                <!-- <input type="text" class="form-control form-control-sm me-2" name="organization" id="organizationInput">
                                 <div class="form-check">
                                     <input class="form-check-input" type="checkbox" id="organization">
                                     <label class="form-check-label" for="organizationContains">содержит</label>
-                                </div>
+                                </div> -->
                             </div>
 
                             <!-- Менеджер -->
@@ -171,7 +184,7 @@
                             <table class="table table-bordered">
                                 <tr>
                                     <td><strong>Эндпоинт:</strong></td>
-                                    <td><code>/api/contacts/</code></td>
+                                    <td><code>/contacts/api/contacts/</code></td>
                                 </tr>
                                 <tr>
                                     <td><strong>Метод HTTP:</strong></td>
@@ -216,7 +229,7 @@
                             <div class="">Пример 1: JavaScript (Fetch API)</div>
                             <div class="code-block">
                                 <pre><code>// Получение всех контактов
-fetch('https://bitrix24.tuna-edu.ru/api/contacts/', {
+fetch('https://bitrix24.tuna-edu.ru/contacts/api/contacts/', {
     method: 'GET',
     headers: {
         'Authorization': 'Token 4a8389aa7f015d3a68e44e3f4bae94d63c7ac097',
@@ -230,7 +243,7 @@ fetch('https://bitrix24.tuna-edu.ru/api/contacts/', {
 
                             <div class="">Пример 2: cURL</div>
                             <div class="code-block">
-                                <pre><code>curl -X GET 'https://bitrix24.tuna-edu.ru/api/contacts/' \
+                                <pre><code>curl -X GET 'https://bitrix24.tuna-edu.ru/contacts/api/contacts/' \
 -H 'Authorization: Token 4a8389aa7f015d3a68e44e3f4bae94d63c7ac097' \
 -H 'Accept: application/json'</code></pre>
                             </div>
@@ -242,7 +255,7 @@ headers = {
     'Authorization': 'Token 4a8389aa7f015d3a68e44e3f4bae94d63c7ac097',
     'Accept': 'application/json'
 }
-response = requests.get('https://bitrix24.tuna-edu.ru/api/contacts/', headers=headers)
+response = requests.get('https://bitrix24.tuna-edu.ru/contacts/api/contacts/', headers=headers)
 data = response.json()
 print(data)</code></pre>
                             </div>
@@ -253,10 +266,10 @@ print(data)</code></pre>
                             <h2>3. Типы контактов</h2>
                             <p>API поддерживает два отличительных типа контактов, которые определяют набор возвращаемых полей:</p>
 
-                            <h3>3.1 Тип "person" (физическое лицо)</h3>
-                            <p>Контактное лицо организации. Возвращает следующие поля:</p>
+                            <h3>3.1 Тип "person" (Физическое лицо)</h3>
+                            <p>Сотрудник организации. Возвращает следующие поля:</p>
                             <ul>
-                                <li><code>type</code> - тип контакта (всегда "person")</li>
+                                <li><code>type</code> - тип контакта ("person")</li>
                                 <li><code>comment</code> - комментарий</li>
                                 <li><code>current</code> - актуальность контакта</li>
                                 <li><code>organization</code> - название организации</li>
@@ -271,20 +284,29 @@ print(data)</code></pre>
                                 <li><code>manager</code> - является ли руководителем</li>
                             </ul>
 
-                            <h3>3.2 Тип "department" (подразделение)</h3>
-                            <p>Контактное подразделение организации. Возвращает следующие поля:</p>
+                            <h3>3.2 Тип "department" (Отдел)</h3>
+                            <p>Некоторый отдел организации. Возвращает следующие поля:</p>
                             <ul>
-                                <li><code>type</code> - тип контакта (всегда "department")</li>
+                                <li><code>type</code> - тип контакта ("department")</li>
                                 <li><code>comment</code> - комментарий</li>
                                 <li><code>current</code> - актуальность контакта</li>
                                 <li><code>organization</code> - название организации</li>
                                 <li><code>department_name</code> - название отдела</li>
                             </ul>
 
-                            <h3>3.2 Тип "main" и "other"</h3>
-                            <p>Главный и другие контакты. Возвращают следующие поля:</p>
+                            <h3>3.3 Тип "main" (Основной)</h3>
+                            <p>Главный контакт, который публикует организация. Возвращают следующие поля:</p>
                             <ul>
-                                <li><code>type</code> - тип контакта (всегда "department")</li>
+                                <li><code>type</code> - тип контакта ("main")</li>
+                                <li><code>comment</code> - комментарий</li>
+                                <li><code>current</code> - актуальность контакта</li>
+                                <li><code>organization</code> - название организации</li>
+                            </ul>
+                            
+                            <h3>3.4 Тип "other" (Другое)</h3>
+                            <p>Другие контакты. Возвращают следующие поля:</p>
+                            <ul>
+                                <li><code>type</code> - тип контакта ("other")</li>
                                 <li><code>comment</code> - комментарий</li>
                                 <li><code>current</code> - актуальность контакта</li>
                                 <li><code>organization</code> - название организации</li>
@@ -367,29 +389,29 @@ print(data)</code></pre>
                             <h3>4.2 Синтаксис фильтрации</h3>
                             <p>Фильтры передаются как query-параметры в URL:</p>
                             <div class="code-block">
-                                <code>/api/contacts/?filter1=value1&filter2=value2</code>
+                                <code>/contacts/api/contacts/?filter1=value1&filter2=value2</code>
                             </div>
 
                             <h3>4.3 Примеры фильтрации</h3>
 
                             <div class="">Пример 1: Все контакты организации</div>
                             <div class="code-block">
-                                <code>https://bitrix24.tuna-edu.ru/api/contacts/?organization=Минобрнауки</code>
+                                <code>https://bitrix24.tuna-edu.ru/contacts/api/contacts/?organization=Минобрнауки</code>
                             </div>
 
                             <div class="">Пример 2: Все физические лица (контактные лица)</div>
                             <div class="code-block">
-                                <code>https://bitrix24.tuna-edu.ru/api/contacts/?type=person</code>
+                                <code>https://bitrix24.tuna-edu.ru/contacts/api/contacts/?type=person</code>
                             </div>
 
                             <div class="">Пример 3: Все руководители в организации</div>
                             <div class="code-block">
-                                <code>https://bitrix24.tuna-edu.ru/api/contacts/?type=person&manager=true&organization__contains=образования</code>
+                                <code>https://bitrix24.tuna-edu.ru/contacts/api/contacts/?type=person&manager=true&organization__contains=образования</code>
                             </div>
 
                             <div class="">Пример 4: Отдела в организации</div>
                             <div class="code-block">
-                                <code>https://bitrix24.tuna-edu.ru/api/contacts/?type=department&organization=Минобрнауки</code>
+                                <code>https://bitrix24.tuna-edu.ru/contacts/api/contacts/?type=department&organization=Минобрнауки</code>
                             </div>
 
                             <div class="alert alert-warning mt-3">
