@@ -43,78 +43,18 @@ class OrganizationType(models.Model):
 
 class Organization(models.Model):
     """Модель для хранения организаций"""
-    name = models.CharField(
-        max_length=500,
-        verbose_name='Название организации',
-        blank=True,
-        null=True
-    )
-
-    full_name = models.CharField(
-        blank=True,
-        verbose_name='Полное наименование',
-    )
-
-    type = models.ForeignKey(
-        OrganizationType,
-        on_delete=models.SET_NULL,
-        related_name="organization",
-        verbose_name="Тип организации",
-        null=True,
-        blank=True
-    )
-
-    roiv = models.ForeignKey(
-        ROIV,
-        on_delete=models.SET_NULL,
-        related_name="organization",
-        verbose_name="Данные РОИВ",
-        null=True,
-        blank=True
-    )
-
-    region = models.ForeignKey(
-        Region,
-        on_delete=models.SET_NULL,
-        related_name='organization',
-        verbose_name='Регион',
-        blank=True,
-        null=True
-    )
-
-    federal_company = models.BooleanField(
-        default=False,
-        verbose_name="Федеральная"
-    )
-
-    prof_activity = models.ManyToManyField(
-        ProfActivity,
-        related_name='organization',
-        verbose_name='Сфера деятельности',
-        blank=True,
-    )
-
-    is_active = models.BooleanField(
-        default=True,
-        verbose_name='Активен'
-    )
-
-    parent_company = models.ForeignKey(
-        'self',
-        on_delete=models.SET_NULL,
-        blank=True,
-        null=True,
-        related_name="child",
-    )
-
-    created_at = models.DateTimeField(
-        auto_now_add=True,
-        verbose_name='Дата создания'
-    )
-    updated_at = models.DateTimeField(
-        auto_now=True,
-        verbose_name='Дата обновления'
-    )
+    name = models.CharField(max_length=500,verbose_name='Название организации',blank=True,null=True)
+    full_name = models.CharField(blank=True,verbose_name='Полное наименование',)
+    inn = models.CharField(verbose_name="ИНН", unique=True)
+    type = models.ForeignKey(OrganizationType,on_delete=models.SET_NULL,related_name="organization",verbose_name="Тип организации",null=True,blank=True)
+    roiv = models.ForeignKey(ROIV,on_delete=models.SET_NULL,related_name="organization",verbose_name="Данные РОИВ",null=True,blank=True)
+    region = models.ForeignKey(Region,on_delete=models.SET_NULL,related_name='organization',verbose_name='Регион',blank=True,null=True)
+    federal_company = models.BooleanField(default=False,verbose_name="Федеральная")
+    prof_activity = models.ManyToManyField(ProfActivity,related_name='organization',verbose_name='Сфера деятельности',blank=True,)
+    is_active = models.BooleanField(default=True,verbose_name='Активен')
+    parent_company = models.ForeignKey('self',on_delete=models.SET_NULL,blank=True,null=True,related_name="child",)
+    created_at = models.DateTimeField(auto_now_add=True,verbose_name='Дата создания')
+    updated_at = models.DateTimeField(auto_now=True,verbose_name='Дата обновления')
     
     class Meta:
         verbose_name = 'Организация'
