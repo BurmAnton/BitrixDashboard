@@ -9,9 +9,11 @@ from rest_framework import serializers
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.authentication import TokenAuthentication
 from rest_framework import viewsets
+from rest_framework import status
 from django_filters.rest_framework import DjangoFilterBackend
-from .models import Contact, Organization, Projects, Region, FederalDistrict, OrganizationType
-from education_planner.models import ProfActivity
+from .models import Contact, Organization, Projects, Region, FederalDistrict, OrganizationType, HistoryOrganization
+from education_planner.models import ProfActivity, ROIV
+from datetime import datetime
 
 def api_guide(request):
     from django.contrib.auth.models import User
@@ -86,19 +88,22 @@ def api_guide(request):
     return render(request, f"contact_management/{'get_all' if 'get_all' in group else group}_api_form.html", context=context)
 
 class ProjectsSerializer(serializers.ModelSerializer):
+    """Сериалайзер для получения списка проектов"""
     class Meta:
         model = Projects
         fields = ["name"]
 
 class OrganizationSerializer(serializers.ModelSerializer):
-    type = serializers.CharField(source='type.name')
-    region = serializers.CharField(source='region.name')
-    prof_activity = ProjectsSerializer(many=True, read_only=True)
-    fed_district = serializers.CharField(source='region.federalDistrict')
+    """Сериалайзер для получения списка организаций"""
+    type = serializers.CharField(source='type.name', read_only=True)
+    region = serializers.CharField(source='region.name', read_only=True)
+    prof_activity = serializers.CharField(source='prof_activity.name', read_only=True)
+    fed_district = serializers.CharField(source='region.federalDistrict', read_only=True)
     projects = ProjectsSerializer(many=True, read_only=True)
     class Meta:
         model = Organization
         fields =[
+            'inn',
             'name',
             'full_name',
             'type',
@@ -113,6 +118,7 @@ class OrganizationSerializer(serializers.ModelSerializer):
         ]
         
 class OrganizationFilter(django_filters.FilterSet):
+    """Фильтры API списков организаций"""
     type = django_filters.CharFilter(field_name='type__name', lookup_expr='exact')
     date = django_filters.CharFilter(field_name='created_at', lookup_expr='contains')
     
@@ -143,7 +149,8 @@ class OrganizationFilter(django_filters.FilterSet):
             return queryset
         return queryset.filter(prof_activity__name__contains=value)
 
-class OrganizationViewSet(viewsets.ReadOnlyModelViewSet):
+class OrganizationViewSet(viewsets.ModelViewSet):
+    """Viewset организаций, только чтение списка с учетом фильтров"""
     authentication_classes = [TokenAuthentication]
     permission_classes = [IsAuthenticated]
     filterset_class = OrganizationFilter
@@ -151,34 +158,123 @@ class OrganizationViewSet(viewsets.ReadOnlyModelViewSet):
     serializer_class = OrganizationSerializer
     filter_backends = [DjangoFilterBackend]
 
+    @action(detail=False, methods=["post"], url_path="add")
+    def add_organization(self, request):
+        serializer = self.get_serializer(data=request.data)
+        print(serializer.is_valid())
+        print(serializer.errors)
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        projects = request.data.get("projects", [])
+        prof_activity_names = request.data.get("prof_activity", [])
+        # создаём контакт с найденной организацией
+        obj = Organization.objects.create(
+            inn=serializer.validated_data["inn"],
+            name=serializer.validated_data.get("name", ""),
+            full_name=serializer.validated_data.get("full_name", ""),
+            type=OrganizationType.objects.filter(name=request.data.get("type", "")).first() or None,
+            roiv=ROIV.objects.filter(name=request.data.get("roiv", "")).first() or None,
+            region= Region.objects.filter(name=request.data.get("region", "")).first() or None,
+            federal_company= serializer.validated_data.get("federal_company", False),
+            is_active= serializer.validated_data.get("is_active", True),
+            parent_company= Organization.objects.filter(inn=request.data.get("parent_company", "")).first() or None,
+        )
+
+        if projects is not None: 
+            for name in projects:
+                project = Projects.objects.filter(name=name).first()
+                if project is not None:
+                    obj.projects.add(project)
+        if obj.type:
+            if prof_activity_names is not None and obj.type.name == 'РОИВ':
+                for name in prof_activity_names:
+                    prof_activity = ProfActivity.objects.filter(name=name).first()
+                    if prof_activity is not None:
+                        obj.prof_activity.add(prof_activity)
+
+        return Response(OrganizationSerializer(obj).data, status=status.HTTP_201_CREATED)
+    
+    @action(detail=False, methods=["patch"], url_path="update")
+    def update_organization(self, request):
+        inn = request.data.get("inn")
+        if not inn:
+            return Response(
+                {"inn": ["Обязательное поле."]},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        try:
+            obj = Organization.objects.filter(inn=inn).first()
+        except Organization.DoesNotExist:
+            return Response(
+                {"detail": "Организация с таким ИНН не найдена."},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        
+        HistoryOrganization.objects.create(
+            organization=obj,
+            name=obj.name,
+            status='active',
+            date=datetime.now()
+        )
+
+        serializer = self.get_serializer(obj, data=request.data, partial=True)
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        
+        prof_activity_names = request.data.get("prof_activity", None)
+        projects = request.data.get("projects", None)
+        # Обновляем поля модели
+        for attr in request.data:
+            if attr == "type":
+                setattr(obj, attr, OrganizationType.objects.filter(name=request.data.get(attr, None)).first())
+            elif attr == "roiv":
+                setattr(obj, attr, ROIV.objects.filter(name=request.data.get(attr, None)).first())
+            elif attr == "region":
+                setattr(obj, attr, Region.objects.filter(name=request.data.get(attr, None)).first())
+            elif attr == "parent_company":
+                setattr(obj, attr, Organization.objects.filter(inn=request.data.get(attr, None)).first())
+            else:
+                try:
+                    setattr(obj, attr, request.data.get(attr, None))
+                except:
+                    pass
+        obj.save()
+        # Обновляем ManyToMany prof_activity
+        if obj.type:
+            if prof_activity_names is not None and obj.type.name == 'РОИВ':
+                for name in prof_activity_names:
+                    prof_activity = ProfActivity.objects.filter(name=name).first()
+                    if prof_activity is not None:
+                        obj.prof_activity.add(prof_activity)
+
+        # Обновляем ManyToMany projects
+        if projects is not None: 
+            for name in projects:
+                project = Projects.objects.filter(name=name).first()
+                if project is not None:
+                    obj.projects.add(project)
+
+        return Response(OrganizationSerializer(obj).data, status=status.HTTP_200_OK)
+
 class ContactSerializer(serializers.ModelSerializer):
-    organization = serializers.CharField(source="organization.name", read_only=True)
+    """Сериалайзер для получения списка контактов """
+    organization = serializers.CharField(source="organization.inn", read_only=True)
 
     class Meta:
         model = Contact
-        fields = [
-            "type",
-            "comment",
-            "current",
-            "organization",
-            "first_name",
-            "last_name",
-            "middle_name",
-            "position",
-            "first_name_dat",
-            "last_name_dat",
-            "middle_name_dat",
-            "position_dat",
-            "manager",
-            "department_name",
-        ]
+        fields = "__all__"
+        # поля, которые можно указывать при создании/обновлении
+        extra_kwargs = {
+            "organization": {"required": True},
+        }
 
     def to_representation(self, instance):
         data = super().to_representation(instance)
 
         if instance.type == "person":
-            # оставляем только персональные поля
             keep = [
+                "id",
                 "type",
                 "comment",
                 "current",
@@ -194,8 +290,8 @@ class ContactSerializer(serializers.ModelSerializer):
                 "manager",
             ]
         elif instance.type == "department":
-            # оставляем только поля подразделения
             keep = [
+                "id",
                 "type",
                 "comment",
                 "current",
@@ -203,11 +299,12 @@ class ContactSerializer(serializers.ModelSerializer):
                 "department_name",
             ]
         else:
-            keep = ["type", "comment", "current", "organization"]
+            keep = ["id", "type", "comment", "current", "organization"]
 
         return {k: v for k, v in data.items() if k in keep}
 
 class ContactFilter(django_filters.FilterSet):
+    """Фильтры API списков контактов"""
     organization = django_filters.CharFilter(field_name='organization__name', lookup_expr='exact')
     organization__contains = django_filters.CharFilter(field_name='organization__name', lookup_expr='contains')
     
@@ -237,7 +334,8 @@ class ContactFilter(django_filters.FilterSet):
             return queryset
         return queryset.filter(manager=value)
 
-class ContactViewSet(viewsets.ReadOnlyModelViewSet):
+class ContactViewSet(viewsets.ModelViewSet):
+    """Viewset контактов, только чтение списка с учетом фильтров"""
     authentication_classes = [TokenAuthentication]
     permission_classes = [IsAuthenticated]
     filterset_class = ContactFilter
@@ -245,28 +343,68 @@ class ContactViewSet(viewsets.ReadOnlyModelViewSet):
     serializer_class = ContactSerializer
     filter_backends = [DjangoFilterBackend]
 
+    @action(detail=False, methods=["post"], url_path="add")
+    def add_contact(self, request):
+        serializer = self.get_serializer(data=request.data)
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+        # вытаскиваем INN из валидированных данных            
+        try:
+            org = Organization.objects.filter(inn=request.data["organization"]).first()
+        except Exception as e:
+            return Response(
+                {"error": f"Не удалось найти огранизацию контакта"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # создаём контакт с найденной организацией
+        contact = Contact.objects.create(
+            organization=org,
+            type=serializer.validated_data["type"],
+            department_name=serializer.validated_data.get("department_name", ""),
+            first_name=serializer.validated_data.get("first_name", ""),
+            last_name=serializer.validated_data.get("last_name", ""),
+            middle_name=serializer.validated_data.get("middle_name", ""),
+            first_name_dat=serializer.validated_data.get("first_name_dat", ""),
+            last_name_dat=serializer.validated_data.get("last_name_dat", ""),
+            middle_name_dat=serializer.validated_data.get("middle_name_dat", ""),
+            position=serializer.validated_data.get("position", ""),
+            position_dat=serializer.validated_data.get("position_dat", ""),
+            manager=serializer.validated_data.get("manager", False),
+            comment=serializer.validated_data.get("comment", ""),
+            current=serializer.validated_data.get("current", True),
+        )
+
+        return Response(ContactSerializer(contact).data, status=status.HTTP_201_CREATED)
+
 class RegionNameSerializer(serializers.ModelSerializer):
+    """Сериалайзер для получения списка регионов"""
     class Meta:
         model = Region
         fields = ["name", "code", "is_active"]
 
 class FederalDistrictWithRegionsSerializer(serializers.ModelSerializer):
+    """Сериалайзер для получения списка федеральный округов"""
     region = RegionNameSerializer(many=True, read_only=True)
     class Meta:
         model = FederalDistrict
         fields = ["name", "region"]
 
 class OrganizationTypeSerializer(serializers.ModelSerializer):
+    """Сериалайзер для получения списка типов организаций"""
     class Meta:
         model = OrganizationType
         fields = "__all__"
 
 class GetAllSerializer(serializers.Serializer):
+    """Сериалайзер для получения списков всех обьектов"""
     federal_districts = FederalDistrictWithRegionsSerializer(many=True, read_only=True)
     regions = RegionNameSerializer(many=True, read_only=True)
     organization_types = OrganizationTypeSerializer(many=True, read_only=True)
 
 class GetAllViewSet(viewsets.ViewSet):
+    """Вьюсет для определния, списки каких моделей вывести"""
     authentication_classes = [TokenAuthentication]
     permission_classes = [IsAuthenticated]
 
