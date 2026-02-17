@@ -28,6 +28,15 @@ logger = logging.getLogger(__name__)
 def index(request):
     return HttpResponseRedirect(reverse('crm_connector:atlas_dashboard'))
 
+def logout_view(request):
+    from django.contrib.auth import logout
+    logout(request)
+    return redirect('/')
+
+def login_view(request):
+    redirect_path = request.GET.get('redirect')
+    return redirect(f'{settings.LOGIN_URL}?next={redirect_path}')
+
 def dashboard(request):
     """Представление для дашборда с данными из Битрикс24"""
     leads_count = Lead.objects.count()
@@ -796,6 +805,9 @@ def import_atlas_applications(request):
     return render(request, 'crm_connector/import_atlas_applications.html', context)
 
 def import_not_atlas(request):
+    if not request.user.is_authenticated:
+        messages.warning(request, 'Для импорта данных необходимо войти в систему.')
+        return redirect(f'{settings.LOGIN_URL}?next={request.path}')
     if request.method == 'POST':
         form = LeadImportForm(request.POST, request.FILES)
         if form.is_valid():
@@ -1459,6 +1471,10 @@ def atlas_dashboard(request):
 
 
 def attestation_progress(request):
+    if not request.user.is_authenticated:
+        messages.warning(request, 'Для импорта данных необходимо войти в систему.')
+        return redirect(f'{settings.LOGIN_URL}?next={request.path}')
+
     ListOfPrograms = AtlasProgram.objects.all()
     education_products = {}
     for program in ListOfPrograms:
@@ -1649,6 +1665,9 @@ def attestation_progress(request):
     return render(request, 'crm_connector/attestation-progress.html', context)
 
 def attestation_stats(request):
+    if not request.user.is_authenticated:
+        messages.warning(request, 'Для импорта данных необходимо войти в систему.')
+        return redirect(f'{settings.LOGIN_URL}?next={request.path}')
     ListerensData = AtlasApplication.objects.filter(program = "Оператор беспилотных авиационных систем (с максимальной взлетной массой 30 килограммов и менее)")
     summary = {}
     ListOfPrograms = AtlasProgram.objects.all()
@@ -2165,6 +2184,10 @@ def applications_list(request):
     from io import BytesIO
     from collections import defaultdict
     from education_planner.models import EducationProgram
+    # Проверяем авторизован ли пользователь
+    if not request.user.is_authenticated:
+        messages.warning(request, 'Для просмотра списка заявок необходимо войти в систему.')
+        return redirect(f'{settings.LOGIN_URL}?next={request.path}')
     
     # Получаем воронку "Заявки (граждане)"
     pipeline = Pipeline.objects.filter(name='Заявки (граждане)').first()
