@@ -1,7 +1,7 @@
 from django.urls import path, include
 from . import views
 from rest_framework.routers import DefaultRouter
-from.views import OrganizationViewSet, ContactViewSet, GetAllViewSet
+from .views import OrganizationViewSet, ContactViewSet, GetAllViewSet
 
 router = DefaultRouter()
 router.register(r'organization', OrganizationViewSet, basename='organization')
@@ -13,4 +13,5 @@ app_name = 'contact_management'
 urlpatterns = [
     path('api-guide/', views.api_guide, name="api-guide"),
     path('api/', include(router.urls)),
+    path('import/', views.ContactImport, name='import')
 ]

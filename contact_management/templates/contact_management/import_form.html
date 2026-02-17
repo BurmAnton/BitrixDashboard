@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Контактный импорт{% endblock %}
+
+{% block extra_css %}
+<style>
+    .container{
+        max-width: 90%;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="row">
+        <div class="col-md-8 offset-md-2">
+            <div class="card">
+                <div class="card-header">
+                    <h4 class="mb-0">Импорт данных об организациях и контактов</h4>
+                </div>
+                <div class="card-body">
+                    <form method="post"  enctype="multipart/form-data">
+                        {% csrf_token %}
+                        
+                        <div class="alert alert-primary">
+                            <h5>Инструкция по импорту:</h5>
+                            <ol>
+                                <li>Принимаются таблицы Excel заполненные по шаблону</li>
+                                <li>Загрузите файл и нажмите "Импортировать"</li>
+                            </ol>
+                            <div class="alert alert-warning"><strong>Примечание:</strong> Убедитесь, что поля "ИНН" заполнены у каждой организации/контакта!</div>
+                        </div>
+                        {{ form.as_p }}
+                        <div class="d-flex justify-content-between">
+                            <button type="submit" class="btn btn-success">Импорт</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
