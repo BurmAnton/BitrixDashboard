@@ -494,7 +494,7 @@ class StageRule(models.Model):
         ordering = ['priority', 'id']
         constraints = [
             models.CheckConstraint(
-                check=models.Q(atlas_status__isnull=False) | models.Q(rr_status__isnull=False),
+                condition=models.Q(atlas_status__isnull=False) | models.Q(rr_status__isnull=False),
                 name='at_least_one_status_required'
             )
         ]

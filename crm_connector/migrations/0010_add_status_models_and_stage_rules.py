@@ -59,6 +59,6 @@ class Migration(migrations.Migration):
         ),
         migrations.AddConstraint(
             model_name='stagerule',
-            constraint=models.CheckConstraint(check=models.Q(('atlas_status__isnull', False), ('rr_status__isnull', False), _connector='OR'), name='at_least_one_status_required'),
+            constraint=models.CheckConstraint(condition=models.Q(('atlas_status__isnull', False), ('rr_status__isnull', False), _connector='OR'), name='at_least_one_status_required'),
         ),
     ]

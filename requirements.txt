@@ -19,9 +19,12 @@ dj-database-url==2.3.0
 Django==4.2.19
 django-autocomplete-light==3.12.1
 django-celery-beat==2.7.0
+django-filter==25.2
 django-simple-history==3.10.1
 django-timezone-field==7.1
-djangorestframework==3.15.2
+django-redis==6.0.0
+djangorestframework==3.16.1
+docxtpl==0.20.2
 et_xmlfile==2.0.0
 fast_bitrix24==1.8.4
 frozenlist==1.5.0

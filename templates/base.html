@@ -47,10 +47,10 @@
                     <li class="nav-item dropdown">
                         <a class="nav-link dropdown-toggle active" aria-expanded="false">Импорт</a>
                         <ul class="dropdown-menu" style="margin-top: 0;">
-                            <li><a class="dropdown-item {% if not user.is_authenticated %} disabled {% else %} active {% endif %}" href="{% url 'crm_connector:import_atlas_applications' %}">Импорт заявок с Атласа</a></li>
-                            <li><a class="dropdown-item {% if not user.is_authenticated %} disabled {% else %} active {% endif %}" href="{% url 'crm_connector:import_not_atlas' %}">Импорт других заявок</a></li>
+                            <li><a class="dropdown-item {% if not user.is_authenticated %} disabled {% endif %}" href="{% url 'crm_connector:import_atlas_applications' %}">Импорт заявок с Атласа</a></li>
+                            <li><a class="dropdown-item {% if not user.is_authenticated %} disabled {% endif %}" href="{% url 'crm_connector:import_not_atlas' %}">Импорт других заявок</a></li>
                             <li><hr class="dropdown-divider"></li>
-                            <li><a class="dropdown-item {% if not user.is_authenticated %} disabled {% else %} active {% endif %}" href="{% url 'contact_management:import' %}">Импорт контактов</a></li>
+                            <li><a class="dropdown-item {% if not user.is_authenticated %} disabled {% endif %}" href="{% url 'contact_management:import' %}">Импорт контактов</a></li>
                         </ul>
                     </li>
                     <li class="nav-item dropdown">
@@ -58,15 +58,15 @@
                         <ul class="dropdown-menu" style="margin-top: 0;">
                             <li><a class="dropdown-item" href="{% url 'crm_connector:atlas_dashboard' %}">Дашборд Атлас</a></li>
                             <li><hr class="dropdown-divider"></li>
-                            <li><a class="dropdown-item {% if not user.is_authenticated %} disabled {% else %} active {% endif %}" href="{% url 'crm_connector:applications_list' %}">Список заявок</a></li>
-                            <li><a class="dropdown-item {% if not user.is_authenticated %} disabled {% else %} active {% endif %}" href="{% url 'education_planner:quota_summary_dashboard' %}">Сводный дашборд квот</a></li>
+                            <li><a class="dropdown-item {% if not user.is_authenticated %} disabled {% endif %}" href="{% url 'crm_connector:applications_list' %}">Список заявок</a></li>
+                            <li><a class="dropdown-item {% if not user.is_authenticated %} disabled {% endif %}" href="{% url 'education_planner:quota_summary_dashboard' %}">Сводный дашборд квот</a></li>
                         </ul>
                     </li>
                     <li class="nav-item dropdown">
                         <a class="nav-link dropdown-toggle active" aria-expanded="false">Аттестации</a>
                         <ul class="dropdown-menu" style="margin-top: 0;">
-                            <li><a class="dropdown-item {% if not user.is_authenticated %} disabled {% else %} active {% endif %}" href="{% url 'crm_connector:attestation_progress' %}">Дашборд аттестаций</a></li>
-                            <li><a class="dropdown-item {% if not user.is_authenticated %} disabled {% else %} active {% endif %}" href="{% url 'crm_connector:attestation-stats' %}">Статистика аттестаций</a></li>
+                            <li><a class="dropdown-item {% if not user.is_authenticated %} disabled {% endif %}" href="{% url 'crm_connector:attestation_progress' %}">Дашборд аттестаций</a></li>
+                            <li><a class="dropdown-item {% if not user.is_authenticated %} disabled {% endif %}" href="{% url 'crm_connector:attestation-stats' %}">Статистика аттестаций</a></li>
                         </ul>
                     </li>
                     
