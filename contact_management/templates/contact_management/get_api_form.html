@@ -1,0 +1,136 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}REST API{% endblock %}
+
+{% block extra_css %}
+    <style>
+        .col-sm-2{
+            text-align: right;
+        }
+        .messages{
+            display: none;
+        }
+        .container{
+            width: 95%; 
+            max-width: 95%;
+        }
+        label{
+            font-size: smaller;
+        }
+        .code-block{
+            background-color: #ebf2f3;
+            border-radius: 12px;
+            padding: 2%;
+        }
+    </style>
+{% endblock %}
+
+{% block content %}
+<body>
+    <div class="row" style="height: 100%;">
+        <!-- Левая колонка: форма для тестов -->
+        <div class="col-md-12">
+            <div class="container-fluid">
+                <div class="card">
+                    <div class="card-header">
+                        <h5>Получение конкретного объекта модели</h5>
+                    </div>
+                    <div class="card-body" style="height: 780px">
+                        <form method="post">
+                            {% csrf_token %}
+
+                            <div class="mb-3 position-relative">
+                                <label for="password" class="form-label">Токен</label>
+                                <div class="input-group">
+                                    <input type="password" readonly class="form-control form-control-sm" id="password" value="{{ token }}">
+                                    <button type="button" class="btn btn-outline-secondary btn-sm" id="togglePassword" style="width: 20%;">Показать</button>
+                                </div>
+                            </div>
+
+                            <!-- ИНН -->
+                            <div class="mb-3 d-flex align-items-center">
+                                <label for="deartmentInput" class="form-label me-2 mb-0">ИНН</label>
+                                <input type="text" class="form-control form-control-sm me-2" name="inn" id="innInput">
+                            </div>
+
+                            <div class="mb-2">
+                                <label for="apiLink" class="form-label">Ссылка API для fetch</label>
+                                <input type="text" readonly class="form-control form-control-sm" id="apiLink" name="apiLink" value="{{ URL|safe }}">
+                            </div>
+
+
+                            <button type="submit" class="btn btn-primary btn-sm">Отправить</button>
+                        </form>
+
+
+
+                        <div class="card" style="margin-top: 12px; padding: 1%; height: 67%; overflow-y: auto; font-size: small;" >
+                            <pre id="JsonResponse"></pre>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</body>
+
+<script>
+    document.getElementById('togglePassword').addEventListener('click', function () {
+        console.log("click")
+        const passwordInput = document.getElementById('password');
+        const type = passwordInput.getAttribute('type') === 'password' ? 'text' : 'password';
+        passwordInput.setAttribute('type', type);
+        this.textContent = type === 'password' ? 'Показать' : 'Скрыть';
+    });
+    pre = document.getElementById('JsonResponse')
+    const jsonResponse = {{ JsonReponse|safe  }};
+    const formattedJson = JSON.stringify(jsonResponse, null, 2);
+    pre.textContent = formattedJson;
+
+    
+    function updateTextInputNames() {
+    // Получаем все чекбоксы на странице
+    const checkboxes = document.querySelectorAll('input[type="checkbox"]');
+
+    checkboxes.forEach(checkbox => {
+        // Получаем id чекбокса
+        const checkboxId = checkbox.id;
+
+        // Находим текстовый input, id которого содержит id чекбокса
+        // Используем атрибут селектор *= для проверки включения подстроки в id
+        const textInput = document.querySelector(`input[type="text"][id*="${checkboxId}"]`);
+
+        if (textInput) {
+            // Запоминаем базовый нейм (без приставки)
+            const baseName = textInput.getAttribute('data-base-name') || textInput.name.replace(/__contains$/, '');
+
+            // Сохраняем базовый нейм в data-атрибут для повторного использования
+            textInput.setAttribute('data-base-name', baseName);
+
+            if (checkbox.checked) {
+                // Добавляем приставку __contains, если ее еще нет
+                if (!textInput.name.endsWith('__contains')) {
+                    textInput.name = baseName + '__contains';
+                }
+            } else {
+                // Убираем приставку, если чекбокс не отмечен
+                textInput.name = baseName;
+            }
+        }
+    });
+}
+
+    const checkboxes = document.querySelectorAll('input[type="checkbox"]');
+
+    checkboxes.forEach(checkbox => {
+        checkbox.addEventListener('change', () => {
+            updateTextInputNames();
+        });
+    });
+
+    // Вызовем функцию один раз при загрузке страницы, чтобы синхронизировать имена
+    updateTextInputNames();
+
+</script>
+{% endblock %}

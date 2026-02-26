@@ -79,7 +79,7 @@
                                 <div class="col-sm-2">
                                     <label for="organizationInput" class="form-label me-2 mb-0">Организация</label>
                                 </div>
-                                <select class="form-control form-control-sm me-2" name="type" id="typeInput">
+                                <select class="form-control form-control-sm me-2" name="organization" id="typeInput">
                                     <option selected value="">------------------</option>
                                     {% for obj in ChoiseFields.organization %}
                                         <option value="{{ obj }}">{{ obj }}</option>
@@ -272,7 +272,7 @@ print(data)</code></pre>
                                 <li><code>type</code> - тип контакта ("person")</li>
                                 <li><code>comment</code> - комментарий</li>
                                 <li><code>current</code> - актуальность контакта</li>
-                                <li><code>organization</code> - название организации</li>
+                                <li><code>organization</code> - ИНН организации</li>
                                 <li><code>first_name</code> - имя</li>
                                 <li><code>last_name</code> - фамилия</li>
                                 <li><code>middle_name</code> - отчество</li>
@@ -290,7 +290,7 @@ print(data)</code></pre>
                                 <li><code>type</code> - тип контакта ("department")</li>
                                 <li><code>comment</code> - комментарий</li>
                                 <li><code>current</code> - актуальность контакта</li>
-                                <li><code>organization</code> - название организации</li>
+                                <li><code>organization</code> - ИНН организации</li>
                                 <li><code>department_name</code> - название отдела</li>
                             </ul>
 
@@ -300,7 +300,7 @@ print(data)</code></pre>
                                 <li><code>type</code> - тип контакта ("main")</li>
                                 <li><code>comment</code> - комментарий</li>
                                 <li><code>current</code> - актуальность контакта</li>
-                                <li><code>organization</code> - название организации</li>
+                                <li><code>organization</code> - ИНН организации</li>
                             </ul>
                             
                             <h3>3.4 Тип "other" (Другое)</h3>
@@ -309,7 +309,7 @@ print(data)</code></pre>
                                 <li><code>type</code> - тип контакта ("other")</li>
                                 <li><code>comment</code> - комментарий</li>
                                 <li><code>current</code> - актуальность контакта</li>
-                                <li><code>organization</code> - название организации</li>
+                                <li><code>organization</code> - ИНН организации</li>
                             </ul>
 
                             <div class="alert alert-info">
@@ -337,15 +337,8 @@ print(data)</code></pre>
                                     <tr>
                                         <td>Организация</td>
                                         <td><code>organization</code></td>
-                                        <td>Название организации</td>
+                                        <td>ИНН организации</td>
                                         <td>Точное совпадение</td>
-                                        <td>-</td>
-                                    </tr>
-                                    <tr>
-                                        <td>Организация (содержит)</td>
-                                        <td><code>organization__contains</code></td>
-                                        <td>Поиск по части названия организации</td>
-                                        <td>Частичное совпадение</td>
                                         <td>-</td>
                                     </tr>
                                     <tr>
@@ -396,7 +389,7 @@ print(data)</code></pre>
 
                             <div class="">Пример 1: Все контакты организации</div>
                             <div class="code-block">
-                                <code>https://bitrix24.tuna-edu.ru/contacts/api/contacts/?organization=Минобрнауки</code>
+                                <code>https://bitrix24.tuna-edu.ru/contacts/api/contacts/?organization=546123</code>
                             </div>
 
                             <div class="">Пример 2: Все физические лица (контактные лица)</div>
@@ -406,12 +399,12 @@ print(data)</code></pre>
 
                             <div class="">Пример 3: Все руководители в организации</div>
                             <div class="code-block">
-                                <code>https://bitrix24.tuna-edu.ru/contacts/api/contacts/?type=person&manager=true&organization__contains=образования</code>
+                                <code>https://bitrix24.tuna-edu.ru/contacts/api/contacts/?type=person&manager=true&organization=713191</code>
                             </div>
 
                             <div class="">Пример 4: Отдела в организации</div>
                             <div class="code-block">
-                                <code>https://bitrix24.tuna-edu.ru/contacts/api/contacts/?type=department&organization=Минобрнауки</code>
+                                <code>https://bitrix24.tuna-edu.ru/contacts/api/contacts/?type=department&organization=313313</code>
                             </div>
 
                             <div class="alert alert-warning mt-3">
@@ -438,7 +431,7 @@ print(data)</code></pre>
     "type": "person",
     "comment": "Основной контакт по проекту",
     "current": true,
-    "organization": "Минобрнауки",
+    "organization": "313313",
     "first_name": "Иван",
     "last_name": "Иванов",
     "middle_name": "Иванович",
@@ -454,7 +447,7 @@ print(data)</code></pre>
     "type": "department",
     "comment": "Отдел цифровизации",
     "current": true,
-    "organization": "Минобрнауки",
+    "organization": "313313",
     "department_name": "Отдел цифровой трансформации"
 },
 // Пример неактуального контакта
@@ -462,7 +455,7 @@ print(data)</code></pre>
     "type": "person",
     "comment": "Бывший сотрудник",
     "current": false,
-    "organization": "ООО Рога и копыта",
+    "organization": "552233",
     "first_name": "Петр",
     "last_name": "Петров",
     "middle_name": "Петрович",
@@ -504,7 +497,7 @@ print(data)</code></pre>
                                     <tr>
                                         <td><code>organization</code></td>
                                         <td>String</td>
-                                        <td>Название организации</td>
+                                        <td>ИНН организации</td>
                                     </tr>
                                     <tr>
                                         <td><code>first_name</code></td>
@@ -582,7 +575,7 @@ print(data)</code></pre>
                                     <tr>
                                         <td><code>organization</code></td>
                                         <td>String</td>
-                                        <td>Название организации</td>
+                                        <td>ИНН организации</td>
                                     </tr>
                                     <tr>
                                         <td><code>department_name</code></td>

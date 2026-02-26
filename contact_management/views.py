@@ -240,20 +240,27 @@ def api_guide(request):
     ChoiseFields.setdefault('fed_district', [obj.name for obj in fed_district])
 
     organization = Organization.objects.all()
-    ChoiseFields.setdefault('organization', [obj.name for obj in organization])
+    ChoiseFields.setdefault('organization', [obj.inn for obj in organization])
 
     login = User.objects.filter(username=request.user.username).first()
     tkn = Token.objects.filter(user=login).first()
     group = 'organization'
     if 'contact' in request.GET:
         group = 'contact'
+    elif 'get_call' in request.GET:
+        group= 'get/organization'
     elif 'organization' in request.GET:
         group= 'organization'
     elif 'get_all' in request.GET:
         group= 'get_all'
         if 'model' in request.POST.dict():
             group = f'get_all/{request.POST.dict().get('model')}'
-    url = f'http://{request.get_host()}/contacts/api/{group}' 
+    url = f'http://{request.get_host()}/contacts/api/{group}'
+    guide_url = group
+    if 'get_all' in guide_url:
+        guide_url = 'get_all'
+    elif 'get/' in guide_url:
+        guide_url = 'get'
 
     headers = { 'Authorization': f'Token {tkn}' }
 
@@ -280,7 +287,7 @@ def api_guide(request):
         'URL': str(urllib.parse.unquote(response.url)),
         'ChoiseFields': ChoiseFields
     }
-    return render(request, f"contact_management/{'get_all' if 'get_all' in group else group}_api_form.html", context=context)
+    return render(request, f"contact_management/{guide_url}_api_form.html", context=context)
 
 class ProjectsSerializer(serializers.ModelSerializer):
     """Сериалайзер для получения списка проектов"""
@@ -500,8 +507,7 @@ class ContactSerializer(serializers.ModelSerializer):
 
 class ContactFilter(django_filters.FilterSet):
     """Фильтры API списков контактов"""
-    organization = django_filters.CharFilter(field_name='organization__name', lookup_expr='exact')
-    organization__contains = django_filters.CharFilter(field_name='organization__name', lookup_expr='contains')
+    organization = django_filters.CharFilter(field_name='organization__inn', lookup_expr='exact')
     
     type = django_filters.CharFilter(field_name='type', lookup_expr='exact')
     
@@ -632,3 +638,57 @@ class GetAllViewSet(viewsets.ViewSet):
         districts = FederalDistrict.objects.all()
         serializer = FederalDistrictWithRegionsSerializer(districts, many=True)
         return Response(serializer.data)
+
+class SingleOrganizationSerializer(serializers.ModelSerializer):
+    """Сериалайзер для получения списка организаций"""
+    type = serializers.CharField(source='type.name', read_only=True)
+    region = serializers.CharField(source='region.name', read_only=True)
+    prof_activity = serializers.CharField(source='prof_activity.name', read_only=True)
+    fed_district = serializers.CharField(source='region.federalDistrict', read_only=True)
+    projects = ProjectsSerializer(many=True, read_only=True)
+    class Meta:
+        model = Organization
+        fields =[
+            'inn',
+            'name',
+            'full_name',
+            'type',
+            'region',
+            'federal_company',
+            'fed_district',
+            'prof_activity',
+            'projects',
+            'is_active',
+            'created_at',
+            'updated_at'
+        ]
+
+class GetViewSet(viewsets.ViewSet):
+    """Вьюсет для GET запросов организаций"""
+    authentication_classes = [TokenAuthentication]
+    permission_classes = [IsAuthenticated]
+    filter_backends = [DjangoFilterBackend]
+
+    def list(self, request):
+        return Response({
+            "message": "Получить организацию по ИНН:",
+            "endpoint": "/contacts/api/get/organization/?inn=<ИНН>"
+        }, status=status.HTTP_200_OK)
+
+    @action(detail=False, methods=["get"], url_path="organization")
+    def organization(self, request):
+        inn = request.query_params.get('inn')        
+        if not inn:
+            return Response({
+                "error": "ИНН обязателен",
+                "usage": "/contacts/api/get/organization/<ИНН>"
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            org = Organization.objects.get(inn=inn)
+            serializer = SingleOrganizationSerializer(org)
+            return Response(serializer.data, status=status.HTTP_200_OK)
+        except Organization.DoesNotExist:
+            return Response({
+                "error": f"Организация с ИНН {inn} не найдена"
+            }, status=status.HTTP_404_NOT_FOUND)
