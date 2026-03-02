@@ -30,7 +30,7 @@
 <body>
     <div class="row" style="height: 100%;">
         <!-- Левая колонка: форма для тестов -->
-        <div class="col-md-12">
+        <div class="col-md-6">
             <div class="container-fluid">
                 <div class="card">
                     <div class="card-header">
@@ -69,6 +69,147 @@
                             <pre id="JsonResponse"></pre>
                         </div>
                     </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-6">
+            <div class="container-fluid">
+                <div class="card">
+                    <!-- Заголовок -->
+                    <div class="card-header">
+                        <h5>Документация REST API получение объекта</h5>
+                    </div>
+
+                    <!-- Table of Contents -->
+                    <div class="card-body" style="max-height: 780px; overflow-y: auto;">
+                        <h3>Эндпоинт</h3>
+                        <p><code>GET /contacts/api/get/organization/</code></p>
+
+                        <h3>Назначение</h3>
+                        <p>Получение детальной информации об организации по её ИНН.</p>
+
+                        <h3>Аутентификация</h3>
+                        <p>Требуется токен в заголовке <code>Authorization</code>.<br>
+                        Формат: <code>Authorization: Token &lt;ваш_токен&gt;</code></p>
+                        <p>Токен можно получить в админ-панели Django (раздел «Токены»). Доступ только у суперпользователей.</p>
+
+                        <h3>Параметры запроса</h3>
+                        <table class="table table-striped table-sm">
+                        <thead>
+                        <tr>
+                            <th>Параметр</th>
+                            <th>Обязательный</th>
+                            <th>Тип</th>
+                            <th>Описание</th>
+                        </tr>
+                        </thead>
+                        <tbody>
+                        <tr>
+                            <td><code>inn</code></td>
+                            <td>да</td>
+                            <td>string</td>
+                            <td>ИНН организации (10 или 12 цифр)</td>
+                        </tr>
+                        </tbody>
+                        </table>
+
+                        <h3>Примеры запросов</h3>
+
+                        <h4>cURL</h4>
+                        <pre class="bg-light p-3 rounded"><code>curl -X GET "https://bitrix24.tuna-edu.ru/contacts/api/get/organization/?inn=7707083893" \
+-H "Authorization: Token 4a8389aa7f015d3a68e44e3f4bae94d63c7ac097"</code></pre>
+
+                        <h4>JavaScript (fetch)</h4>
+                        <pre class="bg-light p-3 rounded"><code>fetch('/contacts/api/get/organization/?inn=7707083893', {
+headers: {
+'Authorization': 'Token 4a8389aa7f015d3a68e44e3f4bae94d63c7ac097'
+}
+})
+.then(response =&gt; response.json())
+.then(data =&gt; console.log(data));</code></pre>
+
+                        <h4>Python (requests)</h4>
+                        <pre class="bg-light p-3 rounded"><code>import requests
+
+headers = {'Authorization': 'Token 4a8389aa7f015d3a68e44e3f4bae94d63c7ac097'}
+params = {'inn': '7707083893'}
+response = requests.get('https://bitrix24.tuna-edu.ru/contacts/api/get/organization/', 
+                headers=headers, params=params)
+print(response.json())</code></pre>
+
+                        <h3>Пример успешного ответа (HTTP 200)</h3>
+                        <pre class="bg-light p-3 rounded"><code>{
+"inn": "7707083893",
+"name": "Сбербанк",
+"full_name": "Публичное акционерное общество 'Сбербанк России'",
+"type": "ПАО",
+"region": "Москва",
+"federal_company": true,
+"fed_district": "Центральный",
+"prof_activity": "Банковская деятельность",
+"projects": [
+{
+    "id": 1,
+    "name": "Цифровая трансформация"
+}
+],
+"is_active": true,
+"created_at": "2024-01-15T10:00:00Z",
+"updated_at": "2024-02-20T14:30:00Z"
+}</code></pre>
+
+                        <h3>Возможные ошибки</h3>
+                        <table class="table table-striped table-sm">
+                        <thead>
+                        <tr>
+                            <th>Код</th>
+                            <th>Описание</th>
+                            <th>Пример ответа</th>
+                        </tr>
+                        </thead>
+                        <tbody>
+                        <tr>
+                            <td>400</td>
+                            <td>Не передан ИНН</td>
+                            <td><code>{"error": "ИНН обязателен", "usage": "/contacts/api/get/organization/&lt;ИНН&gt;"}</code></td>
+                        </tr>
+                        <tr>
+                            <td>401</td>
+                            <td>Отсутствует или неверный токен</td>
+                            <td><code>{"detail": "Authentication credentials were not provided."}</code></td>
+                        </tr>
+                        <tr>
+                            <td>403</td>
+                            <td>Недостаточно прав</td>
+                            <td><code>{"detail": "You do not have permission to perform this action."}</code></td>
+                        </tr>
+                        <tr>
+                            <td>404</td>
+                            <td>Организация не найдена</td>
+                            <td><code>{"error": "Организация с ИНН 1234567890 не найдена"}</code></td>
+                        </tr>
+                        </tbody>
+                        </table>
+
+                        <h3>Примечания</h3>
+                        <ul>
+                        <li>ИНН должен быть строкой, содержащей только цифры.</li>
+                        <li>Поле <code>projects</code> может быть пустым массивом, если у организации нет связанных проектов.</li>
+                        <li>Поле <code>fed_district</code> вычисляется автоматически на основе региона.</li>
+                        </ul>
+
+                        <hr>
+
+                        <h3>Тестирование через форму</h3>
+                        <p>На этой странице вы можете сразу протестировать API:</p>
+                        <ol>
+                        <li>В поле <strong>Токен</strong> уже подставлен ваш текущий токен.</li>
+                        <li>Введите ИНН в поле <strong>ИНН</strong>.</li>
+                        <li>Нажмите <strong>Отправить</strong> – ответ появится в блоке ниже.</li>
+                        </ol>
+                                    </div>
+
                 </div>
             </div>
         </div>
