@@ -16,6 +16,7 @@ from .forms import ContactImportFromExcel
 from education_planner.models import ProfActivity, ROIV
 from datetime import datetime
 import openpyxl
+from django.db.models import Q
 
 def ExcelImportOrganization(form):
     if form.is_valid():
@@ -276,10 +277,14 @@ def api_guide(request):
         response = requests.get(url,headers=headers)
     import json
     try:
-        jsn = json.dumps(response.json())
+        if response.status_code == 200:
+            jsn = json.dumps(response.json(), ensure_ascii=False, indent=2)
+        else:
+            jsn = f"HTTP {response.status_code}: {response.text[:1000]}"
+    except json.JSONDecodeError as e:
+        jsn = f"Не JSON: {e}. Status: {response.status_code}, Content: {response.text[:500]}"
     except Exception as e:
-        print(f"Не удалось преобразовать в json: {e}")
-        jsn = str(response)
+        jsn = f"Ошибка: {e}"
     context={
         'login': login,
         'token': tkn,
@@ -295,11 +300,17 @@ class ProjectsSerializer(serializers.ModelSerializer):
         model = Projects
         fields = ["name"]
 
+class ProfActivitySerializer(serializers.ModelSerializer):
+    """Сериалайзер для получения списка сфер деятельности"""
+    class Meta:
+        model = ProfActivity
+        fields = ["name"]
+
 class OrganizationSerializer(serializers.ModelSerializer):
     """Сериалайзер для получения списка организаций"""
     type = serializers.CharField(source='type.name', read_only=True)
     region = serializers.CharField(source='region.name', read_only=True)
-    prof_activity = serializers.CharField(source='prof_activity.name', read_only=True)
+    prof_activity = ProfActivitySerializer(many=True, read_only=True)
     fed_district = serializers.CharField(source='region.federalDistrict', read_only=True)
     projects = ProjectsSerializer(many=True, read_only=True)
     class Meta:
@@ -321,19 +332,16 @@ class OrganizationSerializer(serializers.ModelSerializer):
         
 class OrganizationFilter(django_filters.FilterSet):
     """Фильтры API списков организаций"""
-    type = django_filters.CharFilter(field_name='type__name', lookup_expr='exact')
+    type = django_filters.AllValuesMultipleFilter(field_name='type__name')
     date = django_filters.CharFilter(field_name='created_at', lookup_expr='contains')
     
-    prof_activity = django_filters.CharFilter(method='filter_prof_activity')
-    prof_activity__contains = django_filters.CharFilter(method='filter_prof_activity_contains')
+    prof_activity = django_filters.CharFilter(method='filter_prof_activity_multiple')
 
     project = django_filters.CharFilter(field_name='projects__name', lookup_expr='contains')
 
-    region = django_filters.CharFilter(field_name='region__name', lookup_expr='exact')
-    region__contains = django_filters.CharFilter(field_name='region__name', lookup_expr='contains')
+    region = django_filters.AllValuesMultipleFilter(field_name='region__name')
 
-    fed_district = django_filters.CharFilter(field_name='region__federalDistrict__name', lookup_expr='exact')
-    fed_district__contains = django_filters.CharFilter(field_name='region__federalDistrict__name', lookup_expr='contains')
+    fed_district = django_filters.AllValuesMultipleFilter(field_name='region__federalDistrict__name')
 
     federal = django_filters.BooleanFilter(field_name='federal_company')
 
@@ -341,15 +349,14 @@ class OrganizationFilter(django_filters.FilterSet):
         model = Organization
         fields = []
 
-    def filter_prof_activity(self, queryset, name, value):
-        if not self.data.get("type") or self.data.get("type") != "РОИВ":
-            return queryset
-        return queryset.filter(prof_activity__name=value)
-
-    def filter_prof_activity_contains(self, queryset, name, value):
-        if not self.data.get("type") or self.data.get("type") != "РОИВ":
-            return queryset
-        return queryset.filter(prof_activity__name__contains=value)
+    def filter_prof_activity_multiple(self, queryset, name, value):
+            if self.data.get("type") != "РОИВ":
+                return queryset
+            values = value.split(',') if isinstance(value, str) else value
+            q_objects = Q()
+            for val in values:
+                q_objects |= Q(prof_activity__name__icontains=val)
+            return queryset.filter(q_objects).distinct()
 
 class OrganizationViewSet(viewsets.ModelViewSet):
     """Viewset организаций, только чтение списка с учетом фильтров"""
@@ -507,28 +514,31 @@ class ContactSerializer(serializers.ModelSerializer):
 
 class ContactFilter(django_filters.FilterSet):
     """Фильтры API списков контактов"""
-    organization = django_filters.CharFilter(field_name='organization__inn', lookup_expr='exact')
+    organization = django_filters.AllValuesMultipleFilter(field_name='organization__inn')
     
-    type = django_filters.CharFilter(field_name='type', lookup_expr='exact')
+    type = django_filters.AllValuesMultipleFilter(field_name='type')
     
-    deartment = django_filters.CharFilter(method='filter_department')
-    deartment__contains = django_filters.CharFilter(method='filter_department_contains')
+    department = django_filters.CharFilter(method='filter_department_multiple')
     
     manager = django_filters.BooleanFilter(method='filter_manager')
 
     class Meta:
         model = Contact
         fields = [] 
-    
-    def filter_department(self, queryset, name, value):
-        if not self.data.get("type") or self.data.get("type") != "department":
+
+    def filter_department_multiple(self, queryset, name, value):
+        if 'department' not in self.data or self.data.get("type") != "department":
             return queryset
-        return queryset.filter(deartment__name=value)
+        values = value.split(',') if isinstance(value, str) else value
+        q_objects = Q()
+        for val in values:
+            q_objects |= Q(department_name__icontains=val)
+        return queryset.filter(q_objects).distinct()
 
     def filter_department_contains(self, queryset, name, value):
         if not self.data.get("type") or self.data.get("type") != "department":
             return queryset
-        return queryset.filter(deartment__name__contains=value)
+        return queryset.filter(department_name__icontains=value)
     
     def filter_manager(self, queryset, name, value):
         if not self.data.get("type") or self.data.get("type") != "person":

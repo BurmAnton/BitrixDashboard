@@ -68,10 +68,6 @@
                                     <label for="deartmentInput" class="form-label me-2 mb-0">Подразделение</label>
                                 </div>
                                 <input type="text" class="form-control form-control-sm me-2" name="department" id="departmentInput">
-                                <div class="form-check ms-3">
-                                    <input class="form-check-input" type="checkbox" id="department">
-                                    <label class="form-check-label" for="deartmentContains">содержит</label>
-                                </div>
                             </div>
 
                             <!-- Организация -->
@@ -184,7 +180,7 @@
                             <table class="table table-bordered">
                                 <tr>
                                     <td><strong>Эндпоинт:</strong></td>
-                                    <td><code>/contacts/api/contacts/</code></td>
+                                    <td><code>/contacts/api/contact/</code></td>
                                 </tr>
                                 <tr>
                                     <td><strong>Метод HTTP:</strong></td>
@@ -229,7 +225,7 @@
                             <div class="">Пример 1: JavaScript (Fetch API)</div>
                             <div class="code-block">
                                 <pre><code>// Получение всех контактов
-fetch('https://bitrix24.tuna-edu.ru/contacts/api/contacts/', {
+fetch('https://bitrix24.tuna-edu.ru/contacts/api/contact/', {
     method: 'GET',
     headers: {
         'Authorization': 'Token 4a8389aa7f015d3a68e44e3f4bae94d63c7ac097',
@@ -243,7 +239,7 @@ fetch('https://bitrix24.tuna-edu.ru/contacts/api/contacts/', {
 
                             <div class="">Пример 2: cURL</div>
                             <div class="code-block">
-                                <pre><code>curl -X GET 'https://bitrix24.tuna-edu.ru/contacts/api/contacts/' \
+                                <pre><code>curl -X GET 'https://bitrix24.tuna-edu.ru/contacts/api/contact/' \
 -H 'Authorization: Token 4a8389aa7f015d3a68e44e3f4bae94d63c7ac097' \
 -H 'Accept: application/json'</code></pre>
                             </div>
@@ -255,7 +251,7 @@ headers = {
     'Authorization': 'Token 4a8389aa7f015d3a68e44e3f4bae94d63c7ac097',
     'Accept': 'application/json'
 }
-response = requests.get('https://bitrix24.tuna-edu.ru/contacts/api/contacts/', headers=headers)
+response = requests.get('https://bitrix24.tuna-edu.ru/contacts/api/contact/', headers=headers)
 data = response.json()
 print(data)</code></pre>
                             </div>
@@ -338,28 +334,21 @@ print(data)</code></pre>
                                         <td>Организация</td>
                                         <td><code>organization</code></td>
                                         <td>ИНН организации</td>
-                                        <td>Точное совпадение</td>
+                                        <td>Точное совпадение, множественное</td>
                                         <td>-</td>
                                     </tr>
                                     <tr>
                                         <td>Тип контакта</td>
                                         <td><code>type</code></td>
-                                        <td>Тип контакта (person/department)</td>
-                                        <td>Точное совпадение</td>
+                                        <td>person/department/main/other</td>
+                                        <td>Точное совпадение, множественное</td>
                                         <td>-</td>
                                     </tr>
                                     <tr>
                                         <td>Подразделение</td>
                                         <td><code>department</code></td>
-                                        <td>Название отдела</td>
-                                        <td>Точное совпадение</td>
-                                        <td>Только для отделов</td>
-                                    </tr>
-                                    <tr>
-                                        <td>Подразделение (содержит)</td>
-                                        <td><code>department__contains</code></td>
-                                        <td>Поиск по части названия отдела</td>
-                                        <td>Частичное совпадение</td>
+                                        <td>Название отдела (частичное совпадение)</td>
+                                        <td>Множественное (icontains)</td>
                                         <td>Только для отделов</td>
                                     </tr>
                                     <tr>
@@ -367,7 +356,7 @@ print(data)</code></pre>
                                         <td><code>manager</code></td>
                                         <td>Фильтр по руководителям</td>
                                         <td>Булевый</td>
-                                        <td>Только для физ.лиц</td>
+                                        <td>Только для сотрудников</td>
                                     </tr>
                                     <tr>
                                         <td>Актуальность</td>
@@ -377,44 +366,52 @@ print(data)</code></pre>
                                         <td>true/false</td>
                                     </tr>
                                 </tbody>
+
                             </table>
 
                             <h3>4.2 Синтаксис фильтрации</h3>
                             <p>Фильтры передаются как query-параметры в URL:</p>
                             <div class="code-block">
-                                <code>/contacts/api/contacts/?filter1=value1&filter2=value2</code>
+                                <code>/contacts/api/contact/?filter1=value1&filter2=value2</code>
                             </div>
+                            <div class="mt-2">
+                                <strong>Множественные значения:</strong> 
+                                <code>?type=person&type=department</code> или <code>?department=IT,Кадры</code>
+                            </div>
+
 
                             <h3>4.3 Примеры фильтрации</h3>
 
-                            <div class="">Пример 1: Все контакты организации</div>
+                            <div class="">Пример 1: Контакты нескольких организаций</div>
                             <div class="code-block">
-                                <code>https://bitrix24.tuna-edu.ru/contacts/api/contacts/?organization=546123</code>
+                                <code>https://bitrix24.tuna-edu.ru/contacts/api/contact/?organization=546123&organization=713191</code>
                             </div>
 
-                            <div class="">Пример 2: Все физические лица (контактные лица)</div>
+                            <div class="">Пример 2: Физические лица + руководители</div>
                             <div class="code-block">
-                                <code>https://bitrix24.tuna-edu.ru/contacts/api/contacts/?type=person</code>
+                                <code>https://bitrix24.tuna-edu.ru/contacts/api/contact/?type=person&manager=true</code>
                             </div>
 
-                            <div class="">Пример 3: Все руководители в организации</div>
+                            <div class="">Пример 3: Несколько отделов в организации</div>
                             <div class="code-block">
-                                <code>https://bitrix24.tuna-edu.ru/contacts/api/contacts/?type=person&manager=true&organization=713191</code>
+                                <code>https://bitrix24.tuna-edu.ru/contacts/api/contact/?type=department&organization=313313&department=цифровизация&department=кадры</code>
                             </div>
 
-                            <div class="">Пример 4: Отдела в организации</div>
+                            <div class="">Пример 4: Комбинированная фильтрация</div>
                             <div class="code-block">
-                                <code>https://bitrix24.tuna-edu.ru/contacts/api/contacts/?type=department&organization=313313</code>
+                                <code>https://bitrix24.tuna-edu.ru/contacts/api/contact/?type=department&type=person&organization=313313&department=отдел,it</code>
                             </div>
 
-                            <div class="alert alert-warning mt-3">
-                                <strong>Обратите внимание:</strong>
+                            <div class="alert alert-info mt-3">
+                                <strong>Поддержка множественной фильтрации:</strong>
                                 <ul>
-                                    <li>Фильтры <code>department</code> и <code>department__contains</code> работают только при <code>type=department</code></li>
-                                    <li>Фильтр <code>manager</code> работает только при <code>type=person</code></li>
-                                    <li>Фильтр <code>current</code> принимает значения true/false для фильтрации по актуальности</li>
+                                    <li><code>?organization=123&organization=456</code> или <code>organization=123,456</code></li>
+                                    <li><code>department</code> использует частичное совпадение (icontains)</li>
+                                    <li><code>manager=true</code> только при <code>type=person</code></li>
+                                    <li><code>department</code> только при <code>type=department</code></li>
                                 </ul>
                             </div>
+
                         </section>
 
                         <!-- Формат ответа -->
