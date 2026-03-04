@@ -45,6 +45,7 @@ class EducationProgram(models.Model):
         choices=StudyForm.choices,
         default=StudyForm.FULL_TIME
     )
+    DOT = models.BooleanField('с использованием ДОТ', default=False)
     activities = models.ForeignKey(
         ProfActivity,
         verbose_name=_('Сфера деятельности'),
@@ -79,6 +80,8 @@ class ProgramSection(models.Model):
     lecture_hours = models.PositiveIntegerField(_('Лекции (Л)'), default=0)
     practice_hours = models.PositiveIntegerField(_('Практические занятия (ПЗ)'), default=0)
     selfstudy_hours = models.PositiveIntegerField(_('Самостоятельная работа (СР)'), default=0)
+    dot_hours = models.PositiveIntegerField(_('Часов с применением ДОТ'), default=0)
+    consultation_hours = models.PositiveIntegerField(_('Часы консультаций'), default=0)
     workload = models.PositiveIntegerField(_('Трудоёмкость (часы)'), default=0)
     attestation_form = models.CharField(_('Форма аттестации'), max_length=255, blank=True)
     description = models.TextField(_('Описание раздела'), blank=True)
@@ -736,3 +739,51 @@ class QuotaDistribution(models.Model):
     def __str__(self):
         return f'{self.quota} - {self.region.name}: {self.allocated_quantity} мест'
 
+class FederalOperator(models.Model):
+    """Модель для хранения федеральных операторов"""
+    name = models.CharField('Федеральный оператор', max_length=255)
+    
+    class Meta:
+        verbose_name = 'Федеральный оператор'
+        verbose_name_plural = 'Федеральные операторы'
+        ordering = ['name']
+
+    def __str__(self):
+        return self.name
+    
+class ProgramRequirements(models.Model):
+    """Модель для хранения требований"""
+    class StudyForm(models.TextChoices):
+        FULL_TIME = 'FT', 'Очная'
+        PART_TIME = 'PT', 'Очно-заочная'
+        DISTANCE = 'DIST', 'Заочная'
+    name = models.ForeignKey('FederalOperator',on_delete=models.CASCADE, verbose_name='Федеральный оператор', related_name='requirements')
+    study_form = models.CharField('Форма обучения', choices=StudyForm.choices, default='FT', max_length=5, blank=True, null=True)
+    DOT = models.BooleanField('с ДОТ', default=False)
+
+    class Meta:
+        verbose_name = 'Требования'
+        verbose_name_plural = 'Требования'
+        ordering = ['name']
+
+    def __str__(self):
+        return self.name.name
+
+class Requirement(models.Model):
+    """Модель для хранения требований по-штучно"""
+    class HoursType(models.TextChoices):
+            lecture_hours = 'lecture_hours', 'Лекции'
+            practice_hours = 'practice_hours', 'Практики'
+            selfstudy_hours = 'selfstudy_hours', 'Самостоятельные'
+            consultation_hours = 'consultation_hours', 'Консультации'
+            dot_hours = 'dot_hours', 'с ДОТ'
+            workload = 'workload', 'Общее'
+            contact_hours = 'contact_hours', 'Контактные часы'
+    related_to = models.ForeignKey('ProgramRequirements',on_delete=models.CASCADE, related_name='requirement', verbose_name='Относится к')
+    left_num_type = models.CharField(choices=HoursType.choices, verbose_name='Тип требуемых часов')
+    left_num_value = models.PositiveIntegerField(verbose_name='Требуемое количество(%)')
+    operator = models.CharField(choices=[('less','<'),('more','>'),('equal','=')],verbose_name='Знак')
+    right_num_type = models.CharField(choices=HoursType.choices, verbose_name='Требуемое количество от')
+
+    def __str__(self):
+        return str(self.pk)
