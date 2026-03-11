@@ -11,10 +11,10 @@ from django.utils import timezone
 from django.db import transaction
 from django.core.files.storage import default_storage
 from django.core.files.base import ContentFile
-from .forms import EducationProgramForm, ProgramSectionFormSet
+from .forms import EducationProgramForm, ProgramSectionFormSet, ProgramTopicsFormSet
 from .models import (
     EducationProgram, EduAgreement, Quota, Supplement, QuotaChange, Region, ROIV,
-    Demand, DemandHistory, QuotaDistribution, AlternativeQuota
+    Demand, DemandHistory, QuotaDistribution, AlternativeQuota, ProgramRequirements, ProgramSection, ProgramTopics, Requirement
 )
 from .cache_utils import cache_atlas_data, AtlasDataCache
 import json
@@ -219,33 +219,424 @@ def program_list(request):
 
 @login_required
 def create_program(request):
+    """
+    Создание новой образовательной программы с разделами и темами.
+    """
     if request.method == 'POST':
         program_form = EducationProgramForm(request.POST)
-        section_formset = ProgramSectionFormSet(request.POST)
-        
-        if program_form.is_valid() and section_formset.is_valid():
+        section_formset = ProgramSectionFormSet(request.POST, prefix='sections')
+        topics_formset = ProgramTopicsFormSet(
+            request.POST,
+            queryset=ProgramTopics.objects.none(),
+            prefix='topics'
+        )
+
+        # Валидация всех форм
+        if (program_form.is_valid() and section_formset.is_valid() and 
+            topics_formset.is_valid()):
+
+            # 1. Сохраняем программу (пока без разделов)
             program = program_form.save()
-            sections = section_formset.save(commit=False)
-            total_workload = 0
-            for section in sections:
+
+            # 2. Сохраняем разделы и запоминаем соответствие temp_id -> объект раздела
+            temp_id_map = {}
+            sections_to_save = []
+
+            for form in section_formset:
+                if form.cleaned_data.get('DELETE'):
+                    # При создании новых записей DELETE игнорируется, но оставим для полноты
+                    continue
+                section = form.save(commit=False)
                 section.program = program
-                section.workload = (section.lecture_hours or 0) + (section.practice_hours or 0) + (section.selfstudy_hours or 0)
-                total_workload += section.workload
+                temp_id = form.cleaned_data.get('temp_id')
+                sections_to_save.append((section, temp_id))
+
+            # Сначала сохраняем разделы, чтобы получить ID
+            for section, temp_id in sections_to_save:
                 section.save()
-            program.academic_hours = total_workload + (program.final_attestation or 0)
+                if temp_id:
+                    temp_id_map[temp_id] = section
+
+            # 3. Сохраняем темы
+            for form in topics_formset:
+                if form.cleaned_data.get('DELETE'):
+                    continue
+                topic = form.save(commit=False)
+                section_temp = form.cleaned_data.get('section_temp')
+
+                # Привязываем тему к разделу по временному идентификатору
+                if section_temp in temp_id_map:
+                    topic.section = temp_id_map[section_temp]
+                else:
+                    # Если тема привязана к существующему разделу (не должно быть при создании)
+                    # но на всякий случай можно пропустить или вызвать ошибку
+                    continue
+
+                topic.save()
+
+            # 4. Пересчитываем общую длительность программы (по желанию)
+            total_workload = sum(
+                (section.workload or 0) for section in program.sections.all()
+            ) + (program.final_attestation or 0)
+            program.academic_hours = total_workload
             program.save()
+
             messages.success(request, 'Программа успешно создана!')
             return redirect('education_planner:program_list')
+
     else:
+        # GET: создаём пустые формы
         program_form = EducationProgramForm()
-        section_formset = ProgramSectionFormSet()
+        section_formset = ProgramSectionFormSet(prefix='sections', queryset=ProgramSection.objects.none())
+        topics_formset = ProgramTopicsFormSet(
+            queryset=ProgramTopics.objects.none(),
+            prefix='topics'
+        )
+
+        # Генерируем временные ID для новых разделов, чтобы темы могли на них ссылаться
+        # В section_formset уже есть пустые формы, добавим каждой начальное значение temp_id
+        for i, form in enumerate(section_formset):
+            form.fields['temp_id'].initial = f'new_{i}'
+
+    # Группируем темы по section_temp для удобства отображения в шаблоне
+    topics_by_section = {}
+    for form in topics_formset:
+        section_temp = form.initial.get('section_temp') or form.data.get(form.add_prefix('section_temp'))
+        if section_temp:
+            topics_by_section.setdefault(section_temp, []).append(form)
 
     context = {
         'program_form': program_form,
         'section_formset': section_formset,
+        'topics_formset': topics_formset,
+        'topics_by_section': topics_by_section,
     }
-    return render(request, 'education_planner/create_program.html', context)
+    return render(request, 'education_planner/program_details.html', context)
 
+from openpyxl import Workbook
+from openpyxl.styles import Alignment, Font
+from openpyxl.utils import get_column_letter
+import time
+
+def build_utp_table(program):
+    """
+    Формирует данные для тела таблицы УТП, включая темы разделов.
+    Возвращает список списков (строки таблицы, колонки 1-8).
+    """
+    rows = []
+    sections = program.sections.all().order_by('order')
+
+    for section in sections:
+        # --- Строка раздела ---
+        section_row = [
+            section.name,                                     # 1 - Наименование
+            section.workload,                                 # 2 - Итого
+            section.lecture_hours + section.practice_hours,   # 3 - Всего контактной работы
+            section.lecture_hours,                             # 4 - Лекции
+            section.practice_hours,                             # 5 - Практические занятия
+            0,                                                  # 6 - с использованием ДОТ (пока не заполняем)
+            section.selfstudy_hours,                            # 7 - Самостоятельная работа
+            section.attestation_form or ''                      # 8 - Форма аттестации
+        ]
+        rows.append(section_row)
+
+        # --- Темы раздела ---
+        topics = section.topics.all().order_by('order')
+        for topic in topics:
+            # Контактные часы темы (лекции + практика)
+            contact_topic = (topic.lecture_hours or 0) + (topic.practice_hours or 0)
+            # Общая трудоёмкость темы (если поле workload не заполнено, вычисляем вручную)
+            workload_topic = topic.workload or (
+                (topic.lecture_hours or 0) +
+                (topic.practice_hours or 0) +
+                (topic.selfstudy_hours or 0) +
+                (topic.consultation_hours or 0)
+            )
+            topic_row = [
+                f"    {topic.name}",                          # отступ для тем
+                workload_topic,                                 # 2 - Итого по теме
+                contact_topic,                                  # 3 - Контактная работа
+                topic.lecture_hours or 0,                       # 4 - Лекции
+                topic.practice_hours or 0,                       # 5 - Практика
+                0,                                               # 6 - ДОТ
+                topic.selfstudy_hours or 0,                      # 7 - СР
+                topic.attestation_form or ''                     # 8 - Форма аттестации
+            ]
+            rows.append(topic_row)
+
+    # --- Итоговая аттестация ---
+    final_att = program.final_attestation or 0
+    rows.append([
+        'Итоговая аттестация',
+        final_att,
+        final_att,          # вся итоговая аттестация считается контактной работой
+        0,
+        final_att,
+        0,
+        0,
+        'Итоговая аттестация'
+    ])
+
+    # --- Общий итог по программе ---
+    total_workload = sum(s.workload for s in sections) + final_att
+    total_contact = sum(s.lecture_hours + s.practice_hours for s in sections) + final_att
+    total_lecture = sum(s.lecture_hours for s in sections)
+    total_practice = sum(s.practice_hours for s in sections) + final_att
+    total_selfstudy = sum(s.selfstudy_hours for s in sections)
+
+    rows.append([
+        'Всего академических часов',
+        total_workload,
+        total_contact,
+        total_lecture,
+        total_practice,
+        0,
+        total_selfstudy,
+        ''
+    ])
+
+    return rows
+
+def generate_utp_xlsx(program):
+    """
+    Создаёт XLSX-файл с полным УТП по шаблону.
+    Возвращает объект Workbook.
+    """
+    wb = Workbook()
+    ws = wb.active
+    ws.title = f"УТП_{program.name}"
+
+    # Заголовки (4 строки)
+    headers = [
+        ['Наименование разделов (модулей), тем, видов аттестации', 'Трудоемкость, ак. час', '', '', '', '', '', 'Формы аттестации'],
+        ['', 'Итого', 'Виды занятий контактной работы, в т.ч.', '', '', 'В том числе с использованием ДОТ (из ст.3)', 'СР', ''],
+        ['', '', 'Всего контактной работы', 'Л', 'ПЗ, ЛР', '', '', ''],
+        ['1', '2', '3', '4', '5', '6', '7', '8']
+    ]
+
+    # Записываем заголовки
+    for r_idx, row_data in enumerate(headers, start=1):
+        for c_idx, value in enumerate(row_data, start=1):
+            cell = ws.cell(row=r_idx, column=c_idx, value=value)
+            cell.alignment = Alignment(horizontal='center', vertical='center', wrap_text=True)
+            cell.font = Font(bold=True)
+
+    # Объединение ячеек в шапке
+    ws.merge_cells(start_row=1, start_column=1, end_row=3, end_column=1)# A1:A3
+    ws.merge_cells(start_row=1, start_column=2, end_row=1, end_column=7)# B1:G1 (Трудоемкость)
+    ws.merge_cells(start_row=1, start_column=8, end_row=3, end_column=8)# H1:H3 (Формы аттестации)
+    ws.merge_cells(start_row=2, start_column=2, end_row=3, end_column=2)# B2:B3 (Итого)
+    ws.merge_cells(start_row=2, start_column=3, end_row=2, end_column=5)# C2:E2 (Виды занятий)
+    ws.merge_cells(start_row=2, start_column=6, end_row=3, end_column=6)# F2:F3 (ДОТ)
+    ws.merge_cells(start_row=2, start_column=7, end_row=3, end_column=7)# G2:G3 (СР)
+
+    # Получаем данные тела таблицы
+    table_rows = build_utp_table(program)
+
+    # Записываем строки тела, начиная с 5-й строки
+    for r_idx, row_data in enumerate(table_rows, start=5):
+        for c_idx, value in enumerate(row_data, start=1):
+            cell = ws.cell(row=r_idx, column=c_idx, value=value)
+            cell.alignment = Alignment(horizontal='center', vertical='center', wrap_text=True)
+
+    # Автоподбор ширины колонок
+    for col in range(1, 9):
+        column_letter = get_column_letter(col)
+        ws.column_dimensions[column_letter].width = 18
+
+    return wb
+
+def _check_single_requirement(requirement, total_hours, program):
+    """Проверяет одно конкретное требование"""
+    types = {
+        choice[0]: choice[1] 
+        for choice in Requirement.HoursType.choices
+    }
+    left_hours = total_hours.get(requirement.left_num_type, 0)
+    right_hours = total_hours.get(requirement.right_num_type, 0)
+    
+    # Применяем процент (left_num_value это процент от right_num_type)
+    required_value = right_hours / 100 * requirement.left_num_value
+    
+    check_result = {
+        'requirement_id': requirement.pk,
+        'left_type': types[requirement.left_num_type],
+        'left_value': left_hours,
+        'left_percent': requirement.left_num_value,
+        'right_type': types[requirement.right_num_type],
+        'right_value': right_hours,
+        'required_value': required_value,
+        'operator': requirement.operator,
+        'status': 'success',
+        'message': '',
+        'types': types
+    }
+    
+    # Проверяем условие
+    if requirement.operator == 'more':
+        if left_hours > required_value:
+            check_result['status'] = 'danger'
+            check_result['message'] = f"{left_hours} {requirement.left_num_type} >= {required_value:.1f} ({requirement.left_num_value}%) от {right_hours} {requirement.right_num_type}"
+    elif requirement.operator == 'less':
+        if left_hours < required_value:
+            check_result['status'] = 'danger'
+            check_result['message'] = f"{left_hours} {requirement.left_num_type} <= {required_value:.1f} ({requirement.left_num_value}%) от {right_hours} {requirement.right_num_type}"
+    elif requirement.operator == 'equal':
+        if left_hours != required_value:
+            check_result['status'] = 'danger'
+            check_result['message'] = f"{left_hours} {requirement.left_num_type} ≠ {required_value:.1f} ({requirement.left_num_value}%) от {right_hours} {requirement.right_num_type}"
+    return check_result
+
+def check_for_requirements(program):
+    """Проверяет соответствие программы требованиям федеральных операторов"""
+    sections = program.sections.all()
+    
+    # Подсчет часов программы
+    total_hours = {
+        'lecture_hours': sum(s.lecture_hours for s in sections),
+        'practice_hours': sum(s.practice_hours for s in sections),
+        'selfstudy_hours': sum(s.selfstudy_hours for s in sections),
+        'dot_hours': sum(s.dot_hours for s in sections),
+        'consultation_hours': sum(s.consultation_hours for s in sections),
+        'workload': sum(s.workload for s in sections),
+        'contact_hours': sum(s.lecture_hours + s.practice_hours for s in sections)
+    }
+    
+    # Группируем требования по оператору, форме обучения и DOT
+    requirements = {}
+    
+    for req_group in ProgramRequirements.objects.select_related('name').prefetch_related('requirement').all():
+        operator_name = req_group.name.name
+        study_form = req_group.study_form or 'FT'
+        dot_key = 'DOT' if req_group.DOT else 'nDOT'
+        
+        # Пропускаем несовместимые требования
+        if study_form != program.study_form:
+            continue
+        if req_group.DOT != program.DOT:
+            continue
+            
+        requirements.setdefault(operator_name, {})
+        requirements[operator_name].setdefault(study_form, {})
+        requirements[operator_name][study_form].setdefault(dot_key, {
+            'status': 'success',
+            'violations': [],
+            'checks': []
+        })
+        
+        result = requirements[operator_name][study_form][dot_key]
+        
+        # Проверяем каждое требование группы
+        for requirement in req_group.requirement.all():
+            check_result = _check_single_requirement(requirement, total_hours, program)
+            result['checks'].append(check_result)
+            
+            if check_result['status'] == 'danger':
+                result['status'] = 'danger'
+                result['violations'].append(check_result['message'])
+    
+    return requirements
+
+@login_required
+def program_details(request, pk):
+    program = get_object_or_404(EducationProgram, pk=pk)
+
+    # Экспорт в XLSX (без изменений)
+    if request.GET.get('export') == 'xlsx':
+        wb = generate_utp_xlsx(program)
+        response = HttpResponse(
+            content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        )
+        response['Content-Disposition'] = f'attachment; filename="program_{program.id}_utp.xlsx"'
+        wb.save(response)
+        return response
+
+    if request.method == 'POST':
+        program_form = EducationProgramForm(request.POST, instance=program)
+        section_formset = ProgramSectionFormSet(request.POST, instance=program, prefix='sections')
+        topics_formset = ProgramTopicsFormSet(
+            request.POST,
+            queryset=ProgramTopics.objects.filter(section__program=program),
+            prefix='topics'
+        )
+        if (program_form.is_valid() and section_formset.is_valid() and topics_formset.is_valid()):
+            program = program_form.save()
+
+            temp_id_to_section = {}
+            for form in section_formset:
+                if form.cleaned_data.get('DELETE'):
+                    if form.instance.pk:
+                        form.instance.delete()
+                    continue
+                section = form.save(commit=False)
+                section.program = program
+                temp_id = form.cleaned_data.get('temp_id')
+                section.save()
+                if temp_id:
+                    temp_id_to_section[temp_id] = section
+                if section.pk and str(section.pk) not in temp_id_to_section:
+                    temp_id_to_section[str(section.pk)] = section
+
+            # Сохраняем темы
+            for form in topics_formset:
+                if form.cleaned_data.get('DELETE'):
+                    if form.instance.pk:
+                        form.instance.delete()
+                    continue
+                topic = form.save(commit=False)
+                section_temp = form.cleaned_data.get('section_temp')
+                if section_temp in temp_id_to_section:
+                    topic.section = temp_id_to_section[section_temp]
+                topic.save()
+
+            # Пересчёт часов
+            total = sum((s.workload or 0) for s in program.sections.all()) + (program.final_attestation or 0)
+            program.academic_hours = total
+            program.save()
+            messages.success(request, 'Программа успешно обновлена!')
+            return redirect('education_planner:program_details', pk=program.pk)
+
+    else:  # GET
+        program_form = EducationProgramForm(instance=program)
+        section_formset = ProgramSectionFormSet(instance=program, prefix='sections')
+        topics_formset = ProgramTopicsFormSet(
+            queryset=ProgramTopics.objects.filter(section__program=program),
+            prefix='topics'
+        )
+
+        # Устанавливаем section_temp в initial для каждой темы
+        for form in topics_formset:
+            if form.instance and form.instance.section_id:
+                form.initial['section_temp'] = str(form.instance.section_id)
+
+        # Устанавливаем temp_id для каждой формы раздела
+        for form in section_formset:
+            if form.instance.pk:
+                form.initial['temp_id'] = str(form.instance.pk)
+            else:
+                # для новых разделов генерируем уникальный временный ID
+                form.initial['temp_id'] = f'new_{int(time.time()*1000)}_{form.prefix}'
+
+    # Строим topics_by_section уже после установки initial
+    topics_by_section = {}
+    for form in topics_formset:
+        section_temp = form.initial.get('section_temp')
+        if section_temp:
+            topics_by_section.setdefault(section_temp, []).append(form)
+
+    # Подготовка таблицы УТП и требований (как было)
+    table_data = build_utp_table(program)
+    requirements = check_for_requirements(program)
+    # return JsonResponse({'s': str(topics_formset)})
+    context = {
+        'program_form': program_form,
+        'section_formset': section_formset,
+        'topics_formset': topics_formset,
+        'topics_by_section': topics_by_section,
+        'table_data': table_data,
+        'requirements': requirements,
+    }
+    return render(request, 'education_planner/program_details.html', context)
 
 @login_required
 def agreements_dashboard(request):
@@ -2804,8 +3195,7 @@ def manage_roiv(request):
             'name': roiv.name,
             'full_name': roiv.full_name,
             'region_id': roiv.region_id,
-            'region_name': roiv.region.name,
-            'contact_info': roiv.contact_info
+            'region_name': roiv.region.name
         } for roiv in roivs]
         
         return JsonResponse({'roivs': data})

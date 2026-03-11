@@ -3,6 +3,15 @@
 
 {% block title %}Образовательные программы{% endblock %}
 
+{% block extra_css %}
+<style>
+    .col-md-6:hover{
+        transition: transform 0.2s ease;
+        transform: translateY(-2px);
+    }
+</style>
+{% endblock %}
+
 {% block content %}
 <div class="container">
     <div class="d-flex justify-content-between align-items-center mb-4">
@@ -12,9 +21,14 @@
         </a>
     </div>
 
+    <div class="input-group mb-2">
+        <span class="input-group-text" id="basic-addon1"><i class="bi bi-search"></i></span>
+        <input type="text" class="form-control" placeholder="Поиск по названию" id="search-input">
+    </div>
+
     <div class="row">
         {% for program in programs %}
-        <div class="col-md-6 mb-4">
+        <div class="col-md-6 mb-4" onclick="location.href='{% url 'education_planner:program_details' pk=program.pk %}';" style="cursor: pointer;" program="{{ program.name }}">
             <div class="card h-100">
                 <div class="card-header">
                     <h5 class="card-title mb-0">{{ program.name }}</h5>
@@ -57,4 +71,31 @@
         {% endfor %}
     </div>
 </div>
+
+{% block extra_js %}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const searchInput = document.getElementById('search-input');
+        const programCards = document.querySelectorAll('.col-md-6');
+
+        function filterPrograms() {
+            const searchText = searchInput.value.toLowerCase().trim();
+            
+            programCards.forEach(card => {
+                const programName = card.getAttribute('program').toLowerCase();
+                console.log(programName)
+                if (programName.includes(searchText.toString())) {
+                    card.style.display = '';
+                } else {
+                    card.style.display = 'none';
+                }
+            });
+        }
+
+        searchInput.addEventListener('input', function() {
+            filterPrograms()
+        });
+    });
+</script>
+{% endblock %}
 {% endblock %} 

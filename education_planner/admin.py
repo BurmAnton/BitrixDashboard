@@ -2,7 +2,7 @@ from django.contrib import admin
 from .models import (
     ProfActivity, EducationProgram, ProgramSection,
     EduAgreement, Quota, Supplement, QuotaChange, Region, ROIV, AlternativeQuota,
-    RegionAltNames
+    RegionAltNames, ProgramRequirements, ProgramTopics, Requirement, FederalOperator
 )
 
 @admin.register(ProfActivity)
@@ -18,12 +18,18 @@ class EducationProgramAdmin(admin.ModelAdmin):
     search_fields = ('name', 'description')
     readonly_fields = ('created_at', 'updated_at')
 
+class TopicsInline(admin.TabularInline):
+    model = ProgramTopics
+    extra = 1
+    fields = ("order", "name", "lecture_hours", "practice_hours", "selfstudy_hours", "consultation_hours", "dot_hours", "workload", "attestation_form")
+
 @admin.register(ProgramSection)
 class ProgramSectionAdmin(admin.ModelAdmin):
     list_display = ('name', 'program', 'order', 'created_at')
     list_filter = ('program', 'created_at')
     search_fields = ('name', 'description', 'program__name')
     readonly_fields = ('created_at', 'updated_at')
+    inlines = [TopicsInline]
 
 class RegionAlternativeNames(admin.TabularInline):
     model = RegionAltNames
@@ -169,3 +175,18 @@ class AlternativeQuotaAdmin(admin.ModelAdmin):
     
     def get_queryset(self, request):
         return super().get_queryset(request).select_related('quota__education_program', 'region')
+    
+
+class Requirement(admin.TabularInline):
+    model = Requirement
+    fields = ('related_to', 'left_num_type', 'left_num_value', 'operator', 'right_num_type')
+    extra = 1 
+
+@admin.register(ProgramRequirements)
+class ProgramRequirementsAdmin(admin.ModelAdmin):
+    list_display = ('name', 'study_form', 'DOT')
+    inlines = [Requirement]
+
+@admin.register(FederalOperator)
+class FederalOperatorAdmin(admin.ModelAdmin):
+    list_display = ('name',)

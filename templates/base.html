@@ -41,6 +41,7 @@
                                 <li><a class="dropdown-item" href="{% url 'contact_management:api-guide' %}">Организации</a></li>
                                 <li><a class="dropdown-item" href="{% url 'contact_management:api-guide' %}?contact">Контакты</a></li>
                                 <li><a class="dropdown-item" href="{% url 'contact_management:api-guide' %}?get_all">Списки</a></li>
+                                <li><a class="dropdown-item" href="{% url 'contact_management:api-guide' %}?get_call">Получить объект</a></li>
                             </ul>
                         </li>
                     {% endif %}
@@ -67,6 +68,12 @@
                         <ul class="dropdown-menu" style="margin-top: 0;">
                             <li><a class="dropdown-item {% if not user.is_authenticated %} disabled {% endif %}" href="{% url 'crm_connector:attestation_progress' %}">Дашборд аттестаций</a></li>
                             <li><a class="dropdown-item {% if not user.is_authenticated %} disabled {% endif %}" href="{% url 'crm_connector:attestation-stats' %}">Статистика аттестаций</a></li>
+                        </ul>
+                    </li>
+                    <li class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle active" aria-expanded="false" href="{% url 'education_planner:program_list' %}">Программы</a>
+                        <ul class="dropdown-menu" style="margin-top: 0;">
+                            <li><a class="dropdown-item {% if not user.is_authenticated %} disabled {% endif %}" href="{% url 'education_planner:create_program' %}">Создать программу</a></li>
                         </ul>
                     </li>
                     

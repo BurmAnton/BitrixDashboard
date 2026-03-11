@@ -1,0 +1,853 @@
+{% extends 'base.html' %}
+{% load static %}
+{% load form_extras %}
+
+{% block title %}Создание образовательной программы{% endblock %}
+
+{% block extra_css %}
+<style>
+    .form-control:focus {
+        border-color: #80bdff;
+        box-shadow: 0 0 0 0.2rem rgba(0,123,255,.25);
+    }
+    .section-form {
+        background-color: #f8f9fa;
+        border-radius: 0.25rem;
+        margin-bottom: 1rem;
+        position: relative;
+    }
+    .section-actions,.topic-actions {
+        display: flex;
+        flex-direction: row;
+        justify-content: center;
+        align-items: center;
+        gap: 4px;
+        min-width: 80px;
+    }
+    .section-actions .btn-move-section,
+    .section-actions .btn-remove-section,
+    .topic-actions .btn-remove-topic,
+    .topic-actions .btn-move-topic {
+        color: #0d6efd;
+        background: none;
+        border: none;
+        font-size: 1.2rem;
+        cursor: pointer;
+        padding: 2px 4px;
+        line-height: 1;
+        vertical-align: middle;
+    }
+    .section-actions .btn-remove-section,
+    .topic-actions .btn-remove-topic {
+        color: #dc3545;
+    }
+    .section-actions .btn-remove-section:hover,
+    .topic-actions .btn-remove-topic:hover {
+        color: #c82333;
+    }
+    .section-actions .btn-move-section:focus,
+    .section-actions .btn-remove-section:focus,
+    .topic-actions .btn-remove-topic:focus,
+    .topic-actions .btn-move-topic:focus {
+        outline: none;
+        box-shadow: none;
+    }
+    .btn-add-section {
+        margin-bottom: 1rem;
+    }
+    .d-none { display: none; }
+    .sticky-footer-actions {
+        position: fixed;
+        bottom: 0;
+        left: 0;
+        width: 100%;
+        z-index: 1000;
+        box-shadow: 0 -2px 8px rgba(0,0,0,0.04);
+        background: #fff;
+    }
+    body { padding-bottom: 80px; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <h2 class="mb-4">Информация об образовательной программе</h2>
+    
+    <form method="post" class="needs-validation">
+        {% csrf_token %}
+        <!-- Основная информация о программе -->
+        <div class="card mb-4">
+            <div class="card-header bg-primary text-white">
+                <h4 class="mb-0"><i class="bi bi-file-earmark-text me-1"></i>Основная информация</h4>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-12">
+                        <div class="mb-3">
+                            <label for="{{ program_form.name.id_for_label }}" class="form-label">{{ program_form.name.label }}</label>
+                            {{ program_form.name }}
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="mb-3">
+                            <label for="{{ program_form.program_type.id_for_label }}" class="form-label">{{ program_form.program_type.label }}</label>
+                            {{ program_form.program_type }}
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="mb-3">
+                            <label for="{{ program_form.study_form.id_for_label }}" class="form-label">{{ program_form.study_form.label }}</label>
+                            {{ program_form.study_form }}
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <label for="{{ program_form.DOT.id_for_label }}" class="form-label">{{ program_form.DOT.label }}</label>
+                        {{ program_form.DOT }}
+                    </div>
+                    <div class="col-md-6">
+                        <div class="mb-3">
+                            <label for="{{ program_form.activities.id_for_label }}" class="form-label">{{ program_form.activities.label }}</label>
+                            {{ program_form.activities }}
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="mb-3">
+                            <label class="form-label">Длительность ИА (ак. часы)</label>
+                            {{ program_form.final_attestation }}
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="mb-3" style="display:none;">
+                            <label for="{{ program_form.academic_hours.id_for_label }}" class="form-label">{{ program_form.academic_hours.label }}</label>
+                            {{ program_form.academic_hours }}
+                        </div>
+                    </div>
+                    <div class="col-12">
+                        <div class="mb-3">
+                            <label for="{{ program_form.description.id_for_label }}" class="form-label">{{ program_form.description.label }}</label>
+                            {{ program_form.description }}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Требования фед. операторов -->
+        {% if requirements.items %}
+            <div class="card mb-4">
+                <div class="card-header bg-primary text-white">
+                    <h4 class="mb-0"><i class="bi bi-file-earmark-break"></i>Требования фед. операторов</h4>
+                </div>
+
+                <div class="card-body">
+                    <ul class="nav nav-tabs" id="myTab" role="tablist">
+                        {% for fed_oper, req_data in requirements.items %}
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link {% if forloop.first %} active {% endif %}" id="{{ fed_oper }}-tab" data-bs-toggle="tab" data-bs-target="#{{ fed_oper }}-tab-pane" type="button" role="tab" aria-controls="{{ fed_oper }}-tab-pane" aria-selected="{% if forloop.first %} true {% else %} false {% endif %}">{{ fed_oper }}</button>
+                            </li>
+                        {% endfor %}
+                    </ul>
+                    <div class="tab-content" id="myTabContent">
+                        {% for fed_oper, req_data in requirements.items %}
+                            {% for form_key, form_data in req_data.items %}
+                                {% if form_key == program_form.study_form.value %}
+                                    {% for dot_key, details in form_data.items %}
+                                        {% if dot_key == 'DOT' and program_form.DOT.value or dot_key == 'nDOT' and not program_form.DOT.value %}
+                                            <!-- Блок требований оператора -->
+                                        <div class="tab-pane fade {% if forloop.first %}show active{% endif %}" id="{{ fed_oper }}-tab-pane" role="tabpanel" aria-labelledby="{{ fed_oper }}-tab" tabindex="0">
+                                            <div class="mb-4 p-3 border rounded-bottom border-top-0">
+                                                <div class="d-flex justify-content-between align-items-start mb-3">
+                                                    <p class="mb-3">
+                                                        <small class="text-muted">
+                                                            Форма: {% if form_key == 'FT' %}Очная
+                                                            {% elif form_key == 'PT' %}Очно-заочная
+                                                            {% elif form_key == 'DIST' %}Заочная
+                                                            {% else %}{{ form_key }}
+                                                            {% endif %}
+                                                            {% if dot_key == 'DOT' %}с ДОТ{% endif %}
+                                                        </small>
+                                                    </p>
+                                                    <span class="badge bg-{{ details.status }} fs-6">
+                                                        {% if details.status == 'success' %}Соответствует{% else %}Нарушения{% endif %}
+                                                    </span>
+                                                </div>
+                                                <!-- Детальная таблица проверок -->
+                                                {% if details.checks %}
+                                                    <div class="table-responsive">
+                                                        <table class="table table-sm table-hover" style="text-align:center">
+                                                            <thead class="table-secondary">
+                                                                <tr>
+                                                                    <th>Тип требуемых часов</th>
+                                                                    <th>Требуемое количество(%)</th>
+                                                                    <th>Требуемое количество от</th>
+                                                                    <th>Факт</th>
+                                                                    <th>Требуется</th>
+                                                                    <th>Статус</th>
+                                                                </tr>
+                                                            </thead>
+                                                            <tbody>
+                                                                {% for check in details.checks %}
+                                                                    <tr class="{% if check.status == 'danger' %}table-warning{% else %}table-success{% endif %}">
+                                                                        <td>
+                                                                            <strong>{{ check.left_type|title }}</strong>
+                                                                        </td>
+                                                                        <td>
+                                                                            <span class="badge bg-primary">{{ check.left_percent }}%</span>
+                                                                        </td>
+                                                                        <td>
+                                                                            <strong>{{ check.right_type|title }}</strong>: {{ check.right_value }} ч.
+                                                                        </td>
+                                                                        <td>
+                                                                            <span class="badge {% if check.status == 'danger' %}bg-danger{% else %}bg-success{% endif %}">
+                                                                                {{ check.left_value }} ч.
+                                                                            </span>
+                                                                        </td>
+                                                                        <td>
+                                                                            <span class="badge bg-{{ check.status }}">
+                                                                                {{ check.required_value|floatformat:1 }} ч.
+                                                                                {% if check.operator == 'less' %}<
+                                                                                {% elif check.operator == 'more' %}>
+                                                                                {% elif check.operator == 'equal' %}=
+                                                                                {% endif %}
+                                                                            </span>
+                                                                        </td>
+                                                                        <td>
+                                                                            <span class="badge bg-{{ check.status }} px-2 py-1">
+                                                                                {% if check.status == 'success' %}
+                                                                                    <i class="bi bi-check2"></i>
+                                                                                {% else %}
+                                                                                    <i class="bi bi-x-lg"></i>
+                                                                                {% endif %}
+                                                                            </span>
+                                                                        </td>
+                                                                    </tr>
+                                                                {% empty %}
+                                                                    <tr>
+                                                                        <td colspan="7" class="text-center text-muted py-4">
+                                                                            <em>Требований не настроено</em>
+                                                                        </td>
+                                                                    </tr>
+                                                                {% endfor %}
+                                                            </tbody>
+                                                        </table>
+
+                                                    </div>
+                                                {% else %}
+                                                    <div class="alert alert-info">
+                                                        Все требования соблюдены ✅
+                                                    </div>
+                                                {% endif %}
+                                            </div>
+                                        </div>
+                                        {% endif %}
+                                    {% endfor %}
+                                {% endif %}
+                            {% endfor %}
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+        {% endif %}
+
+
+
+        <!-- Разделы программы -->
+        <div class="card mb-4">
+            <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
+                <h4 class="mb-0"><i class="bi bi-file-earmark-ruled me-1"></i>Разделы программы</h4>
+                <button type="button" class="btn btn-light btn-sm" id="add-section">
+                    <i class="bi bi-plus-circle"></i> Добавить раздел
+                </button>
+            </div>
+            <div class="card-body">
+                {{ section_formset.management_form }}
+                <div class="table-responsive">
+                    <table class="table table-bordered align-middle mb-2" id="sections-table">
+                        <thead class="table-light">
+                            <tr>
+                                <th style="width: 80px; text-align: center;">№</th>
+                                <th>Название раздела\темы</th>
+                                <th style="width: 100px; text-align: center;">Л</th>
+                                <th style="width: 100px; text-align: center;">ПЗ</th>
+                                <th style="width: 100px; text-align: center;">СР</th>
+                                <th style="width: 100px; text-align: center;">К</th>
+                                <th style="width: 100px; text-align: center;">ДОТ</th>
+                                <th style="width: 100px; text-align: center;">Форма аттестации</th>
+                                <th style="width: 100px; text-align: center;">Итого</th>
+                                <th  style="width: 130px;"></th>
+                            </tr>
+                        </thead>
+                        <tbody id="sections-table-body">
+                            {% for section_form in section_formset %}
+                                <tr class="section-form table table-info">
+                                    <td>{{ section_form.order }}</td>
+                                    <td>{{ section_form.name }}</td>
+                                    <td>{{ section_form.lecture_hours }}</td>
+                                    <td>{{ section_form.practice_hours }}</td>
+                                    <td>{{ section_form.selfstudy_hours }}</td>
+                                    <td>{{ section_form.consultation_hours }}</td>
+                                    <td>{{ section_form.dot_hours }}</td>
+                                    <td>{{ section_form.attestation_form }}</td>
+                                    <td>{{ section_form.workload }}</td>
+                                    <td class="text-center align-middle">
+                                        <div class="section-actions">
+                                            <button type="button" class="btn-move-section move-up"><i class="bi bi-arrow-up"></i></button>
+                                            <button type="button" class="btn-move-section move-down"><i class="bi bi-arrow-down"></i></button>
+                                            <button type="button" class="btn-remove-section"><i class="bi bi-x-circle"></i></button>
+                                        </div>
+                                    </td>
+                                    {{ section_form.temp_id }}  {# скрытое поле #}
+                                    {% for hidden in section_form.hidden_fields %}
+                                        {{ hidden }}
+                                    {% endfor %}
+                                </tr>
+                                <!-- Существующие темы раздела -->
+                                {% with section_temp=section_form.temp_id.value %}
+                                    {% for topic_form in topics_by_section|get_item:section_temp %}
+                                    <tr class="topic-form" data-section-temp="{{ topic_form.section_temp.value }}">
+                                        <td>
+                                            {{ section_form.order.value }}.{{ topic_form.order.value }}
+                                            <input type="hidden" name="{{ topic_form.order.html_name }}" value="{{ topic_form.order.value }}" />
+                                        </td>
+                                        <td>{{ topic_form.name }}</td>
+                                        <td>{{ topic_form.lecture_hours }}</td>
+                                        <td>{{ topic_form.practice_hours }}</td>
+                                        <td>{{ topic_form.selfstudy_hours }}</td>
+                                        <td>{{ topic_form.consultation_hours }}</td>
+                                        <td>{{ topic_form.dot_hours }}</td>
+                                        <td>{{ topic_form.attestation_form }}</td>
+                                        <td>{{ topic_form.workload }}</td>
+                                        <td>
+                                            <div class="topic-actions">
+                                                <button type="button" class="btn-move-topic move-up" title="Вверх"><i class="bi bi-arrow-up"></i></button>
+                                                <button type="button" class="btn-move-topic move-down" title="Вниз"><i class="bi bi-arrow-down"></i></button>
+                                                <button type="button" class="btn-remove-topic" title="Удалить тему"><i class="bi bi-x-circle"></i></button>
+                                            </div>
+                                        </td>
+                                        {{ topic_form.section_temp.as_hidden }}
+                                        {{ topic_form.id.as_hidden }}
+                                        {{ topic_form.DELETE.as_hidden }}  {# или как есть #}
+                                        {% for hidden in topic_form.hidden_fields %}
+                                            {{ hidden }}
+                                        {% endfor %}
+                                    </tr>
+                                    {% endfor %}
+                                {% endwith %}
+                                <!-- Кнопка добавления темы для этого раздела -->
+                                <tr class="add-topic-row" data-section-temp="{{ section_form.temp_id.value }}">
+                                    <td colspan="10">
+                                        <button type="button" class="btn btn-sm btn-outline-primary btn-add-topic">
+                                            <i class="bi bi-plus-circle"></i> Добавить тему
+                                        </button>
+                                    </td>
+                                </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        {% if program_form.name.value %}
+            <!-- Кнопка скачивания XLSX -->
+            <a href="?export=xlsx" class="btn btn-success mb-3">Скачать УТП<i class="bi bi-download ms-2"></i></a>
+
+            <!-- Отображение таблицы УТП -->
+            <div class="card">
+                <div class="card-header">
+                    <h4>Учебно-тематический план</h4>
+                </div>
+                <div class="card-body">
+                    <table class="table table-bordered table-hover table-sm">
+                        <thead class="table-dark"  style="text-align: center;">
+                            <tr>
+                                <th rowspan="3">Наименование разделов (модулей), тем, видов аттестации</th>
+                                <th colspan="6">Трудоемкость, ак. час</th>
+                                <th rowspan="3">Формы аттестации</th>
+                            </tr>
+                            <tr>
+                                <th rowspan="2">Итого (сумма ст.3 и 7)</th>
+                                <th colspan="3">Виды занятий</th>
+                                <th rowspan="2">В том числе с использованием ДОТ (из ст.3)</th>
+                                <th rowspan="2">СР</th>
+                            </tr>
+                            <tr>
+                                <th>Всего контактной работы</th>
+                                <th>Л</th>
+                                <th>ПЗ,ЛР</th>
+                            </tr>
+                            <tr>
+                                <th>1</th>
+                                <th>2</th>
+                                <th>3</th>
+                                <th>4</th>
+                                <th>5</th>
+                                <th>6</th>
+                                <th>7</th>
+                                <th>8</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for row in table_data %}
+                            <tr {% if row.0 == "Всего академических часов" %} class="table-success" {% endif %}>
+                                <td>{{ row.0 }}</td>
+                                <td>{{ row.1 }}</td>
+                                <td>{{ row.2 }}</td>
+                                <td>{{ row.3 }}</td>
+                                <td>{{ row.4 }}</td>
+                                <td>{{ row.5 }}</td>
+                                <td>{{ row.6 }}</td>
+                                <td>{{ row.7 }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        {% endif %}
+
+        <!-- Шаблон новой формы (скрытый, вне контейнера) -->
+        <template id="empty-form-template">
+            <tr class="table table-info section-form">
+                <td><input type="number" name="sections-__prefix__-order" class="form-control order-input" min="1" /></td>
+                <td><input type="text" name="sections-__prefix__-name" class="form-control" /></td>
+                <td><input type="number" name="sections-__prefix__-lecture_hours" class="form-control" min="0" value="0" readonly/></td>
+                <td><input type="number" name="sections-__prefix__-practice_hours" class="form-control" min="0" value="0" readonly/></td>
+                <td><input type="number" name="sections-__prefix__-selfstudy_hours" class="form-control" min="0" value="0" readonly/></td>
+                <td><input type="number" name="sections-__prefix__-consultation_hours" class="form-control" min="0" value="0" readonly/></td>
+                <td><input type="number" name="sections-__prefix__-dot_hours" class="form-control" min="0" value="0" readonly/></td>
+                <td><input type="text" name="sections-__prefix__-attestation_form" class="form-control" /></td>
+                <td><input type="number" name="sections-__prefix__-workload" class="form-control" min="0" value="0" readonly /></td>
+                <td class="text-center align-middle">
+                    <div class="section-actions">
+                        <button type="button" class="btn-move-section move-up" title="Вверх">
+                            <i class="bi bi-arrow-up"></i>
+                        </button>
+                        <button type="button" class="btn-move-section move-down" title="Вниз">
+                            <i class="bi bi-arrow-down"></i>
+                        </button>
+                        <button type="button" class="btn-remove-section" title="Удалить раздел">
+                            <i class="bi bi-x-circle"></i>
+                        </button>
+                    </div>
+                </td>
+                <input type="hidden" name="sections-__prefix__-id" />
+                <input type="hidden" name="sections-__prefix__-temp_id" />
+            </tr>
+        </template>
+
+        <!-- Управление формсетом тем и шаблон пустой темы -->
+        {{ topics_formset.management_form }}
+        <template id="empty-topic-template">
+            <tr class="topic-form" data-section-temp="{{ section_form.temp_id.value }}">
+                <td><input type="number" name="topics-__prefix__-order" class="form-control order-input" readonly /></td>
+                <td><input type="text" name="topics-__prefix__-name" class="form-control" /></td>
+                <td><input type="number" name="topics-__prefix__-lecture_hours" class="form-control" min="0" value="0"/></td>
+                <td><input type="number" name="topics-__prefix__-practice_hours" class="form-control" min="0" value="0"/></td>
+                <td><input type="number" name="topics-__prefix__-selfstudy_hours" class="form-control" min="0" value="0"/></td>
+                <td><input type="number" name="topics-__prefix__-consultation_hours" class="form-control" min="0" value="0"/></td>
+                <td><input type="number" name="topics-__prefix__-dot_hours" class="form-control" min="0" value="0"/></td>
+                <td><input type="text" name="topics-__prefix__-attestation_form" class="form-control" /></td>
+                <td><input type="number" name="topics-__prefix__-workload" class="form-control" min="0" value="0" readonly /></td>
+                <td>
+                    <div class="topic-actions">
+                        <button type="button" class="btn-move-topic move-up" title="Вверх">
+                            <i class="bi bi-arrow-up"></i>
+                        </button>
+                        <button type="button" class="btn-move-topic move-down" title="Вниз">
+                            <i class="bi bi-arrow-down"></i>
+                        </button>
+                        <button type="button" class="btn-remove-topic" title="Удалить тему">
+                            <i class="bi bi-x-circle"></i>
+                        </button>
+                    </div>
+                </td>
+                <!-- Скрытые поля -->
+                <input type="hidden" name="topics-__prefix__-section_temp" class="topic-section-temp" />
+                <input type="hidden" name="topics-__prefix__-id" />
+                <input type="hidden" name="topics-__prefix__-DELETE" />
+            </tr>
+        </template>
+
+        <!-- Кнопки управления -->
+        <div class="sticky-footer-actions d-flex justify-content-between bg-white p-3 border-top shadow-sm">
+            <div class="container d-flex justify-content-between align-items-center">
+                <button type="button" class="btn btn-secondary" onclick="history.back()">Назад</button>
+                <span id="total-academic-hours" class="fw-bold" style="font-size: 1.4rem;">{{ program_form.academic_hours.value|default_if_none:0 }} ак. часов</span>
+                <button type="submit" class="btn btn-primary">Создать программу</button>
+            </div>
+        </div>
+        {% if program_form.errors or section_formset.non_form_errors or section_formset.errors %}
+        <div class="container mt-2">
+            <div class="alert alert-danger">
+                <ul class="mb-0">
+                    {% for field, errors in program_form.errors.items %}
+                        {% with field_obj=program_form|get_item:field %}
+                            {% for error in errors %}
+                                <li>{{ field_obj.label }}: {{ error }}</li>
+                            {% endfor %}
+                        {% endwith %}
+                    {% endfor %}
+                    {% for error in section_formset.non_form_errors %}
+                        <li>{{ error }}</li>
+                    {% endfor %}
+                    {% for form in section_formset.forms %}
+                        {% for field, errors in form.errors.items %}
+                            {% for error in errors %}
+                                <li>Раздел: {{ form.prefix }} — {{ form.label }}: {{ error }}</li>
+                            {% endfor %}
+                        {% endfor %}
+                    {% endfor %}
+                </ul>
+            </div>
+        </div>
+        {% endif %}
+    </form>
+</div>
+{% endblock %} 
+{% block extra_js %}
+<script>
+function updateSectionOrders() {
+    const forms = document.querySelectorAll('#sections-table-body .section-form');
+    forms.forEach((form, idx) => {
+        const orderInput = form.querySelector('.order-input');
+        if (orderInput) {
+            orderInput.value = idx + 1;
+            orderInput.setAttribute('readonly', true);
+        }
+    });
+}
+
+function updateTopicOrders() {
+    const topics = document.querySelectorAll('#sections-table-body .topic-form');
+    topics.forEach((topic, idx) => {
+        const orderInput = topic.querySelector('.order-input');
+        if (orderInput) {
+            orderInput.value = idx + 1;
+        }
+    });
+}
+
+function updateWorkloadAndTotal() {
+    let total = 0;
+    document.querySelectorAll('#sections-table-body .section-form').forEach(form => {
+        const workload = form.querySelector('[name$="workload"]');
+        if (workload) total += parseInt(workload.value) || 0;
+    });
+    const finalAttestation = document.querySelector('[name$="final_attestation"]');
+    let ia = parseInt(finalAttestation?.value) || 0;
+    total += ia;
+    const academicHours = document.querySelector('[name$="academic_hours"]');
+    if (academicHours) academicHours.value = total;
+    const totalSpan = document.getElementById('total-academic-hours');
+    if (totalSpan) totalSpan.textContent = total + ' ак. часов';
+}
+
+// Новая функция: пересчёт workload темы
+function updateTopicWorkload(topicRow) {
+    const lecture = topicRow.querySelector('[name$="lecture_hours"]');
+    const practice = topicRow.querySelector('[name$="practice_hours"]');
+    const selfstudy = topicRow.querySelector('[name$="selfstudy_hours"]');
+    const consultation = topicRow.querySelector('[name$="consultation_hours"]');
+    const workload = topicRow.querySelector('[name$="workload"]');
+    
+    let l = parseInt(lecture?.value) || 0;
+    let p = parseInt(practice?.value) || 0;
+    let s = parseInt(selfstudy?.value) || 0;
+    let c = parseInt(consultation?.value) || 0;
+    let sum = l + p + s + c;
+    if (workload) workload.value = sum;
+    return sum;
+}
+
+// Новая функция: пересчёт workload раздела по его темам
+function updateSectionWorkload(sectionTempId) {
+    const sectionRow = Array.from(document.querySelectorAll('tr.section-form')).find(row => {
+        const tempInput = row.querySelector('[name$="temp_id"]');
+        return tempInput && tempInput.value === sectionTempId;
+    });
+    if (!sectionRow) return;
+
+    // Все темы этого раздела (видимые и не помеченные на удаление)
+    const topicRows = document.querySelectorAll(`tr.topic-form[data-section-temp="${sectionTempId}"]`);
+    let total = 0;
+    topicRows.forEach(row => {
+        // Игнорируем скрытые (помеченные на удаление)
+        if (row.style.display === 'none') return;
+        const deleteCheckbox = row.querySelector('input[type="checkbox"][name$="-DELETE"]');
+        if (deleteCheckbox && deleteCheckbox.checked) return;
+        
+        // Актуализируем workload темы
+        updateTopicWorkload(row);
+        const wlInput = row.querySelector('[name$="workload"]');
+        if (wlInput) total += parseInt(wlInput.value) || 0;
+    });
+
+    const sectionWorkload = sectionRow.querySelector('[name$="workload"]');
+    if (sectionWorkload) sectionWorkload.value = total;
+    return total;
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    // Валидация форм
+    const forms = document.querySelectorAll('.needs-validation');
+    Array.from(forms).forEach(form => {
+        form.addEventListener('submit', event => {
+            if (!form.checkValidity()) {
+                event.preventDefault();
+                event.stopPropagation();
+            }
+            form.classList.add('was-validated');
+        }, false);
+    });
+
+    const container = document.getElementById('sections-table-body');
+    const addButton = document.getElementById('add-section');
+    const totalSectionsInput = document.getElementById('id_sections-TOTAL_FORMS');
+    const emptySectionTemplate = document.getElementById('empty-form-template');
+    const totalTopicsInput = document.getElementById('id_topics-TOTAL_FORMS');
+    const emptyTopicTemplate = document.getElementById('empty-topic-template');
+    let isAdding = false;
+
+    // Инициализация: проставляем order и пересчитываем workload разделов из тем
+    setTimeout(() => {
+        updateSectionOrders();
+        // Пересчёт workload для всех разделов
+        document.querySelectorAll('tr.section-form').forEach(sectionRow => {
+            const tempInput = sectionRow.querySelector('[name$="temp_id"]');
+            if (tempInput) {
+                updateSectionWorkload(tempInput.value);
+            }
+        });
+        updateTopicOrders();
+        updateWorkloadAndTotal();
+    }, 0);
+
+    // Автоподсчёт при изменении полей темы
+    container.addEventListener('input', function(e) {
+        const target = e.target;
+        const topicRow = target.closest('tr.topic-form');
+        if (topicRow) {
+            updateTopicWorkload(topicRow);
+            const sectionTemp = topicRow.dataset.sectionTemp;
+            if (sectionTemp) {
+                updateSectionWorkload(sectionTemp);
+                updateWorkloadAndTotal();
+            }
+        }
+        // Изменения полей раздела игнорируем (они readonly или не должны влиять)
+    });
+
+    const finalAttestation = document.querySelector('[name$="final_attestation"]');
+    if (finalAttestation) {
+        finalAttestation.addEventListener('input', updateWorkloadAndTotal);
+    }
+
+    // Добавление раздела
+    addButton.addEventListener('click', function(e) {
+        e.preventDefault();
+        if (isAdding) return;
+        isAdding = true;
+
+        let currentSectionTotal = parseInt(totalSectionsInput.value);
+        const newSectionFragment = emptySectionTemplate.content.cloneNode(true);
+        const tempId = 'new_' + Date.now() + '_' + currentSectionTotal;
+
+        newSectionFragment.querySelectorAll('[name*="__prefix__"]').forEach(el => {
+            el.name = el.name.replace('__prefix__', currentSectionTotal);
+            if (el.name && el.name.endsWith('temp_id')) {
+                el.value = tempId;
+            }
+        });
+
+        container.appendChild(newSectionFragment);
+
+        const addTopicRow = document.createElement('tr');
+        addTopicRow.className = 'add-topic-row';
+        addTopicRow.setAttribute('data-section-temp', tempId);
+        const td = document.createElement('td');
+        td.colSpan = 10;
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'btn btn-sm btn-outline-primary btn-add-topic';
+        btn.innerHTML = '<i class="bi bi-plus-circle"></i> Добавить тему';
+        td.appendChild(btn);
+        addTopicRow.appendChild(td);
+        container.appendChild(addTopicRow);
+
+        totalSectionsInput.value = currentSectionTotal + 1;
+        updateSectionOrders();
+        updateWorkloadAndTotal(); // новый раздел с нулевыми часами
+        setTimeout(() => {
+            isAdding = false;
+        }, 100);
+    });
+
+    // Удаление раздела
+    container.addEventListener('click', function(e) {
+        if (e.target.closest('.btn-remove-section')) {
+            e.preventDefault();
+            const sectionRow = e.target.closest('tr.section-form');
+            if (!sectionRow) return;
+
+            const tempIdInput = sectionRow.querySelector('[name$="temp_id"]');
+            const tempId = tempIdInput ? tempIdInput.value : null;
+
+            if (tempId) {
+                const topicRows = container.querySelectorAll('tr.topic-form');
+                topicRows.forEach(row => {
+                    if (row.dataset.sectionTemp === tempId) {
+                        row.remove();
+                    }
+                });
+                const addTopicRow = container.querySelector(`tr.add-topic-row[data-section-temp="${tempId}"]`);
+                if (addTopicRow) addTopicRow.remove();
+            }
+
+            sectionRow.remove();
+            updateSectionOrders();
+            updateWorkloadAndTotal();
+        }
+    });
+
+    // Добавление темы
+    container.addEventListener('click', function(e) {
+        const addTopicBtn = e.target.closest('.btn-add-topic');
+        if (!addTopicBtn) return;
+        e.preventDefault();
+
+        const addTopicRow = addTopicBtn.closest('tr.add-topic-row');
+        if (!addTopicRow) return;
+        const sectionTemp = addTopicRow.dataset.sectionTemp;
+
+        if (!totalTopicsInput) return;
+        let currentTopicTotal = parseInt(totalTopicsInput.value);
+        if (!emptyTopicTemplate) return;
+
+        // Определяем следующий order
+        const topicRowsInSection = container.querySelectorAll(`tr.topic-form[data-section-temp="${sectionTemp}"]`);
+        let maxOrder = 0;
+        topicRowsInSection.forEach(row => {
+            const orderInput = row.querySelector('.order-input');
+            if (orderInput) {
+                const val = parseInt(orderInput.value) || 0;
+                if (val > maxOrder) maxOrder = val;
+            }
+        });
+        const nextOrder = maxOrder + 1;
+
+        const newTopicFragment = emptyTopicTemplate.content.cloneNode(true);
+        const topicRow = newTopicFragment.querySelector('tr.topic-form');
+        if (topicRow) {
+            topicRow.dataset.sectionTemp = sectionTemp;
+        }
+
+        newTopicFragment.querySelectorAll('[name*="__prefix__"]').forEach(el => {
+            el.name = el.name.replace('__prefix__', currentTopicTotal);
+            if (el.classList.contains('topic-section-temp')) {
+                el.value = sectionTemp;
+            }
+            if (el.name.endsWith('order')) {
+                el.value = nextOrder;
+            }
+        });
+
+        container.insertBefore(newTopicFragment, addTopicRow);
+        totalTopicsInput.value = currentTopicTotal + 1;
+
+        // Пересчитываем workload для новой темы и раздела
+        const newTopicRow = container.querySelector(`tr.topic-form[data-section-temp="${sectionTemp}"]:last-of-type`);
+        if (newTopicRow) {
+            updateTopicWorkload(newTopicRow);
+        }
+        updateSectionWorkload(sectionTemp);
+        updateWorkloadAndTotal();
+    });
+
+    // Удаление темы
+    container.addEventListener('click', function(e) {
+        if (e.target.closest('.btn-remove-topic')) {
+            e.preventDefault();
+            const topicRow = e.target.closest('tr.topic-form');
+            if (!topicRow) return;
+
+            const sectionTemp = topicRow.dataset.sectionTemp;
+            const deleteCheckbox = topicRow.querySelector('input[type="checkbox"][name$="-DELETE"]');
+
+            if (deleteCheckbox) {
+                deleteCheckbox.checked = true;
+                topicRow.style.display = 'none';
+            } else {
+                topicRow.remove();
+            }
+
+            if (sectionTemp) {
+                updateSectionWorkload(sectionTemp);
+                updateWorkloadAndTotal();
+            }
+        }
+    });
+
+    // Перемещение разделов
+    container.addEventListener('click', function(e) {
+        if (e.target.closest('.move-up')) {
+            e.preventDefault();
+            const current = e.target.closest('tr.section-form');
+            let prev = current.previousElementSibling;
+            while (prev && !prev.classList.contains('section-form')) {
+                prev = prev.previousElementSibling;
+            }
+            if (prev) {
+                container.insertBefore(current, prev);
+                updateSectionOrders();
+                updateWorkloadAndTotal(); // сумма не меняется, но порядок важен для order
+            }
+        }
+        if (e.target.closest('.move-down')) {
+            e.preventDefault();
+            const current = e.target.closest('tr.section-form');
+            let next = current.nextElementSibling;
+            while (next && !next.classList.contains('section-form')) {
+                next = next.nextElementSibling;
+            }
+            if (next) {
+                container.insertBefore(next, current);
+                updateSectionOrders();
+                updateWorkloadAndTotal();
+            }
+        }
+    });
+
+    // Перемещение тем
+    container.addEventListener('click', function(e) {
+        if (e.target.closest('.move-up')) {
+            if (!e.target.closest('.topic-form')) return;
+            e.preventDefault();
+            const current = e.target.closest('tr.topic-form');
+            let prev = current.previousElementSibling;
+            while (prev && !prev.classList.contains('topic-form')) {
+                prev = prev.previousElementSibling;
+            }
+            if (prev) {
+                container.insertBefore(current, prev);
+                updateTopicOrders();
+                // workload раздела не меняется, но можно обновить порядок
+            }
+        }
+        if (e.target.closest('.move-down')) {
+            if (!e.target.closest('.topic-form')) return;
+            e.preventDefault();
+            const current = e.target.closest('tr.topic-form');
+            let next = current.nextElementSibling;
+            while (next && !next.classList.contains('topic-form')) {
+                next = next.nextElementSibling;
+            }
+            if (next) {
+                container.insertBefore(next, current);
+                updateTopicOrders();
+            }
+        }
+    });
+});
+</script>
+{% endblock %}

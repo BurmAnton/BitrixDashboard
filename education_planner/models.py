@@ -2,6 +2,8 @@ from django.db import models
 from django.utils.translation import gettext_lazy as _
 from django.utils import timezone
 from django.core.exceptions import ValidationError
+from django.db.models.signals import post_save
+from django.dispatch import receiver
 
 class ProfActivity(models.Model):
     """Модель для хранения сфер деятельности"""
@@ -95,8 +97,83 @@ class ProgramSection(models.Model):
         ordering = ['order', 'name']
         unique_together = ['program', 'order']
 
+    def update_hours_from_topics(self):
+            """Пересчитывает часы секции на основе связанных топиков"""
+            total_lecture = self.topics.aggregate(
+                lecture_total=models.Sum('lecture_hours')
+            )['lecture_total'] or 0
+            
+            total_practice = self.topics.aggregate(
+                practice_total=models.Sum('practice_hours')
+            )['practice_total'] or 0
+            
+            total_selfstudy = self.topics.aggregate(
+                selfstudy_total=models.Sum('selfstudy_hours')
+            )['selfstudy_total'] or 0
+            
+            total_consultation = self.topics.aggregate(
+                consultation_total=models.Sum('consultation_hours')
+            )['consultation_total'] or 0
+            
+            total_dot = self.topics.aggregate(
+                dot_total=models.Sum('dot_hours')
+            )['dot_total'] or 0
+            
+            total_workload = self.topics.aggregate(
+                workload_total=models.Sum('workload')
+            )['workload_total'] or 0
+            
+            # Обновляем поля секции
+            self.lecture_hours = total_lecture
+            self.practice_hours = total_practice
+            self.selfstudy_hours = total_selfstudy
+            self.consultation_hours = total_consultation
+            self.dot_hours = total_dot
+            self.workload = total_workload
+            
+            self.save(update_fields=[
+                'lecture_hours', 'practice_hours', 'selfstudy_hours',
+                'consultation_hours', 'dot_hours', 'workload'
+            ])
+
     def __str__(self):
         return f"{self.program.name} - {self.name}"
+
+class ProgramTopics(models.Model):
+    """Модель для хранения тем образовательной программы"""
+    section = models.ForeignKey(
+        ProgramSection,
+        verbose_name=_('Раздел'),
+        on_delete=models.CASCADE,
+        related_name='topics'
+    )
+    name = models.CharField(_('Название темы'), max_length=255)
+    lecture_hours = models.PositiveIntegerField(_('Лекции (Л)'), default=0)
+    practice_hours = models.PositiveIntegerField(_('Практические занятия (ПЗ)'), default=0)
+    selfstudy_hours = models.PositiveIntegerField(_('Самостоятельная работа (СР)'), default=0)
+    consultation_hours = models.PositiveIntegerField(_('Консультации (К)'), default=0)
+    dot_hours = models.PositiveIntegerField(_('Часов с применением ДОТ'), default=0)
+    workload = models.PositiveIntegerField(_('Трудоёмкость (часы)'), default=0)
+    attestation_form = models.CharField(_('Форма аттестации'), max_length=255, blank=True)
+    description = models.TextField(_('Описание темы'), blank=True)
+    order = models.PositiveIntegerField(_('Порядок'), default=0)
+    created_at = models.DateTimeField(_('Дата создания'), auto_now_add=True)
+    updated_at = models.DateTimeField(_('Дата обновления'), auto_now=True)
+
+    class Meta:
+        verbose_name = _('Тема программы')
+        verbose_name_plural = _('Темы программы')
+        ordering = ['order', 'name']
+        unique_together = ['section', 'order']
+
+    def __str__(self):
+        return f"{self.section.name} - {self.name}"
+
+@receiver(post_save, sender=ProgramTopics)
+def update_section_hours_on_topic_save(sender, instance, **kwargs):
+    """Автоматически обновляет часы секции при сохранении топика"""
+    if instance.section:
+        instance.section.update_hours_from_topics()
 
 class Region(models.Model):
     """Модель для хранения регионов реализации программ"""
