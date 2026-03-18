@@ -397,6 +397,151 @@ def build_utp_table(program):
 
     return rows
 
+def build_tgu_table(program):
+    """Таблица для шаблона ТГУ"""
+    rows = []
+    sections = program.sections.all().order_by('order')
+    roman_numerals = ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X']
+
+    for sec_idx, section in enumerate(sections, start=1):
+        roman = roman_numerals[sec_idx-1] if sec_idx <= len(roman_numerals) else str(sec_idx)
+        total_sec = section.workload or 0
+        dot_sec = section.dot_hours or 0
+        rows.append([
+            roman,                                          # 1 – № п/п
+            section.name,                                   # 2 – Наименование
+            total_sec,                                       # 3 – Всего, ч.
+            f"{dot_sec} ({dot_sec/total_sec*100:.0f}%)" if total_sec else '0 (0%)',  # 4 – ДОТ, ч/%
+            section.lecture_hours or 0,                      # 5 – Лекции всего
+            0,                                                # 6 – Лекции ДОТ
+            0,                                                # 7 – Лаб. всего
+            0,                                                # 8 – Лаб. ДОТ
+            section.practice_hours or 0,                      # 9 – Практика всего
+            0,                                                # 10 – Практика ДОТ
+            section.selfstudy_hours or 0,                     # 11 – СРС
+            section.attestation_form or ''                    # 12 – Форма контроля
+        ])
+
+        for top_idx, topic in enumerate(section.topics.all().order_by('order'), start=1):
+            total_topic = topic.workload or 0
+            dot_topic = topic.dot_hours or 0
+            rows.append([
+                f"{sec_idx}.{top_idx}",
+                f"    {topic.name}",
+                total_topic,
+                f"{dot_topic} ({dot_topic/total_topic*100:.0f}%)" if total_topic else '0 (0%)',
+                topic.lecture_hours or 0,
+                0,
+                0,
+                0,
+                topic.practice_hours or 0,
+                0,
+                topic.selfstudy_hours or 0,
+                topic.attestation_form or ''
+            ])
+
+    # Итоговая аттестация
+    final_att = program.final_attestation or 0
+    rows.append([
+        '*',
+        'Итоговая аттестация',
+        final_att,
+        '0 (0%)',
+        0,
+        0,
+        0,
+        0,
+        final_att,
+        0,
+        0,
+        'Итоговая аттестация'
+    ])
+
+    # Общий итог
+    total_workload = sum(s.workload for s in sections) + final_att
+    total_lecture = sum(s.lecture_hours for s in sections)
+    total_practice = sum(s.practice_hours for s in sections) + final_att
+    total_selfstudy = sum(s.selfstudy_hours for s in sections)
+    total_dot = sum(s.dot_hours for s in sections)
+
+    rows.append([
+        '',
+        'Итого',
+        total_workload,
+        f"{total_dot} ({total_dot/total_workload*100:.0f}%)" if total_workload else '0 (0%)',
+        total_lecture,
+        0,
+        0,
+        0,
+        total_practice,
+        0,
+        total_selfstudy,
+        ''
+    ])
+
+    return rows
+
+def build_appendix3_table(program):
+    """Таблица для шаблона ИРПО"""
+    rows = []
+    sections = program.sections.all().order_by('order')
+
+    for section in sections:
+        rows.append([
+            section.name,                                    # 1 – Наименование
+            section.workload or 0,                            # 2 – Всего, час.
+            section.lecture_hours or 0,                        # 3 – ТЗ (лекции)
+            section.practice_hours or 0,                       # 4 – ПЗ (практика)
+            section.selfstudy_hours or 0,                      # 5 – СР
+            section.consultation_hours or 0,                   # 6 – К (консультации)
+            section.dot_hours or 0,                            # 7 – ДОТ
+            section.attestation_form or ''                     # 8 – Форма аттестации
+        ])
+
+        for topic in section.topics.all().order_by('order'):
+            rows.append([
+                f"    {topic.name}",
+                topic.workload or 0,
+                topic.lecture_hours or 0,
+                topic.practice_hours or 0,
+                topic.selfstudy_hours or 0,
+                topic.consultation_hours or 0,
+                topic.dot_hours or 0,
+                topic.attestation_form or ''
+            ])
+
+    final_att = program.final_attestation or 0
+    rows.append([
+        'Итоговая аттестация',
+        final_att,
+        0,
+        final_att,
+        0,
+        0,
+        0,
+        'Итоговая аттестация'
+    ])
+
+    total_workload = sum(s.workload for s in sections) + final_att
+    total_tz = sum(s.lecture_hours for s in sections)
+    total_pz = sum(s.practice_hours for s in sections) + final_att
+    total_sr = sum(s.selfstudy_hours for s in sections)
+    total_k = sum(s.consultation_hours for s in sections)
+    total_dot = sum(s.dot_hours for s in sections)
+
+    rows.append([
+        'Всего ак. часов',
+        total_workload,
+        total_tz,
+        total_pz,
+        total_sr,
+        total_k,
+        total_dot,
+        'х'
+    ])
+
+    return rows
+
 def generate_utp_xlsx(program):
     """
     Создаёт XLSX-файл с полным УТП по шаблону.
@@ -443,6 +588,262 @@ def generate_utp_xlsx(program):
     for col in range(1, 9):
         column_letter = get_column_letter(col)
         ws.column_dimensions[column_letter].width = 18
+
+    return wb
+
+def generate_appendix3_xlsx(program):
+    wb = Workbook()
+    ws = wb.active
+    ws.title = f"Приложение 3"
+
+    # === Информационная часть ===
+    info_rows = [
+        ["Приложение 3 к Заявке"],
+        [],
+        ["Учебный план образовательной программы"],
+        [],
+        ["Наименование организации", ""],
+        ["Вид, подвид программы", program.get_program_type_display()],
+        ["Наименование программы", program.name],
+        ["Код категории программы", ""],  # можно заполнить из дополнительного поля, если есть
+    ]
+    for r_idx, row_data in enumerate(info_rows, start=1):
+        for c_idx, value in enumerate(row_data, start=1):
+            cell = ws.cell(row=r_idx, column=c_idx, value=value)
+            cell.font = Font(bold=True) if r_idx in (1,3) else Font()
+            if r_idx == 1:
+                cell.font = Font(bold=True, size=14)
+
+    # === Заголовки таблицы ===
+    headers = [
+        ["Наименование разделов (модулей), тем", "Общая трудоемкость, (час.)", "", "", "", "", "", "Форма аттестации"],
+        ["", "Всего, час.", "в т.ч. по видам занятий, час.", "", "", "", "из них, с применением ДОТ, час.", ""],
+        ["", "", "ТЗ[1]", "ПЗ[2]", "СР[3]", "К[4]", "", ""],
+        ['1', '2', '3', '4', '5', '6', '7', '8']
+    ]
+    # Объединение ячеек шапки
+    start_row = len(info_rows) + 2  # после информационной части и пустой строки
+    for r_idx, row in enumerate(headers, start=start_row):
+        for c_idx, val in enumerate(row, start=1):
+            cell = ws.cell(row=r_idx, column=c_idx, value=val)
+            cell.alignment = Alignment(horizontal='center', vertical='center', wrap_text=True)
+            cell.font = Font(bold=True)
+    ws.merge_cells(start_row=start_row, start_column=1, end_row=start_row+2, end_column=1)  # "Наименование разделов (модулей), тем"
+    ws.merge_cells(start_row=start_row, start_column=2, end_row=start_row, end_column=7)  # "Общая трудоемкость"
+    ws.merge_cells(start_row=start_row+1, start_column=2, end_row=start_row+2, end_column=2)  # "Всего, час."
+    ws.merge_cells(start_row=start_row+1, start_column=3, end_row=start_row+1, end_column=6)  # "в т.ч. по видам занятий"
+    ws.merge_cells(start_row=start_row+2, start_column=3, end_row=start_row+2, end_column=3)  # ТЗ
+    ws.merge_cells(start_row=start_row+2, start_column=4, end_row=start_row+2, end_column=4)  # ПЗ
+    ws.merge_cells(start_row=start_row+2, start_column=5, end_row=start_row+2, end_column=5)  # СР
+    ws.merge_cells(start_row=start_row+2, start_column=6, end_row=start_row+2, end_column=6)  # К
+    ws.merge_cells(start_row=start_row+1, start_column=7, end_row=start_row+2, end_column=7)  # из них ДОТ
+    ws.merge_cells(start_row=start_row, start_column=8, end_row=start_row+2, end_column=8)  # Форма аттестации
+
+    # === Данные таблицы ===
+    data_rows = []
+    sections = program.sections.all().order_by('order')
+    for section in sections:
+        # Строка раздела
+        data_rows.append([
+            section.name,
+            section.workload,
+            section.lecture_hours,
+            section.practice_hours,
+            section.selfstudy_hours,
+            section.consultation_hours,
+            section.dot_hours,
+            section.attestation_form or ''
+        ])
+        # Темы раздела
+        for topic in section.topics.all().order_by('order'):
+            data_rows.append([
+                f"    {topic.name}",
+                topic.workload,
+                topic.lecture_hours,
+                topic.practice_hours,
+                topic.selfstudy_hours,
+                topic.consultation_hours,
+                topic.dot_hours,
+                topic.attestation_form or ''
+            ])
+
+    # Итоговая аттестация
+    final_att = program.final_attestation or 0
+    data_rows.append([
+        "Итоговая аттестация",
+        final_att,
+        0,  # ТЗ
+        final_att,  # ПЗ (можно считать, что вся ИА – практическая)
+        0,
+        0,
+        0,
+        "Итоговая аттестация"
+    ])
+
+    # Итог по программе
+    total_workload = sum(s.workload for s in sections) + final_att
+    total_tz = sum(s.lecture_hours for s in sections)
+    total_pz = sum(s.practice_hours for s in sections) + final_att
+    total_sr = sum(s.selfstudy_hours for s in sections)
+    total_k = sum(s.consultation_hours for s in sections)
+    total_dot = sum(s.dot_hours for s in sections)
+
+    data_rows.append([
+        "Всего ак. часов",
+        total_workload,
+        total_tz,
+        total_pz,
+        total_sr,
+        total_k,
+        total_dot,
+        "х"
+    ])
+
+    # Проценты (опционально, можно добавить как комментарий или отдельными строками)
+    # Сноски уже есть в шаблоне, их можно не дублировать, либо добавить текстом ниже.
+
+    # Запись данных
+    for r_idx, row_data in enumerate(data_rows, start=start_row+4):
+        for c_idx, value in enumerate(row_data, start=1):
+            cell = ws.cell(row=r_idx, column=c_idx, value=value)
+            cell.alignment = Alignment(horizontal='center', vertical='center', wrap_text=True)
+
+    # Настройка ширины колонок
+    for col in range(1, 9):
+        ws.column_dimensions[get_column_letter(col)].width = 20
+
+    return wb
+
+def generate_tgu_utp_xlsx(program):
+    wb = Workbook()
+    ws = wb.active
+    ws.title = f"УТП_ТГУ"
+
+    # ---------- Шапка ----------
+    headers = [
+        # 1-я строка
+        ['№', 'Наименование дисциплин (модулей, курсов), разделов, тем',
+         'Срок освоения / трудоемкость', '',
+         'Контактные часы, в.т.ч. с применением ДОТ', '', '', '', '', '',
+         'СРС, ч.', 'Формы контроля'],
+        # 2-я строка
+        ['', '', '', '', 'лекции', '', 'лабораторные работы', '',
+         'практические и семинарские занятия', '', '', ''],
+        # 3-я строка
+        ['п/п', '', 'Всего, ч.', 'из них с ДОТ, ч / (%)',
+         'Всего, ч', 'из них с ДОТ, ч',
+         'Всего, ч', 'из них с ДОТ, ч',
+         'Всего, ч', 'из них с ДОТ, ч',
+         '', '']
+    ]
+
+    # Запись заголовков
+    for r_idx, row in enumerate(headers, start=1):
+        for c_idx, val in enumerate(row, start=1):
+            cell = ws.cell(row=r_idx, column=c_idx, value=val)
+            cell.alignment = Alignment(horizontal='center', vertical='center', wrap_text=True)
+            cell.font = Font(bold=True)
+
+    # ---------- Объединение ячеек в шапке ----------
+    ws.merge_cells(start_row=1, start_column=1, end_row=2, end_column=1)   # №
+    ws.merge_cells(start_row=1, start_column=2, end_row=3, end_column=2)   # Наименование дисциплин (модулей, курсов), разделов, тем
+    ws.merge_cells(start_row=1, start_column=3, end_row=2, end_column=4)   # Срок освоения / трудоемкость
+    ws.merge_cells(start_row=1, start_column=5, end_row=1, end_column=10)  # Контактные часы ...
+    ws.merge_cells(start_row=2, start_column=5, end_row=2, end_column=6)   # Лекции
+    ws.merge_cells(start_row=2, start_column=7, end_row=2, end_column=8)   # Лабораторные работы
+    ws.merge_cells(start_row=2, start_column=9, end_row=2, end_column=10)  # Практические и семинарские занятия
+    ws.merge_cells(start_row=1, start_column=11, end_row=3, end_column=11)  # СРС, ч
+    ws.merge_cells(start_row=1, start_column=12, end_row=3, end_column=12)  # Формы контроля
+    # ---------- Сбор данных тела таблицы ----------
+    data_rows = []
+    sections = program.sections.all().order_by('order')
+    roman_numerals = ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X']
+
+    for sec_idx, section in enumerate(sections, start=1):
+        roman = roman_numerals[sec_idx-1] if sec_idx <= len(roman_numerals) else str(sec_idx)
+        total_sec = section.workload or 0
+        dot_sec = section.dot_hours or 0
+        data_rows.append([
+            roman,
+            section.name,
+            total_sec,
+            f"{dot_sec} ({dot_sec/total_sec*100:.0f}%)" if total_sec else '0 (0%)',
+            section.lecture_hours or 0,
+            0,
+            0,
+            0,
+            section.practice_hours or 0,
+            0,
+            section.selfstudy_hours or 0,
+            section.attestation_form or ''
+        ])
+
+        for top_idx, topic in enumerate(section.topics.all().order_by('order'), start=1):
+            total_topic = topic.workload or 0
+            dot_topic = topic.dot_hours or 0
+            data_rows.append([
+                f"{sec_idx}.{top_idx}",
+                f"    {topic.name}",
+                total_topic,
+                f"{dot_topic} ({dot_topic/total_topic*100:.0f}%)" if total_topic else '0 (0%)',
+                topic.lecture_hours or 0,
+                0,
+                0,
+                0,
+                topic.practice_hours or 0,
+                0,
+                topic.selfstudy_hours or 0,
+                topic.attestation_form or ''
+            ])
+
+    # Итоговая аттестация
+    final_att = program.final_attestation or 0
+    data_rows.append([
+        '*',
+        'Итоговая аттестация',
+        final_att,
+        '0 (0%)',
+        0,
+        0,
+        0,
+        0,
+        final_att,
+        0,
+        0,
+        'Итоговая аттестация'
+    ])
+
+    # Итого по программе
+    total_workload = sum(s.workload for s in sections) + final_att
+    total_lecture = sum(s.lecture_hours for s in sections)
+    total_practice = sum(s.practice_hours for s in sections) + final_att
+    total_selfstudy = sum(s.selfstudy_hours for s in sections)
+    total_dot = sum(s.dot_hours for s in sections)
+
+    data_rows.append([
+        '',
+        'Итого',
+        total_workload,
+        f"{total_dot} ({total_dot/total_workload*100:.0f}%)" if total_workload else '0 (0%)',
+        total_lecture,
+        0,
+        0,
+        0,
+        total_practice,
+        0,
+        total_selfstudy,
+        ''
+    ])
+
+    # Запись данных
+    for r_idx, row_data in enumerate(data_rows, start=4):
+        for c_idx, value in enumerate(row_data, start=1):
+            cell = ws.cell(row=r_idx, column=c_idx, value=value)
+            cell.alignment = Alignment(horizontal='center', vertical='center', wrap_text=True)
+
+    # Автоширина колонок
+    for col in range(1, 13):
+        ws.column_dimensions[get_column_letter(col)].width = 16
 
     return wb
 
@@ -542,14 +943,27 @@ def program_details(request, pk):
     program = get_object_or_404(EducationProgram, pk=pk)
 
     # Экспорт в XLSX (без изменений)
-    if request.GET.get('export') == 'xlsx':
-        wb = generate_utp_xlsx(program)
-        response = HttpResponse(
-            content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-        )
-        response['Content-Disposition'] = f'attachment; filename="program_{program.id}_utp.xlsx"'
-        wb.save(response)
-        return response
+    export_format = request.GET.get('export')
+    if export_format:
+        filename = f"program_{program.id}_utp"
+        wb = None
+        if export_format == 'standard':
+            wb = generate_utp_xlsx(program)
+            filename += ".xlsx"
+        elif export_format == 'tgu':
+            wb = generate_tgu_utp_xlsx(program)
+            filename = f"TGU_{program.id}.xlsx"
+        elif export_format == 'appendix3':
+            wb = generate_appendix3_xlsx(program)
+            filename = f"Appendix3_{program.id}.xlsx"
+
+        if wb:
+            response = HttpResponse(
+                content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+            )
+            response['Content-Disposition'] = f'attachment; filename="{filename}"'
+            wb.save(response)
+            return response
 
     if request.method == 'POST':
         program_form = EducationProgramForm(request.POST, instance=program)
@@ -559,43 +973,100 @@ def program_details(request, pk):
             queryset=ProgramTopics.objects.filter(section__program=program),
             prefix='topics'
         )
-        if (program_form.is_valid() and section_formset.is_valid() and topics_formset.is_valid()):
-            program = program_form.save()
 
-            temp_id_to_section = {}
-            for form in section_formset:
-                if form.cleaned_data.get('DELETE'):
-                    if form.instance.pk:
+        if program_form.is_valid() and section_formset.is_valid() and topics_formset.is_valid():
+            with transaction.atomic():
+                program = program_form.save()
+
+                # 1. Удаляем темы, помеченные пользователем (DELETE=True)
+                for form in topics_formset:
+                    if form.cleaned_data.get('DELETE') and form.instance.pk:
                         form.instance.delete()
-                    continue
-                section = form.save(commit=False)
-                section.program = program
-                temp_id = form.cleaned_data.get('temp_id')
-                section.save()
-                if temp_id:
-                    temp_id_to_section[temp_id] = section
-                if section.pk and str(section.pk) not in temp_id_to_section:
-                    temp_id_to_section[str(section.pk)] = section
 
-            # Сохраняем темы
-            for form in topics_formset:
-                if form.cleaned_data.get('DELETE'):
-                    if form.instance.pk:
-                        form.instance.delete()
-                    continue
-                topic = form.save(commit=False)
-                section_temp = form.cleaned_data.get('section_temp')
-                if section_temp in temp_id_to_section:
-                    topic.section = temp_id_to_section[section_temp]
-                topic.save()
+                # 2. Обрабатываем разделы
+                temp_id_to_section = {}
+                deleted_section_ids = set()
 
-            # Пересчёт часов
-            total = sum((s.workload or 0) for s in program.sections.all()) + (program.final_attestation or 0)
-            program.academic_hours = total
-            program.save()
-            messages.success(request, 'Программа успешно обновлена!')
-            return redirect('education_planner:program_details', pk=program.pk)
+                for form in section_formset:
+                    if form.cleaned_data.get('DELETE'):
+                        if form.instance.pk:
+                            # Удаляем все темы этого раздела вручную (если они ещё есть)
+                            ProgramTopics.objects.filter(section=form.instance).delete()
+                            form.instance.delete()
+                            deleted_section_ids.add(form.instance.pk)
+                        continue
 
+                    section = form.save(commit=False)
+                    section.program = program
+                    temp_id = form.cleaned_data.get('temp_id')
+                    section.save()
+                    if temp_id:
+                        temp_id_to_section[temp_id] = section
+                    if section.pk:
+                        temp_id_to_section[str(section.pk)] = section
+
+                # 3. Обрабатываем оставшиеся темы (не удалённые)
+                topics_by_section = {}  # ключ: id раздела, значение: список (form, section)
+
+                for form in topics_formset:
+                    if form.cleaned_data.get('DELETE'):
+                        continue  # уже удалены
+
+                    section_temp = form.cleaned_data.get('section_temp')
+                    target_section = None
+
+                    if section_temp in temp_id_to_section:
+                        target_section = temp_id_to_section[section_temp]
+                    else:
+                        try:
+                            section_id = int(section_temp)
+                            if section_id not in deleted_section_ids:
+                                target_section = ProgramSection.objects.get(pk=section_id, program=program)
+                        except (ValueError, ProgramSection.DoesNotExist):
+                            pass
+
+                    if target_section:
+                        topics_by_section.setdefault(target_section.id, []).append((form, target_section))
+                    else:
+                        # Раздел не найден — удаляем тему (orphan)
+                        if form.instance.pk:
+                            form.instance.delete()
+
+                # 4. Сохраняем темы с пересчитанным order
+                for section_id, topics in topics_by_section.items():
+                    for idx, (form, section) in enumerate(topics, start=1):
+                        topic = form.save(commit=False)
+                        topic.section = section
+                        topic.order = idx
+                        topic.save()
+
+                # 5. Пересчитываем order разделов по порядку формсета
+                sections_in_order = []
+                for form in section_formset:
+                    if form.cleaned_data.get('DELETE'):
+                        continue
+                    # Определяем сохранённый раздел
+                    temp_id = form.cleaned_data.get('temp_id')
+                    if temp_id and temp_id in temp_id_to_section:
+                        section = temp_id_to_section[temp_id]
+                    elif form.instance.pk and form.instance.pk not in deleted_section_ids:
+                        section = form.instance
+                    else:
+                        continue
+                    sections_in_order.append(section)
+
+                for idx, section in enumerate(sections_in_order, start=1):
+                    if section.order != idx:
+                        section.order = idx
+                        section.save()
+
+                # 6. Обновляем общую трудоёмкость программы
+                total = sum((s.workload or 0) for s in program.sections.all()) + (program.final_attestation or 0)
+                program.academic_hours = total
+                program.save()
+
+                messages.success(request, 'Программа успешно обновлена!')
+                return redirect('education_planner:program_details', pk=program.pk)
     else:  # GET
         program_form = EducationProgramForm(instance=program)
         section_formset = ProgramSectionFormSet(instance=program, prefix='sections')
@@ -617,26 +1088,38 @@ def program_details(request, pk):
                 # для новых разделов генерируем уникальный временный ID
                 form.initial['temp_id'] = f'new_{int(time.time()*1000)}_{form.prefix}'
 
-    # Строим topics_by_section уже после установки initial
-    topics_by_section = {}
-    for form in topics_formset:
-        section_temp = form.initial.get('section_temp')
-        if section_temp:
-            topics_by_section.setdefault(section_temp, []).append(form)
+        # Строим topics_by_section уже после установки initial
+        topics_by_section = {}
+        for form in topics_formset:
+            section_temp = form.initial.get('section_temp')
+            if section_temp:
+                topics_by_section.setdefault(section_temp, []).append(form)
 
-    # Подготовка таблицы УТП и требований (как было)
-    table_data = build_utp_table(program)
-    requirements = check_for_requirements(program)
-    # return JsonResponse({'s': str(topics_formset)})
-    context = {
-        'program_form': program_form,
-        'section_formset': section_formset,
-        'topics_formset': topics_formset,
-        'topics_by_section': topics_by_section,
-        'table_data': table_data,
-        'requirements': requirements,
-    }
-    return render(request, 'education_planner/program_details.html', context)
+        # Подготовка таблицы УТП и требований (как было)
+        requirements = check_for_requirements(program)
+        tables = {
+            'ВНИИ': {
+                'export_url': '?export=standard',
+                'rows': build_utp_table(program),
+            },
+            'ТГУ': {
+                'export_url': '?export=tgu',
+                'rows': build_tgu_table(program),
+            },
+            'ИРПО': {
+                'export_url': '?export=appendix3',
+                'rows': build_appendix3_table(program),
+            }
+        }
+        context = {
+            'program_form': program_form,
+            'section_formset': section_formset,
+            'topics_formset': topics_formset,
+            'topics_by_section': topics_by_section,
+            'tables': tables,
+            'requirements': requirements
+        }
+        return render(request, 'education_planner/program_details.html', context)
 
 @login_required
 def agreements_dashboard(request):
