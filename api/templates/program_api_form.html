@@ -1,0 +1,309 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}REST API{% endblock %}
+
+{% block extra_css %}
+    <style>
+        .col-sm-2{
+            text-align: right;
+        }
+        .messages{
+            display: none;
+        }
+        .container{
+            width: 95%; 
+            max-width: 95%;
+        }
+        label{
+            font-size: smaller;
+        }
+        .code-block{
+            background-color: #ebf2f3;
+            border-radius: 12px;
+            padding: 2%;
+        }
+    </style>
+{% endblock %}
+
+{% block content %}
+<body>
+    <div class="row" style="height: 100%;">
+        <!-- Левая колонка: форма для тестов -->
+        <div class="col-md-6">
+            <div class="container-fluid">
+                <div class="card">
+                    <div class="card-header">
+                        <h5>Получение списков контактов</h5>
+                    </div>
+                    <div class="card-body" style="height: 780px">
+                        <form method="post">
+                            {% csrf_token %}
+
+                            <div class="mb-3 position-relative">
+                                <label for="password" class="form-label">Токен</label>
+                                <div class="input-group">
+                                    <input type="password" readonly class="form-control form-control-sm" id="password" value="{{ token }}">
+                                    <button type="button" class="btn btn-outline-secondary btn-sm" id="togglePassword" style="width: 20%;">Показать</button>
+                                </div>
+                            </div>
+
+                            <!-- Название программы (contains) -->
+                            <div class="mb-3 d-flex align-items-center">
+                                <div class="col-sm-2">
+                                    <label for="nameInput" class="form-label me-2 mb-0">Название</label>
+                                </div>
+                                <input type="text" class="form-control form-control-sm me-2" name="name" id="nameInput" placeholder="Часть названия...">
+                            </div>
+
+                            <!-- Тип программы (exact) -->
+                            <div class="mb-3 d-flex align-items-center">
+                                <div class="col-sm-2">
+                                    <label for="programTypeInput" class="form-label me-2 mb-0">Тип программы</label>
+                                </div>
+                                <select class="form-control form-control-sm me-2" name="program_type" id="programTypeInput">
+                                    <option selected value="">------------------</option>
+                                    <option value="ADV">ДПО ПК</option>
+                                    <option value="PROFP">ПО ПП</option>
+                                    <option value="PROF">ПО</option>
+                                </select>
+                            </div>
+
+                            <!-- Форма обучения (exact) -->
+                            <div class="mb-3 d-flex align-items-center">
+                                <div class="col-sm-2">
+                                    <label for="studyFormInput" class="form-label me-2 mb-0">Форма обучения</label>
+                                </div>
+                                <select class="form-control form-control-sm me-2" name="study_form" id="studyFormInput">
+                                    <option selected value="">------------------</option>
+                                    <option value="FT">Очная</option>
+                                    <option value="PT">Очно-заочная</option>
+                                    <option value="DIST">Заочная</option>
+                                </select>
+                            </div>
+
+                            <!-- Электронное обучение (DOT) -->
+                            <div class="mb-3 d-flex align-items-center">
+                                <div class="col-sm-2">
+                                    <label class="form-label me-2">с ДОТ</label>
+                                </div>
+                                <div class="form-check form-check-inline">
+                                    <input class="form-check-input" type="radio" name="DOT" id="dotTrue" value="true">
+                                    <label class="form-check-label" for="dotTrue">Да</label>
+                                </div>
+                                <div class="form-check form-check-inline">
+                                    <input class="form-check-input" type="radio" name="DOT" id="dotFalse" value="false">
+                                    <label class="form-check-label" for="dotFalse">Нет</label>
+                                </div>
+                                <div class="form-check form-check-inline ms-3">
+                                    <input class="form-check-input" type="radio" name="DOT" id="dotAll" value="" checked>
+                                    <label class="form-check-label" for="dotAll">Все</label>
+                                </div>
+                            </div>
+
+                            <div class="mb-2">
+                                <label for="apiLink" class="form-label">Ссылка API для fetch</label>
+                                <input type="text" readonly class="form-control form-control-sm" id="apiLink" name="apiLink" value="{{ URL|safe }}">
+                            </div>
+
+
+                            <button type="submit" class="btn btn-primary btn-sm">Отправить</button>
+                        </form>
+
+
+
+                        <div class="card" style="margin-top: 12px; padding: 1%; height: 50%; overflow-y: auto; font-size: small;" >
+                            <pre id="JsonResponse"></pre>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+<div class="col-md-6">
+    <div class="container-fluid">
+        <div class="card">
+            <div class="card-header">
+                <h5>Документация REST API по программам</h5>
+            </div>
+            <div class="card-body" style="max-height: 780px; overflow-y: auto;">
+                <h3>Эндпоинт</h3>
+                <p><code>GET /api/program/</code></p>
+
+                <h3>Назначение</h3>
+                <p>Получение списка образовательных программ с возможностью фильтрации по названию, типу, форме обучения и использованию ДОТ.</p>
+
+                <h3>Аутентификация</h3>
+                <p>Требуется токен в заголовке <code>Authorization: Token &lt;ваш_токен&gt;</code>.</p>
+
+                <h3>Параметры фильтрации</h3>
+                <table class="table table-striped table-sm">
+                    <thead>
+                        <tr>
+                            <th>Параметр</th>
+                            <th>Тип</th>
+                            <th>Описание</th>
+                            <th>Пример</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><code>name</code></code></td>
+                            <td>string</code></td>
+                            <td>Поиск по названию (частичное совпадение, регистрозависимо)</code></td>
+                            <td><code>?name=цифровая</code></code></td>
+                        </tr>
+                        <tr>
+                            <td><code>program_type</code></code></td>
+                            <td>string</code></td>
+                            <td>Точное совпадение типа программы</code></td>
+                            <td><code>?program_type=PROF</code></code></td>
+                        </tr>
+                        <tr>
+                            <td><code>study_form</code></code></td>
+                            <td>string</code></td>
+                            <td>Точное совпадение формы обучения</code></td>
+                            <td><code>?study_form=FT</code></code></td>
+                        </tr>
+                        <tr>
+                            <td><code>DOT</code></code></td>
+                            <td>boolean</code> (true/false)</code></td>
+                            <td>Фильтр по наличию электронного обучения</code></td>
+                            <td><code>?DOT=true</code></code></td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <h3>Примеры запросов</h3>
+                <h4>cURL</h4>
+                <pre class="bg-light p-3 rounded"><code>curl -X GET "https://bitrix24.tuna-edu.ru/api/program/?name=менеджмент&program_type=PROF&DOT=true" \
+-H "Authorization: Token ваш_токен"</code></pre>
+
+                <h4>JavaScript (fetch)</h4>
+                <pre class="bg-light p-3 rounded"><code>fetch('/api/program/?name=менеджмент&study_form=FT', {
+    headers: { 'Authorization': 'Token ваш_токен' }
+})
+.then(res => res.json())
+.then(data => console.log(data));</code></pre>
+
+                <h4>Python (requests)</h4>
+                <pre class="bg-light p-3 rounded"><code>import requests
+params = {'program_type': 'PROF', 'DOT': 'false'}
+headers = {'Authorization': 'Token ваш_токен'}
+response = requests.get('https://bitrix24.tuna-edu.ru/api/program/', params=params, headers=headers)
+print(response.json())</code></pre>
+
+                <h3>Пример успешного ответа (HTTP 200)</h3>
+                <pre class="bg-light p-3 rounded"><code>[
+    {
+      "id": 6,
+      "name": "Оператор БПЛА 30 КГ",
+      "academic_hours": 20,
+      "program_type": "PROF",
+      "study_form": "FT",
+      "DOT": false,
+      "description": "",
+      "duration": 0,
+      "final_attestation": 8,
+      "created_at": "2026-03-11T14:10:32.638704+04:00",
+      "updated_at": "2026-03-19T16:19:44.233163+04:00",
+      "activities": null
+    }
+]</code></pre>
+
+                <h3>Возможные ошибки</h3>
+                <table class="table table-striped table-sm">
+                    <thead>
+                        <tr>
+                            <th>Код</th>
+                            <th>Описание</th>
+                            <th>Пример ответа</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>401</code></td>
+                            <td>Неверный или отсутствующий токен</code></td>
+                            <td><code>{"detail": "Authentication credentials were not provided."}</code></code></td>
+                        </tr>
+                        <tr>
+                            <td>200</code> (с пустым списком)</code></td>
+                            <td>Фильтры не дали результатов</code></td>
+                            <td><code>[]</code></code></td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <h3>Примечания</h3>
+                <ul>
+                    <li>Все параметры необязательны. Можно комбинировать любые из них.</li>
+                    <li>Параметр <code>name</code> ищет по вхождению подстроки (<code>icontains</code> в зависимости от БД).</li>
+                    <li><code>program_type</code> и <code>study_form</code> чувствительны к регистру, используйте значения точно как в системе.</li>
+                    <li>Для <code>DOT</code> допустимы значения <code>true</code> (вкл.), <code>false</code> (выкл.) или отсутствие параметра (все записи).</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+</div>
+    </div>
+</body>
+
+<script>
+    document.getElementById('togglePassword').addEventListener('click', function () {
+        console.log("click")
+        const passwordInput = document.getElementById('password');
+        const type = passwordInput.getAttribute('type') === 'password' ? 'text' : 'password';
+        passwordInput.setAttribute('type', type);
+        this.textContent = type === 'password' ? 'Показать' : 'Скрыть';
+    });
+    pre = document.getElementById('JsonResponse')
+    const jsonResponse = {{ JsonReponse|safe  }};
+    const formattedJson = JSON.stringify(jsonResponse, null, 2);
+    pre.textContent = formattedJson;
+
+    
+    function updateTextInputNames() {
+    // Получаем все чекбоксы на странице
+    const checkboxes = document.querySelectorAll('input[type="checkbox"]');
+
+    checkboxes.forEach(checkbox => {
+        // Получаем id чекбокса
+        const checkboxId = checkbox.id;
+
+        // Находим текстовый input, id которого содержит id чекбокса
+        // Используем атрибут селектор *= для проверки включения подстроки в id
+        const textInput = document.querySelector(`input[type="text"][id*="${checkboxId}"]`);
+
+        if (textInput) {
+            // Запоминаем базовый нейм (без приставки)
+            const baseName = textInput.getAttribute('data-base-name') || textInput.name.replace(/__contains$/, '');
+
+            // Сохраняем базовый нейм в data-атрибут для повторного использования
+            textInput.setAttribute('data-base-name', baseName);
+
+            if (checkbox.checked) {
+                // Добавляем приставку __contains, если ее еще нет
+                if (!textInput.name.endsWith('__contains')) {
+                    textInput.name = baseName + '__contains';
+                }
+            } else {
+                // Убираем приставку, если чекбокс не отмечен
+                textInput.name = baseName;
+            }
+        }
+    });
+}
+
+    const checkboxes = document.querySelectorAll('input[type="checkbox"]');
+
+    checkboxes.forEach(checkbox => {
+        checkbox.addEventListener('change', () => {
+            updateTextInputNames();
+        });
+    });
+
+    // Вызовем функцию один раз при загрузке страницы, чтобы синхронизировать имена
+    updateTextInputNames();
+
+</script>
+{% endblock %}

@@ -47,6 +47,7 @@ INSTALLED_APPS = [
     'crm_connector',
     'education_planner',
     'contact_management',
+    'api',
     'rest_framework',  # для API если потребуется
     'rest_framework.authtoken',
     'django_celery_beat',  # для периодических задач

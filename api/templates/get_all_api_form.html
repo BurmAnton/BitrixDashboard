@@ -129,7 +129,7 @@
                             <table class="table table-bordered">
                                 <tr>
                                     <td><strong>Эндпоинт:</strong></td>
-                                    <td><code>/contacts/api/get_all/fed_district/</code></td>
+                                    <td><code>/api/get_all/fed_district/</code></td>
                                 </tr>
                                 <tr>
                                     <td><strong>Метод HTTP:</strong></td>
@@ -149,7 +149,7 @@
                             <table class="table table-bordered">
                                 <tr>
                                     <td><strong>Эндпоинт:</strong></td>
-                                    <td><code>/contacts/api/get_all/region/</code></td>
+                                    <td><code>/api/get_all/region/</code></td>
                                 </tr>
                                 <tr>
                                     <td><strong>Метод HTTP:</strong></td>
@@ -169,7 +169,7 @@
                             <table class="table table-bordered">
                                 <tr>
                                     <td><strong>Эндпоинт:</strong></td>
-                                    <td><code>/contacts/api/get_all/organization_type/</code></td>
+                                    <td><code>/api/get_all/organization_type/</code></td>
                                 </tr>
                                 <tr>
                                     <td><strong>Метод HTTP:</strong></td>
@@ -213,7 +213,7 @@
 
                             <div class="">Пример 1: JavaScript (Fetch API) - получение федеральных округов</div>
                             <div class="code-block">
-                                <pre><code>fetch('https://bitrix24.tuna-edu.ru/contacts/api/get_all/fed_district/', {
+                                <pre><code>fetch('https://bitrix24.tuna-edu.ru/api/get_all/fed_district/', {
     method: 'GET',
     headers: {
         'Authorization': 'Token ваш_токен_здесь',
@@ -227,7 +227,7 @@
 
                             <div class="">Пример 2: cURL - получение регионов</div>
                             <div class="code-block">
-                                <pre><code>curl -X GET 'https://bitrix24.tuna-edu.ru/contacts/api/get_all/region/' \
+                                <pre><code>curl -X GET 'https://bitrix24.tuna-edu.ru/api/get_all/region/' \
 -H 'Authorization: Token ваш_токен_здесь' \
 -H 'Accept: application/json'</code></pre>
                             </div>
@@ -239,7 +239,7 @@ headers = {
     'Authorization': 'Token ваш_токен_здесь',
     'Accept': 'application/json'
 }
-response = requests.get('https://bitrix24.tuna-edu.ru/contacts/api/get_all/organization_type/', headers=headers)
+response = requests.get('https://bitrix24.tuna-edu.ru/api/get_all/organization_type/', headers=headers)
 data = response.json()
 print(data)</code></pre>
                             </div>

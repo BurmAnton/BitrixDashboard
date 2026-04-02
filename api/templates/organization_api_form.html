@@ -34,12 +34,11 @@
             <div class="container-fluid">
                 <div class="card">
                     <div class="card-header">
-                        <h5>Получение списков контактов</h5>
+                        <h5>Получение списков организаций</h5>
                     </div>
                     <div class="card-body" style="height: 780px">
                         <form method="post">
                             {% csrf_token %}
-
                             <div class="mb-3 position-relative">
                                 <label for="password" class="form-label">Токен</label>
                                 <div class="input-group">
@@ -53,73 +52,105 @@
                                 <div class="col-sm-2">
                                     <label for="typeInput" class="form-label me-2 mb-0">Тип</label>
                                 </div>
-                                <select class="form-control form-control-sm me-2" name="type" id="typeInput">
+                                <select class="form-control form-control-sm me-2" name="type">
                                     <option selected value="">------------------</option>
-                                    <option value="department">Отдел</option>
-                                    <option value="person">Сотрудник</option>
-                                    <option value="main">Основной</option>
-                                    <option value="other">Другое</option>
-                                </select>
-                            </div>
-
-                            <!-- Подразделение -->
-                            <div class="mb-3 d-flex align-items-center">
-                                <div class="col-sm-2">
-                                    <label for="deartmentInput" class="form-label me-2 mb-0">Подразделение</label>
-                                </div>
-                                <input type="text" class="form-control form-control-sm me-2" name="department" id="departmentInput">
-                            </div>
-
-                            <!-- Организация -->
-                            <div class="mb-3 d-flex align-items-center">
-                                <div class="col-sm-2">
-                                    <label for="organizationInput" class="form-label me-2 mb-0">Организация</label>
-                                </div>
-                                <select class="form-control form-control-sm me-2" name="organization" id="typeInput">
-                                    <option selected value="">------------------</option>
-                                    {% for obj in ChoiseFields.organization %}
+                                    {% for obj in ChoiseFields.type %}
                                         <option value="{{ obj }}">{{ obj }}</option>
                                     {% endfor %}
                                 </select>
-                                <!-- <input type="text" class="form-control form-control-sm me-2" name="organization" id="organizationInput">
-                                <div class="form-check">
-                                    <input class="form-check-input" type="checkbox" id="organization">
-                                    <label class="form-check-label" for="organizationContains">содержит</label>
-                                </div> -->
                             </div>
 
-                            <!-- Менеджер -->
+                            <!-- Дата -->
                             <div class="mb-3 d-flex align-items-center">
                                 <div class="col-sm-2">
-                                <label class="form-label me-2">Менеджер</label>
+                                    <label for="dateInput" class="form-label me-2 mb-0 flex-grow-1">Дата</label>
                                 </div>
-                                <div class="form-check form-check-inline">
-                                    <input class="form-check-input" type="radio" name="manager" id="managerTrue" value="true">
-                                    <label class="form-check-label" for="managerTrue">Да</label>
-                                </div>
-                                <div class="form-check form-check-inline">
-                                    <input class="form-check-input" type="radio" name="manager" id="managerFalse" value="false">
-                                    <label class="form-check-label" for="managerFalse">Нет</label>
-                                </div>
-                                <div class="form-check form-check-inline ms-3">
-                                    <input class="form-check-input" type="radio" name="manager" id="managerAll" value="" checked>
-                                    <label class="form-check-label" for="managerAll">Все</label>
+                                <input type="text" class="form-control form-control-sm me-2" name="date" id="dateInput">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" id="date">
+                                    <label class="form-check-label" for="date">содержит</label>
                                 </div>
                             </div>
 
+                            <!-- Сфера деятельности -->
+                            <div class="mb-3 d-flex align-items-center">
+                                <div class="col-sm-2">
+                                    <label for="profActivityInput" class="form-label me-2 mb-0 flex-grow-1">Сфера деятельности</label>
+                                </div>
+                                <select class="form-control form-control-sm me-2" name="prof_activity">
+                                    <option selected value="">------------------</option>
+                                    {% for obj in ChoiseFields.prof_activity %}
+                                        <option value="{{ obj }}">{{ obj }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+
+                            <!-- Проект -->
+                            <div class="mb-3 d-flex align-items-center">
+                                <div class="col-sm-2">
+                                    <label for="projectInput" class="form-label me-2 mb-0 flex-grow-1">Проект</label>
+                                </div>
+                                <select class="form-control form-control-sm me-2" name="project">
+                                    <option selected value="">------------------</option>
+                                    {% for obj in ChoiseFields.project %}
+                                        <option value="{{ obj }}">{{ obj }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+
+                            <!-- Регион -->
+                            <div class="mb-3 d-flex align-items-center">
+                                <div class="col-sm-2">
+                                    <label for="regionInput" class="form-label me-2 mb-0 flex-grow-1">Регион</label>
+                                </div>
+                                <select class="form-control form-control-sm me-2" name="region">
+                                    <option selected value="">------------------</option>
+                                    {% for obj in ChoiseFields.region %}
+                                        <option value="{{ obj }}">{{ obj }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+
+                            <!-- Федеральный округ -->
+                            <div class="mb-3 d-flex align-items-center">
+                                <div class="col-sm-2">
+                                    <label for="fedDistrictInput" class="form-label me-2 mb-0 flex-grow-1">Федеральный округ</label>
+                                </div>
+                                <select class="form-control form-control-sm me-2" name="fed_district">
+                                    <option selected value="">------------------</option>
+                                    {% for obj in ChoiseFields.fed_district %}
+                                        <option value="{{ obj }}">{{ obj }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+
+                            <!-- Федеральная компания -->
+                            <div class="mb-3 d-flex align-items-center">
+                                <label class="form-label me-2 mb-0">Федеральная компания</label>
+                                <div class="form-check form-check-inline">
+                                    <input class="form-check-input" type="radio" name="federal" id="federalTrue" value="true">
+                                    <label class="form-check-label" for="federalTrue">Да</label>
+                                </div>
+                                <div class="form-check form-check-inline">
+                                    <input class="form-check-input" type="radio" name="federal" id="federalFalse" value="false">
+                                    <label class="form-check-label" for="federalFalse">Нет</label>
+                                </div>
+                                <div class="form-check form-check-inline ms-3">
+                                    <input class="form-check-input" type="radio" name="federal" id="federalAll" value="" checked>
+                                    <label class="form-check-label" for="federalAll">Все</label>
+                                </div>
+                            </div>
 
                             <div class="mb-2">
                                 <label for="apiLink" class="form-label">Ссылка API для fetch</label>
                                 <input type="text" readonly class="form-control form-control-sm" id="apiLink" name="apiLink" value="{{ URL|safe }}">
                             </div>
 
-
                             <button type="submit" class="btn btn-primary btn-sm">Отправить</button>
                         </form>
 
 
-
-                        <div class="card" style="margin-top: 12px; padding: 1%; height: 50%; overflow-y: auto; font-size: small;" >
+                        <div class="card" style="margin-top: 12px; padding: 1%; height: 31%; overflow-y: auto; font-size: small;" >
                             <pre id="JsonResponse"></pre>
                         </div>
                     </div>
@@ -133,7 +164,7 @@
                 <div class="card">
                     <!-- Заголовок -->
                     <div class="card-header">
-                        <h5>Документация REST API Contacts</h5>
+                        <h5>Документация REST API Organizations</h5>
                     </div>
 
                     <!-- Table of Contents -->
@@ -144,19 +175,18 @@
                                 <li><a class="link-body-emphasis link-underline-opacity-0" href="#intro">Введение</a></li>
                                 <li><a class="link-body-emphasis link-underline-opacity-0" href="#auth">1. Аутентификация</a></li>
                                 <li><a class="link-body-emphasis link-underline-opacity-0" href="#endpoint">2. Основной эндпоинт</a></li>
-                                <li><a class="link-body-emphasis link-underline-opacity-0" href="#types">3. Типы контактов</a></li>
-                                <li><a class="link-body-emphasis link-underline-opacity-0" href="#filters">4. Фильтрация результатов</a></li>
-                                <li><a class="link-body-emphasis link-underline-opacity-0" href="#response">5. Формат ответа</a></li>
-                                <li><a class="link-body-emphasis link-underline-opacity-0" href="#errors">6. Коды ответов и ошибки</a></li>
+                                <li><a class="link-body-emphasis link-underline-opacity-0" href="#filters">3. Фильтрация результатов</a></li>
+                                <li><a class="link-body-emphasis link-underline-opacity-0" href="#response">4. Формат ответа</a></li>
+                                <li><a class="link-body-emphasis link-underline-opacity-0" href="#errors">5. Коды ответов и ошибки</a></li>
                             </ul>
                         </div>
 
                         <!-- Введение -->
                         <section id="intro">
                             <h2>Введение</h2>
-                            <p>Добро пожаловать в документацию REST API для работы с контактами организаций. Этот API предоставляет доступ к контактным лицам и отделам, связанным с организациями.</p>
+                            <p>Добро пожаловать в документацию REST API для работы с организациями. Этот API предоставляет возможность получения информации об организациях, их типах, регионах, сферах деятельности и связанных проектах.</p>
                             <div class="alert alert-info">
-                                <strong>Особенности API:</strong> Поддерживает 4 типа контактов: физические лица, отделы, основной и другое. Физ лица и отделы предоставляют свои поля.
+                                <strong>Особенности API:</strong> Поддерживает расширенную фильтрацию по различным параметрам, включая вложенные связи (регионы, федеральные округа, проекты).
                             </div>
                         </section>
 
@@ -176,11 +206,11 @@
                         <section id="endpoint">
                             <h2>2. Основной эндпоинт</h2>
 
-                            <h3>2.1 Получение данных о контактах</h3>
+                            <h3>2.1 Получение данных об организациях</h3>
                             <table class="table table-bordered">
                                 <tr>
                                     <td><strong>Эндпоинт:</strong></td>
-                                    <td><code>/contacts/api/contact/</code></td>
+                                    <td><code>/api/organization/</code></td>
                                 </tr>
                                 <tr>
                                     <td><strong>Метод HTTP:</strong></td>
@@ -224,8 +254,8 @@
 
                             <div class="">Пример 1: JavaScript (Fetch API)</div>
                             <div class="code-block">
-                                <pre><code>// Получение всех контактов
-fetch('https://bitrix24.tuna-edu.ru/contacts/api/contact/', {
+                                <pre><code>// Получение всех организаций
+fetch('https://bitrix24.tuna-edu.ru/api/organization/', {
     method: 'GET',
     headers: {
         'Authorization': 'Token 4a8389aa7f015d3a68e44e3f4bae94d63c7ac097',
@@ -239,9 +269,9 @@ fetch('https://bitrix24.tuna-edu.ru/contacts/api/contact/', {
 
                             <div class="">Пример 2: cURL</div>
                             <div class="code-block">
-                                <pre><code>curl -X GET 'https://bitrix24.tuna-edu.ru/contacts/api/contact/' \
--H 'Authorization: Token 4a8389aa7f015d3a68e44e3f4bae94d63c7ac097' \
--H 'Accept: application/json'</code></pre>
+                                <pre><code>curl -X GET 'https://bitrix24.tuna-edu.ru/api/organization/' \
+            -H 'Authorization: Token 4a8389aa7f015d3a68e44e3f4bae94d63c7ac097' \
+            -H 'Accept: application/json'</code></pre>
                             </div>
 
                             <div class="">Пример 3: Python (Requests)</div>
@@ -251,74 +281,18 @@ headers = {
     'Authorization': 'Token 4a8389aa7f015d3a68e44e3f4bae94d63c7ac097',
     'Accept': 'application/json'
 }
-response = requests.get('https://bitrix24.tuna-edu.ru/contacts/api/contact/', headers=headers)
+response = requests.get('https://bitrix24.tuna-edu.ru/api/organization/', headers=headers)
 data = response.json()
 print(data)</code></pre>
                             </div>
                         </section>
 
-                        <!-- Типы контактов -->
-                        <section id="types">
-                            <h2>3. Типы контактов</h2>
-                            <p>API поддерживает два отличительных типа контактов, которые определяют набор возвращаемых полей:</p>
-
-                            <h3>3.1 Тип "person" (Физическое лицо)</h3>
-                            <p>Сотрудник организации. Возвращает следующие поля:</p>
-                            <ul>
-                                <li><code>type</code> - тип контакта ("person")</li>
-                                <li><code>comment</code> - комментарий</li>
-                                <li><code>current</code> - актуальность контакта</li>
-                                <li><code>organization</code> - ИНН организации</li>
-                                <li><code>first_name</code> - имя</li>
-                                <li><code>last_name</code> - фамилия</li>
-                                <li><code>middle_name</code> - отчество</li>
-                                <li><code>position</code> - должность</li>
-                                <li><code>first_name_dat</code> - имя в дательном падеже</li>
-                                <li><code>last_name_dat</code> - фамилия в дательном падеже</li>
-                                <li><code>middle_name_dat</code> - отчество в дательном падеже</li>
-                                <li><code>position_dat</code> - должность в дательном падеже</li>
-                                <li><code>manager</code> - является ли руководителем</li>
-                            </ul>
-
-                            <h3>3.2 Тип "department" (Отдел)</h3>
-                            <p>Некоторый отдел организации. Возвращает следующие поля:</p>
-                            <ul>
-                                <li><code>type</code> - тип контакта ("department")</li>
-                                <li><code>comment</code> - комментарий</li>
-                                <li><code>current</code> - актуальность контакта</li>
-                                <li><code>organization</code> - ИНН организации</li>
-                                <li><code>department_name</code> - название отдела</li>
-                            </ul>
-
-                            <h3>3.3 Тип "main" (Основной)</h3>
-                            <p>Главный контакт, который публикует организация. Возвращают следующие поля:</p>
-                            <ul>
-                                <li><code>type</code> - тип контакта ("main")</li>
-                                <li><code>comment</code> - комментарий</li>
-                                <li><code>current</code> - актуальность контакта</li>
-                                <li><code>organization</code> - ИНН организации</li>
-                            </ul>
-                            
-                            <h3>3.4 Тип "other" (Другое)</h3>
-                            <p>Другие контакты. Возвращают следующие поля:</p>
-                            <ul>
-                                <li><code>type</code> - тип контакта ("other")</li>
-                                <li><code>comment</code> - комментарий</li>
-                                <li><code>current</code> - актуальность контакта</li>
-                                <li><code>organization</code> - ИНН организации</li>
-                            </ul>
-
-                            <div class="alert alert-info">
-                                <strong>Примечание:</strong> Для корректной фильтрации убедитесь, что используете правильные фильтры для соответствующего типа контакта.
-                            </div>
-                        </section>
-
                         <!-- Фильтрация -->
                         <section id="filters">
-                            <h2>4. Фильтрация результатов</h2>
-                            <p>API поддерживает фильтрацию контактов по различным параметрам.</p>
+                            <h2>3. Фильтрация результатов</h2>
+                            <p>API поддерживает расширенную фильтрацию по различным параметрам организаций.</p>
 
-                            <h3>4.1 Доступные фильтры</h3>
+                            <h3>3.1 Доступные фильтры</h3>
                             <table class="table table-striped">
                                 <thead>
                                     <tr>
@@ -331,37 +305,58 @@ print(data)</code></pre>
                                 </thead>
                                 <tbody>
                                     <tr>
-                                        <td>Организация</td>
-                                        <td><code>organization</code></td>
-                                        <td>ИНН организации</td>
-                                        <td>Точное совпадение, множественное</td>
-                                        <td>-</td>
-                                    </tr>
-                                    <tr>
-                                        <td>Тип контакта</td>
+                                        <td>Тип организации</td>
                                         <td><code>type</code></td>
-                                        <td>person/department/main/other</td>
+                                        <td>Тип организации (РОИВ, Коммерческая и др.)</td>
                                         <td>Точное совпадение, множественное</td>
                                         <td>-</td>
                                     </tr>
                                     <tr>
-                                        <td>Подразделение</td>
-                                        <td><code>department</code></td>
-                                        <td>Название отдела (частичное совпадение)</td>
-                                        <td>Множественное (icontains)</td>
-                                        <td>Только для отделов</td>
+                                        <td>Дата создания</td>
+                                        <td><code>date</code></td>
+                                        <td>Поиск по части даты создания</td>
+                                        <td>Частичное совпадение</td>
+                                        <td>Формат: YYYY-MM-DD</td>
                                     </tr>
                                     <tr>
-                                        <td>Руководитель</td>
-                                        <td><code>manager</code></td>
-                                        <td>Фильтр по руководителям</td>
+                                        <td>Сфера деятельности</td>
+                                        <td><code>prof_activity</code></td>
+                                        <td>Сфера деятельности (Здоровье, Образование)</td>
+                                        <td>Частичное совпадение, множественное</td>
+                                        <td>Только для РОИВ</td>
+                                    </tr>
+                                    <tr>
+                                        <td>Проект</td>
+                                        <td><code>project</code></td>
+                                        <td>Поиск по проектам</td>
+                                        <td>Частичное совпадение, множественное</td>
+                                        <td>По названию проекта</td>
+                                    </tr>
+                                    <tr>
+                                        <td>Регион</td>
+                                        <td><code>region</code></td>
+                                        <td>Название региона</td>
+                                        <td>Частичное совпадение, множественное</td>
+                                        <td></td>
+                                    </tr>
+                                    <tr>
+                                        <td>Федеральный округ</td>
+                                        <td><code>fed_district</code></td>
+                                        <td>Название федерального округа</td>
+                                        <td>Частичное совпадение, множественное</td>
+                                        <td></td>
+                                    </tr>
+                                    <tr>
+                                        <td>Федеральная компания</td>
+                                        <td><code>federal</td>
+                                        <td>Фильтр по федеральным компаниям</td>
                                         <td>Булевый</td>
-                                        <td>Только для сотрудников</td>
+                                        <td>true/false</td>
                                     </tr>
                                     <tr>
-                                        <td>Актуальность</td>
-                                        <td><code>current</code></td>
-                                        <td>Фильтр по актуальным контактам</td>
+                                        <td>Активность</td>
+                                        <td><code>is_active</code></td>
+                                        <td>Фильтр по активности</td>
                                         <td>Булевый</td>
                                         <td>true/false</td>
                                     </tr>
@@ -369,104 +364,90 @@ print(data)</code></pre>
 
                             </table>
 
-                            <h3>4.2 Синтаксис фильтрации</h3>
+                            <h3>3.2 Синтаксис фильтрации</h3>
                             <p>Фильтры передаются как query-параметры в URL:</p>
                             <div class="code-block">
-                                <code>/contacts/api/contact/?filter1=value1&filter2=value2</code>
+                                <code>/api/organization/?filter1=value1&filter2=value2</code>
                             </div>
+
                             <div class="mt-2">
-                                <strong>Множественные значения:</strong> 
-                                <code>?type=person&type=department</code> или <code>?department=IT,Кадры</code>
+                                <strong>Множественные значения:</strong>
+                                <code>?type=РОИВ&type=Коммерческая</code> или <code>?prof_activity=Здоровье,Образование</code>
                             </div>
 
+                            <h3>3.3 Примеры фильтрации</h3>
 
-                            <h3>4.3 Примеры фильтрации</h3>
-
-                            <div class="">Пример 1: Контакты нескольких организаций</div>
+                            <div class="">Пример 1: Поиск РОИВ по сфере деятельности</div>
                             <div class="code-block">
-                                <code>https://bitrix24.tuna-edu.ru/contacts/api/contact/?organization=546123&organization=713191</code>
+                                <code>https://bitrix24.tuna-edu.ru/api/organization/?type=РОИВ&prof_activity=образование&prof_activity=здоровье</code>
                             </div>
 
-                            <div class="">Пример 2: Физические лица + руководители</div>
+                            <div class="">Пример 2: Множественная фильтрация по регионам и округам</div>
                             <div class="code-block">
-                                <code>https://bitrix24.tuna-edu.ru/contacts/api/contact/?type=person&manager=true</code>
+                                <code>https://bitrix24.tuna-edu.ru/api/organization/?region=Москва&region=СПб&fed_district=Центральный</code>
                             </div>
 
-                            <div class="">Пример 3: Несколько отделов в организации</div>
+                            <div class="">Пример 3: Комбинированный поиск проектов</div>
                             <div class="code-block">
-                                <code>https://bitrix24.tuna-edu.ru/contacts/api/contact/?type=department&organization=313313&department=цифровизация&department=кадры</code>
+                                <code>https://bitrix24.tuna-edu.ru/api/organization/?project=цифровизация&project=автоматизация&type=РОИВ</code>
                             </div>
 
-                            <div class="">Пример 4: Комбинированная фильтрация</div>
+                            <div class="">Пример 4: Запятая-разделённые значения</div>
                             <div class="code-block">
-                                <code>https://bitrix24.tuna-edu.ru/contacts/api/contact/?type=department&type=person&organization=313313&department=отдел,it</code>
+                                <code>https://bitrix24.tuna-edu.ru/api/organization/?prof_activity=образование,здоровье®ion=Москва,СПб</code>
                             </div>
+
 
                             <div class="alert alert-info mt-3">
-                                <strong>Поддержка множественной фильтрации:</strong>
-                                <ul>
-                                    <li><code>?organization=123&organization=456</code> или <code>organization=123,456</code></li>
-                                    <li><code>department</code> использует частичное совпадение (icontains)</li>
-                                    <li><code>manager=true</code> только при <code>type=person</code></li>
-                                    <li><code>department</code> только при <code>type=department</code></li>
-                                </ul>
+                                <strong>Поддержка множественной фильтрации:</strong> Передавайте параметры повторно (?param=value1&param=value2) или через запятую (param=value1,value2). Логика AND между фильтрами.
                             </div>
 
                         </section>
 
                         <!-- Формат ответа -->
                         <section id="response">
-                            <h2>5. Формат ответа</h2>
+                            <h2>4. Формат ответа</h2>
 
-                            <h3>5.1 Успешный ответ (HTTP 200 OK)</h3>
-                            <p>API возвращает список контактов. Структура ответа зависит от типа контакта.</p>
+                            <h3>4.1 Успешный ответ (HTTP 200 OK)</h3>
+                            <p>API возвращает список организаций с детальной информацией.</p>
 
                             <div class="code-block" style="height: 400px; overflow-y: auto; font-size: small;">
                                 <pre><code>[
-// Пример контакта типа "person"
-{
-    "type": "person",
-    "comment": "Основной контакт по проекту",
-    "current": true,
-    "organization": "313313",
-    "first_name": "Иван",
-    "last_name": "Иванов",
-    "middle_name": "Иванович",
-    "position": "Начальник отдела",
-    "first_name_dat": "Ивану",
-    "last_name_dat": "Иванову",
-    "middle_name_dat": "Ивановичу",
-    "position_dat": "Начальнику отдела",
-    "manager": true
-},
-// Пример контакта типа "department"
-{
-    "type": "department",
-    "comment": "Отдел цифровизации",
-    "current": true,
-    "organization": "313313",
-    "department_name": "Отдел цифровой трансформации"
-},
-// Пример неактуального контакта
-{
-    "type": "person",
-    "comment": "Бывший сотрудник",
-    "current": false,
-    "organization": "552233",
-    "first_name": "Петр",
-    "last_name": "Петров",
-    "middle_name": "Петрович",
-    "position": "Бывший директор",
-    "first_name_dat": "Петру",
-    "last_name_dat": "Петрову",
-    "middle_name_dat": "Петровичу",
-    "position_dat": "Бывшему директору",
-    "manager": false
-}
+    {
+        "name": "ООО \"Рога и копыта\"",
+        "full_name": "Общество с ограниченной ответственностью \"Рога и копыта\"",
+        "type": "Коммерческая",
+        "region": "Московская область",
+        "federal_company": false,
+        "fed_district": "Центральный",
+        "prof_activity": "IT-услуги",
+        "projects": [
+            {"name": "Цифровизация"},
+            {"name": "Автоматизация"}
+        ],
+        "is_active": true,
+        "created_at": "2023-05-15T10:30:00Z",
+        "updated_at": "2024-01-20T14:45:00Z"
+    },
+    {
+        "name": "Минобрнауки",
+        "full_name": "Министерство образования и науки",
+        "type": "РОИВ",
+        "region": "Москва",
+        "federal_company": true,
+        "fed_district": "Центральный",
+        "prof_activity": "Образование",
+        "projects": [
+            {"name": "Национальный проект \"Образование\""}
+        ],
+        "is_active": true,
+        "created_at": "2022-01-10T09:00:00Z",
+        "updated_at": "2023-11-05T16:20:00Z"
+    }
 ]</code></pre>
                             </div>
 
-                            <h3>5.2 Структура данных в ответе (для типа "person")</h3>
+                            <h3>4.2 Структура данных в ответе</h3>
                             <table class="table table-striped">
                                 <thead>
                                     <tr>
@@ -475,109 +456,60 @@ print(data)</code></pre>
                                         <th>Описание</th>
                                     </tr>
                                 </thead>
-                                <tbody>
+                                    <tr>
+                                        <td><code>name</code></td>
+                                        <td>String</td>
+                                        <td>Краткое название организации</td>
+                                    </tr>
+                                    <tr>
+                                        <td><code>full_name</code></td>
+                                        <td>String</td>
+                                        <td>Полное официальное название</td>
+                                    </tr>
                                     <tr>
                                         <td><code>type</code></td>
                                         <td>String</td>
-                                        <td>Тип контакта (всегда "person")</td>
+                                        <td>Тип организации</td>
                                     </tr>
                                     <tr>
-                                        <td><code>comment</code></td>
+                                        <td><code>region</code></td>
                                         <td>String</td>
-                                        <td>Комментарий к контакту</td>
+                                        <td>Регион расположения</td>
                                     </tr>
                                     <tr>
-                                        <td><code>current</code></td>
+                                        <td><code>federal_company</code></td>
                                         <td>Boolean</td>
-                                        <td>Актуальность контакта</td>
+                                        <td>Является ли федеральной компанией</td>
                                     </tr>
                                     <tr>
-                                        <td><code>organization</code></td>
+                                        <td><code>fed_district</code></td>
                                         <td>String</td>
-                                        <td>ИНН организации</td>
+                                        <td>Федеральный округ</td>
                                     </tr>
                                     <tr>
-                                        <td><code>first_name</code></td>
+                                        <td><code>prof_activity</code></td>
                                         <td>String</td>
-                                        <td>Имя контактного лица</td>
+                                        <td>Сфера деятельности (для РОИВ)</td>
                                     </tr>
                                     <tr>
-                                        <td><code>last_name</code></td>
-                                        <td>String</td>
-                                        <td>Фамилия контактного лица</td>
+                                        <td><code>projects</code></td>
+                                        <td>Array</td>
+                                        <td>Список проектов организации</td>
                                     </tr>
                                     <tr>
-                                        <td><code>middle_name</code></td>
-                                        <td>String</td>
-                                        <td>Отчество контактного лица</td>
-                                    </tr>
-                                    <tr>
-                                        <td><code>position</code></td>
-                                        <td>String</td>
-                                        <td>Должность</td>
-                                    </tr>
-                                    <tr>
-                                        <td><code>first_name_dat</code></td>
-                                        <td>String</td>
-                                        <td>Имя в дательном падеже</td>
-                                    </tr>
-                                    <tr>
-                                        <td><code>last_name_dat</code></td>
-                                        <td>String</td>
-                                        <td>Фамилия в дательном падеже</td>
-                                    </tr>
-                                    <tr>
-                                        <td><code>middle_name_dat</code></td>
-                                        <td>String</td>
-                                        <td>Отчество в дательном падеже</td>
-                                    </tr>
-                                    <tr>
-                                        <td><code>position_dat</code></td>
-                                        <td>String</td>
-                                        <td>Должность в дательном падеже</td>
-                                    </tr>
-                                    <tr>
-                                        <td><code>manager</code></td>
+                                        <td><code>is_active</code></td>
                                         <td>Boolean</td>
-                                        <td>Является ли руководителем</td>
-                                    </tr>
-                                </tbody>
-                            </table>
-
-                            <h3>5.3 Структура данных в ответе (для типа "department")</h3>
-                            <table class="table table-striped">
-                                <thead>
-                                    <tr>
-                                        <th>Поле</th>
-                                        <th>Тип</th>
-                                        <th>Описание</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    <tr>
-                                        <td><code>type</code></td>
-                                        <td>String</td>
-                                        <td>Тип контакта (всегда "department")</td>
+                                        <td>Активна ли организация</td>
                                     </tr>
                                     <tr>
-                                        <td><code>comment</code></td>
-                                        <td>String</td>
-                                        <td>Комментарий к контакту</td>
+                                        <td><code>created_at</code></td>
+                                        <td>String (ISO 8601)</td>
+                                        <td>Дата создания записи</td>
                                     </tr>
                                     <tr>
-                                        <td><code>current</code></td>
-                                        <td>Boolean</td>
-                                        <td>Актуальность контакта</td>
-                                    </tr>
-                                    <tr>
-                                        <td><code>organization</code></td>
-                                        <td>String</td>
-                                        <td>ИНН организации</td>
-                                    </tr>
-                                    <tr>
-                                        <td><code>department_name</code></td>
-                                        <td>String</td>
-                                        <td>Название отдела</td>
+                                        <td><code>updated_at</code></td>
+                                        <td>String (ISO 8601)</td>
+                                        <td>Дата последнего обновления</td>
                                     </tr>
                                 </tbody>
                             </table>
@@ -585,9 +517,9 @@ print(data)</code></pre>
 
                         <!-- Коды ответов -->
                         <section id="errors">
-                            <h2>6. Коды ответов и ошибки</h2>
+                            <h2>5. Коды ответов и ошибки</h2>
 
-                            <h3>6.1 Успешные коды ответов</h3>
+                            <h3>5.1 Успешные коды ответов</h3>
                             <table class="table table-striped">
                                 <thead>
                                     <tr>
@@ -603,7 +535,7 @@ print(data)</code></pre>
                                 </tbody>
                             </table>
 
-                            <h3>6.2 Коды ошибок</h3>
+                            <h3>5.2 Коды ошибок</h3>
                             <table class="table table-striped">
                                 <thead>
                                     <tr>
@@ -641,7 +573,7 @@ print(data)</code></pre>
                                 </tbody>
                             </table>
 
-                            <h3>6.3 Примеры ошибок</h3>
+                            <h3>5.3 Примеры ошибок</h3>
 
                             <div class="">Ошибка 401: Отсутствует токен</div>
                             <div class="code-block">
@@ -705,7 +637,6 @@ print(data)</code></pre>
 }
 
     const checkboxes = document.querySelectorAll('input[type="checkbox"]');
-
     checkboxes.forEach(checkbox => {
         checkbox.addEventListener('change', () => {
             updateTextInputNames();
