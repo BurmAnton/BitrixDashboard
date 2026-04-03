@@ -162,11 +162,35 @@ class ProfActivitySerializer(serializers.ModelSerializer):
 
 class OrganizationSerializer(serializers.ModelSerializer):
     """Сериалайзер для получения списка организаций"""
-    type = serializers.CharField(source='type.name', read_only=True)
-    region = serializers.CharField(source='region.name', read_only=True)
-    prof_activity = ProfActivitySerializer(many=True, read_only=True)
-    fed_district = serializers.CharField(source='region.federalDistrict', read_only=True)
+    type = serializers.SerializerMethodField()
+    region = serializers.SerializerMethodField()
+    prof_activity = serializers.SerializerMethodField()
+    fed_district = serializers.SerializerMethodField()
     projects = ProjectsSerializer(many=True, read_only=True)
+
+    def get_type(self, obj):
+        return obj.type.name if obj.type_id else None
+
+    def get_region(self, obj):
+        return obj.region.name if obj.region_id else None
+
+    def to_representation(self, instance):
+        """Всегда возвращаем все поля; prof_activity — массив, не null."""
+        data = super().to_representation(instance)
+        if data.get('prof_activity') is None:
+            data['prof_activity'] = []
+        return data
+
+    def get_prof_activity(self, obj):
+        try:
+            return [pa.name for pa in obj.prof_activity.all()]
+        except Exception:
+            return []
+
+    def get_fed_district(self, obj):
+        if obj.region_id and obj.region.federalDistrict_id:
+            return obj.region.federalDistrict.name
+        return None
     class Meta:
         model = Organization
         fields =[
@@ -287,6 +311,8 @@ class OrganizationViewSet(viewsets.ModelViewSet):
         projects = request.data.get("projects", None)
         # Обновляем поля модели
         for attr in request.data:
+            if attr in ("projects", "prof_activity"):
+                continue
             if attr == "type":
                 setattr(obj, attr, OrganizationType.objects.filter(name=request.data.get(attr, None)).first())
             elif attr == "roiv":
@@ -298,23 +324,29 @@ class OrganizationViewSet(viewsets.ModelViewSet):
             else:
                 try:
                     setattr(obj, attr, request.data.get(attr, None))
-                except:
+                except Exception:
                     pass
         obj.save()
         # Обновляем ManyToMany prof_activity
-        if obj.type:
-            if prof_activity_names is not None and obj.type.name == 'РОИВ':
+        if prof_activity_names is not None:
+            if obj.type and obj.type.name == 'РОИВ':
+                prof_objs = []
                 for name in prof_activity_names:
-                    prof_activity = ProfActivity.objects.filter(name=name).first()
-                    if prof_activity is not None:
-                        obj.prof_activity.add(prof_activity)
+                    pa = ProfActivity.objects.filter(name=name).first()
+                    if pa is not None:
+                        prof_objs.append(pa)
+                obj.prof_activity.set(prof_objs)
+            else:
+                obj.prof_activity.clear()
 
-        # Обновляем ManyToMany projects
-        if projects is not None: 
+        # Обновляем ManyToMany projects (полная замена выбора)
+        if projects is not None:
+            project_objs = []
             for name in projects:
                 project = Projects.objects.filter(name=name).first()
                 if project is not None:
-                    obj.projects.add(project)
+                    project_objs.append(project)
+            obj.projects.set(project_objs)
 
         return Response(OrganizationSerializer(obj).data, status=status.HTTP_200_OK)
 
@@ -458,6 +490,12 @@ class OrganizationTypeSerializer(serializers.ModelSerializer):
         model = OrganizationType
         fields = "__all__"
 
+class ProfActivitySerializer(serializers.ModelSerializer):
+    """Сериалайзер для получения списка сфер деятельности"""
+    class Meta:
+        model = ProfActivity
+        fields = ["id", "name"]
+
 class GetAllViewSet(ViewSet):
     """Вьюсет для определния, списки каких моделей вывести"""
     def list(self, request):
@@ -469,9 +507,16 @@ class GetAllViewSet(ViewSet):
                     "Типы организаций": "/api/get_all/organization_type/",
                     "Федеральные округа": "/api/get_all/fed_district/",
                     "Программы": "/api/get_all/program/",
+                    "Сферы деятельности": "/api/get_all/prof_activity/",
                 },
             }
         )
+    
+    @action(detail=False, methods=["get"], url_path="prof_activity")
+    def prof_activity_list(self, request):
+        activities = ProfActivity.objects.all().order_by("name")
+        serializer = ProfActivitySerializer(activities, many=True)
+        return Response(serializer.data)
     
     @action(detail=False, methods=["get"], url_path="region")
     def regions(self, request):

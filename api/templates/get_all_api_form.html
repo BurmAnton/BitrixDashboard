@@ -56,6 +56,7 @@
                                     <option value="region" name="region">Регионы</option>
                                     <option value="fed_district" name="fed_district">Федеральные округа</option>
                                     <option value="organization_type" name="organization_type">Типы организаций</option>
+                                    <option value="prof_activity" name="prof_activity">Сферы деятельности</option>
                                 </select>
                             </div>
 
@@ -185,7 +186,27 @@
                                 </tr>
                             </table>
 
-                            <h3>2.4 Формат запроса</h3>
+                            <h3>2.4 Получение всех сфер деятельности</h3>
+                            <table class="table table-bordered">
+                                <tr>
+                                    <td><strong>Эндпоинт:</strong></td>
+                                    <td><code>/api/get_all/prof_activity/</code></td>
+                                </tr>
+                                <tr>
+                                    <td><strong>Метод HTTP:</strong></td>
+                                    <td>GET</td>
+                                </tr>
+                                <tr>
+                                    <td><strong>Аутентификация:</strong></td>
+                                    <td>Требуется (токен в заголовке Authorization)</td>
+                                </tr>
+                                <tr>
+                                    <td><strong>Описание:</strong></td>
+                                    <td>Возвращает список всех сфер деятельности</td>
+                                </tr>
+                            </table>
+
+                            <h3>2.5 Формат запроса</h3>
                             <p><strong>Заголовки обязательные:</strong></p>
                             <table class="table table-striped">
                                 <thead>
@@ -209,7 +230,7 @@
                                 </tbody>
                             </table>
 
-                            <h3>2.5 Примеры использования</h3>
+                            <h3>2.6 Примеры использования</h3>
 
                             <div class="">Пример 1: JavaScript (Fetch API) - получение федеральных округов</div>
                             <div class="code-block">
