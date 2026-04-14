@@ -1,0 +1,97 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}REST API{% endblock %}
+
+{% block extra_css %}
+    {% include "includes/api_form_styles.html" %}
+{% endblock %}
+
+{% block content %}
+<body>
+    <div class="row" style="height: 100%;">
+        <div class="col-md-6">
+            <div class="container-fluid">
+                <div class="card">
+                    <div class="card-header">
+                        <h5>Журнал коммуникаций: получение, добавление и изменение</h5>
+                    </div>
+                    <div class="card-body api-test-card-body">
+                        <form method="post">
+                            {% csrf_token %}
+                            <div class="mb-3 position-relative">
+                                <label for="password" class="form-label">Токен</label>
+                                <div class="input-group">
+                                    <input type="password" readonly class="form-control form-control-sm" id="password" value="{{ token }}">
+                                    <button type="button" class="btn btn-outline-secondary btn-sm" id="togglePassword" style="width: 20%;">Показать</button>
+                                </div>
+                            </div>
+
+                            <div class="mb-3 d-flex align-items-center">
+                                <div class="col-sm-2">
+                                    <label for="apiAction" class="form-label me-2 mb-0">Операция</label>
+                                </div>
+                                <select class="form-control form-control-sm me-2" name="api_action" id="apiAction">
+                                    <option value="list" {% if api_action == 'list' %}selected{% endif %}>Получение списка (GET)</option>
+                                    <option value="add" {% if api_action == 'add' %}selected{% endif %}>Добавление (POST /add)</option>
+                                    <option value="update" {% if api_action == 'update' %}selected{% endif %}>Изменение (PATCH /update)</option>
+                                </select>
+                            </div>
+                            <input type="hidden" name="api_method" id="apiMethodInput" value="{{ api_method|default:'GET' }}">
+
+                            <div class="mb-2">
+                                <label for="apiLink" class="form-label">Ссылка API для fetch</label>
+                                <input type="text" readonly class="form-control form-control-sm" id="apiLink" name="apiLink" value="{{ URL|safe }}">
+                            </div>
+
+                            <div class="api-request-panel">
+                                <label for="requestBody" class="form-label">Тело запроса (JSON для добавления/изменения)</label>
+                                <textarea class="form-control form-control-sm api-json-textarea" id="requestBody" name="request_body" rows="12">{{ request_body|default:'{}' }}</textarea>
+                                <div class="api-form-submit-row">
+                                    <button type="submit" class="btn btn-primary btn-sm">Отправить</button>
+                                </div>
+                            </div>
+                        </form>
+
+                        <div class="api-response-panel">
+                            <div class="api-response-label">Ответ API</div>
+                            <pre id="JsonResponse"></pre>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        {% include "includes/api_guide_documentation.html" %}
+    </div>
+</body>
+
+<script>
+    document.getElementById('togglePassword').addEventListener('click', function () {
+        const passwordInput = document.getElementById('password');
+        const type = passwordInput.getAttribute('type') === 'password' ? 'text' : 'password';
+        passwordInput.setAttribute('type', type);
+        this.textContent = type === 'password' ? 'Показать' : 'Скрыть';
+    });
+
+    const pre = document.getElementById('JsonResponse');
+    const jsonResponse = {{ JsonReponse|safe }};
+    pre.textContent = JSON.stringify(jsonResponse, null, 2);
+
+    const apiAction = document.getElementById('apiAction');
+    const apiMethodInput = document.getElementById('apiMethodInput');
+    const requestBody = document.getElementById('requestBody');
+
+    function toggleFormMode() {
+        const isList = apiAction.value === 'list';
+        apiMethodInput.value = isList ? 'GET' : (apiAction.value === 'add' ? 'POST' : 'PATCH');
+        requestBody.disabled = isList;
+        if (isList && !requestBody.value.trim()) {
+            requestBody.value = '{}';
+        }
+    }
+
+    apiAction.addEventListener('change', toggleFormMode);
+    toggleFormMode();
+</script>
+{% endblock %}

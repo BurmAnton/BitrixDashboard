@@ -1,5 +1,6 @@
 from django.contrib import admin
 from .models import (
+    CommunicationInteraction,
     HistoryOrganization,
     OrganizationType,
     FederalDistrict,
@@ -64,6 +65,7 @@ class OrganizationAdmin(admin.ModelAdmin):
         "type",
         "region",
         "federal_company",
+        "is_our_side",
         "is_active",
         "get_prof_activities",
     )
@@ -71,6 +73,7 @@ class OrganizationAdmin(admin.ModelAdmin):
         "type",
         "region",
         "federal_company",
+        "is_our_side",
         "is_active",
     )
     search_fields = (
@@ -78,7 +81,7 @@ class OrganizationAdmin(admin.ModelAdmin):
         "full_name",
         "region__name",
         "prof_activity__name",
-        "history__name"
+        "legacy_history__name"
     )
     filter_horizontal = ("prof_activity",)
     inlines = [ContactInline, ProjectsInline]
@@ -135,3 +138,27 @@ class ProjectsAdmin(admin.ModelAdmin):
     list_display = ('name', )
     search_fields = ('name',)
     filter_horizontal = ("organizations",)
+
+
+@admin.register(CommunicationInteraction)
+class CommunicationInteractionAdmin(admin.ModelAdmin):
+    list_display = (
+        "id",
+        "counterparty_organization",
+        "counterparty_contact",
+        "our_organization",
+        "channel",
+        "occurred_at",
+        "project",
+    )
+    list_filter = ("channel", "occurred_at", "project", "our_organization__is_our_side")
+    search_fields = (
+        "counterparty_organization__name",
+        "counterparty_organization__inn",
+        "our_organization__name",
+        "our_organization__inn",
+        "counterparty_contact__first_name",
+        "counterparty_contact__last_name",
+        "counterparty_contact__middle_name",
+        "result",
+    )

@@ -1,9 +1,8 @@
 from django.shortcuts import render, redirect
 from django.contrib import messages
 from django.conf import settings
-from .models import Organization, Region, OrganizationType, HistoryOrganization, ContactEmail, ContactPhone
+from .models import Organization, Region, OrganizationType, ContactEmail, ContactPhone
 from .forms import ContactImportFromExcel
-from datetime import datetime
 import openpyxl
 
 def ExcelImportOrganization(form):
@@ -16,8 +15,8 @@ def ExcelImportOrganization(form):
         except Exception as e:
             return False, f'Ошибка при открытии файла: {e}'
 
-        created = 0
-        updated = 0
+        created_count = 0
+        updated_count = 0
 
         for row in ws.iter_rows(min_row=2, values_only=True):
             inn = row[0]
@@ -32,18 +31,7 @@ def ExcelImportOrganization(form):
             region = Region.objects.filter(name=region_name).first()
             parent_company = Organization.objects.filter(inn=parent_company_inn) or None
 
-            obj_history = Organization.objects.filter(inn=inn).first()
-            if obj_history:       
-                HistoryOrganization.objects.create(
-                    organization=obj_history,
-                    name=obj_history.name,
-                    status='active',
-                    date=datetime.now()
-                )
-                updated += 1
-            else: created += 1
-
-            Organization.objects.update_or_create(
+            _, was_created = Organization.objects.update_or_create(
                 inn=inn,
                 defaults={
                     'name': name,
@@ -54,7 +42,11 @@ def ExcelImportOrganization(form):
                     'parent_company': parent_company
                 }
             )
-        return True, f"Результат: Успешный импорт, Добавлено: {created}, Обновлено: {updated}"
+            if was_created:
+                created_count += 1
+            else:
+                updated_count += 1
+        return True, f"Результат: Успешный импорт, Добавлено: {created_count}, Обновлено: {updated_count}"
     return False, f"Ошибка: Не корректная форма"
 
 def ExcelImportContact(form):

@@ -1,5 +1,19 @@
 from django.shortcuts import render
-from contact_management.models import Organization, OrganizationType, ProfActivity, Projects, FederalDistrict, Region, ROIV,  HistoryOrganization, ContactEmail, ContactPhone, Contact
+from django.apps import apps
+
+from contact_management.models import (
+    CommunicationInteraction,
+    Contact,
+    ContactEmail,
+    ContactPhone,
+    FederalDistrict,
+    Organization,
+    OrganizationType,
+    ProfActivity,
+    Projects,
+    ROIV,
+    Region,
+)
 from crm_connector.models import AtlasApplication
 from education_planner.models import EducationProgram, ProgramTopics, ProgramSection
 from django.shortcuts import render, redirect
@@ -16,7 +30,6 @@ from rest_framework.authentication import TokenAuthentication
 from rest_framework import viewsets
 from rest_framework import status
 from django_filters.rest_framework import DjangoFilterBackend
-from datetime import datetime
 from django.db.models import Q
 from django.http import JsonResponse, HttpResponse, Http404
 
@@ -32,6 +45,8 @@ def _guide_doc_key(request):
         return 'program'
     if 'contact' in request.GET:
         return 'contact'
+    if 'communication' in request.GET:
+        return 'communication'
     if 'organization' in request.GET:
         return 'organization'
     if 'get_all' in request.GET:
@@ -43,6 +58,7 @@ def _guide_doc_key(request):
 _GUIDE_MD_FILENAMES = {
     'organization': 'rest-api-organizations.md',
     'contact': 'rest-api-contacts.md',
+    'communication': 'rest-api-communication.md',
     'program': 'rest-api-programs.md',
     'get_all': 'rest-api-get-all.md',
     'get': 'rest-api-get-object.md',
@@ -112,6 +128,8 @@ def api_guide(request):
         group = 'program'
     if 'contact' in request.GET:
         group = 'contact'
+    if 'communication' in request.GET:
+        group = 'communication'
     elif 'organization' in request.GET:
         group= 'organization'
     elif 'get_all' in request.GET:
@@ -141,7 +159,7 @@ def api_guide(request):
 
     import json
     payload = None
-    if request.method == 'POST' and guide_url in ('organization', 'contact'):
+    if request.method == 'POST' and guide_url in ('organization', 'contact', 'communication'):
         api_method = request.POST.get('api_method', 'GET').upper()
         api_action = request.POST.get('api_action', 'list')
         request_body = request.POST.get('request_body', '{}').strip() or '{}'
@@ -324,6 +342,140 @@ class OrganizationFilter(django_filters.FilterSet):
                 q_objects |= Q(prof_activity__name__icontains=val)
             return queryset.filter(q_objects).distinct()
 
+
+def parse_record_history(data):
+    """По умолчанию True — записывать историю (django-simple-history)."""
+    v = data.get("record_history")
+    if v is None:
+        return True
+    if isinstance(v, bool):
+        return v
+    if isinstance(v, str):
+        return v.strip().lower() in ("true", "1", "yes")
+    return bool(v)
+
+
+class HistoryPagination(Pagination):
+    """Только для эндпоинтов /history/, не меняет поведение list()."""
+    pass
+
+
+class HistoricalOrganizationRecordSerializer(serializers.ModelSerializer):
+    history_user = serializers.SerializerMethodField()
+    type = serializers.SerializerMethodField()
+    region = serializers.SerializerMethodField()
+    roiv = serializers.SerializerMethodField()
+    parent_company = serializers.SerializerMethodField()
+    prof_activity = serializers.SerializerMethodField()
+
+    class Meta:
+        model = apps.get_model("contact_management", "HistoricalOrganization")
+        fields = [
+            "history_id",
+            "history_date",
+            "history_type",
+            "history_change_reason",
+            "name",
+            "full_name",
+            "inn",
+            "federal_company",
+            "is_active",
+            "created_at",
+            "updated_at",
+            "type",
+            "region",
+            "roiv",
+            "parent_company",
+            "prof_activity",
+            "history_user",
+        ]
+
+    def get_history_user(self, obj):
+        u = obj.history_user
+        if u is None:
+            return None
+        return {"id": u.pk, "username": getattr(u, "username", str(u.pk))}
+
+    def get_type(self, obj):
+        if obj.type_id:
+            t = OrganizationType.objects.filter(pk=obj.type_id).first()
+            return t.name if t else None
+        return None
+
+    def get_region(self, obj):
+        if obj.region_id:
+            r = Region.objects.filter(pk=obj.region_id).first()
+            return r.name if r else None
+        return None
+
+    def get_roiv(self, obj):
+        if obj.roiv_id:
+            r = ROIV.objects.filter(pk=obj.roiv_id).first()
+            return r.name if r else None
+        return None
+
+    def get_parent_company(self, obj):
+        if obj.parent_company_id:
+            p = Organization.objects.filter(pk=obj.parent_company_id).first()
+            return p.inn if p else None
+        return None
+
+    def get_prof_activity(self, obj):
+        Through = apps.get_model("contact_management", "HistoricalOrganization_prof_activity")
+        rows = Through.objects.filter(history_id=obj.history_id)
+        names = []
+        for row in rows:
+            if row.profactivity_id:
+                pa = ProfActivity.objects.filter(pk=row.profactivity_id).first()
+                if pa:
+                    names.append(pa.name)
+        return names
+
+
+class HistoricalContactRecordSerializer(serializers.ModelSerializer):
+    history_user = serializers.SerializerMethodField()
+    organization = serializers.SerializerMethodField()
+
+    class Meta:
+        model = apps.get_model("contact_management", "HistoricalContact")
+        fields = [
+            "history_id",
+            "history_date",
+            "history_type",
+            "history_change_reason",
+            "id",
+            "type",
+            "department_name",
+            "first_name",
+            "last_name",
+            "middle_name",
+            "first_name_dat",
+            "last_name_dat",
+            "middle_name_dat",
+            "position",
+            "position_dat",
+            "manager",
+            "comment",
+            "current",
+            "organization",
+            "created_at",
+            "updated_at",
+            "history_user",
+        ]
+
+    def get_history_user(self, obj):
+        u = obj.history_user
+        if u is None:
+            return None
+        return {"id": u.pk, "username": getattr(u, "username", str(u.pk))}
+
+    def get_organization(self, obj):
+        if obj.organization_id:
+            o = Organization.objects.filter(pk=obj.organization_id).first()
+            return o.inn if o else None
+        return None
+
+
 class OrganizationViewSet(viewsets.ModelViewSet):
     """Viewset организаций, только чтение списка с учетом фильтров"""
     filterset_class = OrganizationFilter
@@ -331,11 +483,29 @@ class OrganizationViewSet(viewsets.ModelViewSet):
     serializer_class = OrganizationSerializer
     filter_backends = [DjangoFilterBackend]
 
+    @action(detail=False, methods=["get"], url_path="history")
+    def organization_history(self, request):
+        inn = request.query_params.get("inn")
+        if not inn:
+            return Response(
+                {"inn": ["Обязательное поле."]},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        org = Organization.objects.filter(inn=inn).first()
+        if org is None:
+            return Response(
+                {"detail": "Организация с таким ИНН не найдена."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        qs = org.history.all().order_by("-history_date")
+        paginator = HistoryPagination()
+        page = paginator.paginate_queryset(qs, request)
+        serializer = HistoricalOrganizationRecordSerializer(page, many=True)
+        return paginator.get_paginated_response(serializer.data)
+
     @action(detail=False, methods=["post"], url_path="add")
     def add_organization(self, request):
         serializer = self.get_serializer(data=request.data)
-        print(serializer.is_valid())
-        print(serializer.errors)
         if not serializer.is_valid():
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
         projects = request.data.get("projects", [])
@@ -376,20 +546,14 @@ class OrganizationViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-        try:
-            obj = Organization.objects.filter(inn=inn).first()
-        except Organization.DoesNotExist:
+        obj = Organization.objects.filter(inn=inn).first()
+        if obj is None:
             return Response(
                 {"detail": "Организация с таким ИНН не найдена."},
                 status=status.HTTP_404_NOT_FOUND
             )
-        
-        HistoryOrganization.objects.create(
-            organization=obj,
-            name=obj.name,
-            status='active',
-            date=datetime.now()
-        )
+
+        record_history = parse_record_history(request.data)
 
         serializer = self.get_serializer(obj, data=request.data, partial=True)
         if not serializer.is_valid():
@@ -399,7 +563,7 @@ class OrganizationViewSet(viewsets.ModelViewSet):
         projects = request.data.get("projects", None)
         # Обновляем поля модели
         for attr in request.data:
-            if attr in ("projects", "prof_activity"):
+            if attr in ("projects", "prof_activity", "record_history"):
                 continue
             if attr == "type":
                 setattr(obj, attr, OrganizationType.objects.filter(name=request.data.get(attr, None)).first())
@@ -414,27 +578,38 @@ class OrganizationViewSet(viewsets.ModelViewSet):
                     setattr(obj, attr, request.data.get(attr, None))
                 except Exception:
                     pass
-        obj.save()
-        # Обновляем ManyToMany prof_activity
-        if prof_activity_names is not None:
-            if obj.type and obj.type.name == 'РОИВ':
-                prof_objs = []
-                for name in prof_activity_names:
-                    pa = ProfActivity.objects.filter(name=name).first()
-                    if pa is not None:
-                        prof_objs.append(pa)
-                obj.prof_activity.set(prof_objs)
-            else:
-                obj.prof_activity.clear()
 
-        # Обновляем ManyToMany projects (полная замена выбора)
-        if projects is not None:
-            project_objs = []
-            for name in projects:
-                project = Projects.objects.filter(name=name).first()
-                if project is not None:
-                    project_objs.append(project)
-            obj.projects.set(project_objs)
+        def _apply_m2m():
+            if prof_activity_names is not None:
+                if obj.type and obj.type.name == 'РОИВ':
+                    prof_objs = []
+                    for name in prof_activity_names:
+                        pa = ProfActivity.objects.filter(name=name).first()
+                        if pa is not None:
+                            prof_objs.append(pa)
+                    obj.prof_activity.set(prof_objs)
+                else:
+                    obj.prof_activity.clear()
+
+            if projects is not None:
+                project_objs = []
+                for name in projects:
+                    project = Projects.objects.filter(name=name).first()
+                    if project is not None:
+                        project_objs.append(project)
+                obj.projects.set(project_objs)
+
+        if record_history:
+            obj.save()
+            _apply_m2m()
+        else:
+            obj.skip_history_when_saving = True
+            try:
+                obj.save()
+                _apply_m2m()
+            finally:
+                if hasattr(obj, "skip_history_when_saving"):
+                    del obj.skip_history_when_saving
 
         return Response(OrganizationSerializer(obj).data, status=status.HTTP_200_OK)
 
@@ -524,6 +699,33 @@ class ContactViewSet(viewsets.ModelViewSet):
     serializer_class = ContactSerializer
     filter_backends = [DjangoFilterBackend]
 
+    @action(detail=False, methods=["get"], url_path="history")
+    def contact_history(self, request):
+        cid = request.query_params.get("id")
+        if not cid:
+            return Response(
+                {"id": ["Обязательное поле."]},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        try:
+            cid = int(cid)
+        except (TypeError, ValueError):
+            return Response(
+                {"id": ["Должен быть целым числом."]},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        contact = Contact.objects.filter(id=cid).first()
+        if contact is None:
+            return Response(
+                {"detail": "Контакт с таким id не найден."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        qs = contact.history.all().order_by("-history_date")
+        paginator = HistoryPagination()
+        page = paginator.paginate_queryset(qs, request)
+        serializer = HistoricalContactRecordSerializer(page, many=True)
+        return paginator.get_paginated_response(serializer.data)
+
     @action(detail=False, methods=["post"], url_path="add")
     def add_contact(self, request):
         serializer = self.get_serializer(data=request.data)
@@ -612,8 +814,214 @@ class ContactViewSet(viewsets.ModelViewSet):
             if field in serializer.validated_data:
                 setattr(contact, field, serializer.validated_data[field])
 
-        contact.save()
+        record_history = parse_record_history(request.data)
+        if record_history:
+            contact.save()
+        else:
+            contact.save_without_historical_record()
         return Response(ContactSerializer(contact).data, status=status.HTTP_200_OK)
+
+
+class CommunicationInteractionSerializer(serializers.ModelSerializer):
+    counterparty_organization = serializers.CharField(source="counterparty_organization.inn", read_only=True)
+    counterparty_organization_name = serializers.CharField(source="counterparty_organization.name", read_only=True)
+    counterparty_contact = serializers.SerializerMethodField()
+    our_organization = serializers.CharField(source="our_organization.inn", read_only=True)
+    our_organization_name = serializers.CharField(source="our_organization.name", read_only=True)
+    project = serializers.CharField(source="project.name", read_only=True)
+    channel_display = serializers.CharField(source="get_channel_display", read_only=True)
+
+    class Meta:
+        model = CommunicationInteraction
+        fields = [
+            "id",
+            "counterparty_organization",
+            "counterparty_organization_name",
+            "counterparty_contact",
+            "our_organization",
+            "our_organization_name",
+            "channel",
+            "channel_display",
+            "occurred_at",
+            "result",
+            "project",
+            "created_at",
+            "updated_at",
+        ]
+
+    def get_counterparty_contact(self, obj):
+        contact = obj.counterparty_contact
+        if contact is None:
+            return None
+        fio = " ".join(filter(None, [contact.last_name, contact.first_name, contact.middle_name])).strip()
+        return {
+            "id": contact.id,
+            "fio": fio or None,
+            "position": contact.position,
+        }
+
+
+class CommunicationInteractionPayloadSerializer(serializers.Serializer):
+    counterparty_organization = serializers.CharField(required=True)
+    counterparty_contact = serializers.IntegerField(required=False, allow_null=True)
+    our_organization = serializers.CharField(required=True)
+    channel = serializers.ChoiceField(choices=CommunicationInteraction.Channel.choices)
+    occurred_at = serializers.DateTimeField()
+    result = serializers.CharField()
+    project = serializers.CharField(required=False, allow_blank=True, allow_null=True)
+
+
+class CommunicationInteractionFilter(django_filters.FilterSet):
+    organization = django_filters.AllValuesMultipleFilter(field_name="counterparty_organization__inn")
+    counterparty_inn = django_filters.AllValuesMultipleFilter(field_name="counterparty_organization__inn")
+    contact_id = django_filters.NumberFilter(field_name="counterparty_contact__id")
+    our_organization = django_filters.AllValuesMultipleFilter(field_name="our_organization__inn")
+    project = django_filters.CharFilter(field_name="project__name", lookup_expr="icontains")
+    channel = django_filters.AllValuesMultipleFilter(field_name="channel")
+    occurred_after = django_filters.IsoDateTimeFilter(field_name="occurred_at", lookup_expr="gte")
+    occurred_before = django_filters.IsoDateTimeFilter(field_name="occurred_at", lookup_expr="lte")
+
+    class Meta:
+        model = CommunicationInteraction
+        fields = []
+
+
+class CommunicationInteractionViewSet(viewsets.ModelViewSet):
+    filterset_class = CommunicationInteractionFilter
+    queryset = CommunicationInteraction.objects.select_related(
+        "counterparty_organization",
+        "counterparty_contact",
+        "our_organization",
+        "project",
+    ).all()
+    serializer_class = CommunicationInteractionSerializer
+    filter_backends = [DjangoFilterBackend]
+    pagination_class = Pagination
+
+    def _validate_payload(self, data, partial=False):
+        serializer = CommunicationInteractionPayloadSerializer(data=data, partial=partial)
+        serializer.is_valid(raise_exception=True)
+        return serializer.validated_data
+
+    def _resolve_payload(self, data, instance=None):
+        attrs = {}
+
+        if "counterparty_organization" in data:
+            counterparty_inn = data["counterparty_organization"]
+            counterparty_org = Organization.objects.filter(inn=counterparty_inn).first()
+            if counterparty_org is None:
+                raise serializers.ValidationError(
+                    {"counterparty_organization": ["Организация-контрагент с таким ИНН не найдена."]}
+                )
+            attrs["counterparty_organization"] = counterparty_org
+
+        if "our_organization" in data:
+            our_inn = data["our_organization"]
+            our_org = Organization.objects.filter(inn=our_inn).first()
+            if our_org is None:
+                raise serializers.ValidationError(
+                    {"our_organization": ["Наша организация с таким ИНН не найдена."]}
+                )
+            if not our_org.is_our_side:
+                raise serializers.ValidationError(
+                    {"our_organization": ["Организация должна иметь признак is_our_side=true."]}
+                )
+            attrs["our_organization"] = our_org
+
+        if "counterparty_contact" in data:
+            contact_id = data["counterparty_contact"]
+            if contact_id is None:
+                attrs["counterparty_contact"] = None
+            else:
+                contact = Contact.objects.filter(id=contact_id).first()
+                if contact is None:
+                    raise serializers.ValidationError(
+                        {"counterparty_contact": ["Контакт с таким id не найден."]}
+                    )
+                counterparty_org = attrs.get("counterparty_organization")
+                if counterparty_org is None and instance is not None:
+                    counterparty_org = attrs.get("counterparty_organization", instance.counterparty_organization)
+                if counterparty_org and contact.organization_id != counterparty_org.id:
+                    raise serializers.ValidationError(
+                        {"counterparty_contact": ["Контакт должен принадлежать counterparty_organization."]}
+                    )
+                attrs["counterparty_contact"] = contact
+
+        if instance is not None and "counterparty_organization" in attrs and "counterparty_contact" not in data:
+            current_contact = instance.counterparty_contact
+            if current_contact and current_contact.organization_id != attrs["counterparty_organization"].id:
+                raise serializers.ValidationError(
+                    {
+                        "counterparty_contact": [
+                            "Текущий контакт не принадлежит новой организации. Передайте counterparty_contact или null."
+                        ]
+                    }
+                )
+
+        if "project" in data:
+            project_name = data["project"]
+            if not project_name:
+                attrs["project"] = None
+            else:
+                project = Projects.objects.filter(name=project_name).first()
+                if project is None:
+                    raise serializers.ValidationError({"project": ["Проект с таким названием не найден."]})
+                attrs["project"] = project
+
+        for field in ("channel", "occurred_at", "result"):
+            if field in data:
+                attrs[field] = data[field]
+        return attrs
+
+    def _create_interaction(self, data):
+        validated_data = self._validate_payload(data)
+        attrs = self._resolve_payload(validated_data)
+        interaction = CommunicationInteraction(**attrs)
+        interaction.full_clean()
+        interaction.save()
+        return interaction
+
+    def _partial_update_interaction(self, instance, data):
+        validated_data = self._validate_payload(data, partial=True)
+        attrs = self._resolve_payload(validated_data, instance=instance)
+        for attr, value in attrs.items():
+            setattr(instance, attr, value)
+        instance.full_clean()
+        instance.save()
+        return instance
+
+    def create(self, request, *args, **kwargs):
+        interaction = self._create_interaction(request.data)
+        return Response(self.get_serializer(interaction).data, status=status.HTTP_201_CREATED)
+
+    def partial_update(self, request, *args, **kwargs):
+        interaction = self.get_object()
+        interaction = self._partial_update_interaction(interaction, request.data)
+        return Response(self.get_serializer(interaction).data, status=status.HTTP_200_OK)
+
+    @action(detail=False, methods=["post"], url_path="add")
+    def add_interaction(self, request):
+        return self.create(request)
+
+    @action(detail=False, methods=["patch"], url_path="update")
+    def update_interaction(self, request):
+        interaction_id = request.data.get("id")
+        if not interaction_id:
+            return Response({"id": ["Обязательное поле."]}, status=status.HTTP_400_BAD_REQUEST)
+
+        interaction = CommunicationInteraction.objects.filter(id=interaction_id).first()
+        if interaction is None:
+            return Response(
+                {"detail": "Запись коммуникации с таким id не найдена."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        payload = request.data.copy()
+        if hasattr(payload, "dict"):
+            payload = payload.dict()
+        payload.pop("id", None)
+        interaction = self._partial_update_interaction(interaction, payload)
+        return Response(self.get_serializer(interaction).data, status=status.HTTP_200_OK)
 
 class RegionNameSerializer(serializers.ModelSerializer):
     """Сериалайзер для получения списка регионов"""

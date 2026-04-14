@@ -1,12 +1,21 @@
 from django.urls import path, include
 from . import views
 from rest_framework.routers import DefaultRouter
-from .views import OrganizationViewSet, ContactViewSet, GetAllViewSet, GetViewSet, ListenerProgressViewSet, EducationProgramViewSet
+from .views import (
+    CommunicationInteractionViewSet,
+    ContactViewSet,
+    EducationProgramViewSet,
+    GetAllViewSet,
+    GetViewSet,
+    ListenerProgressViewSet,
+    OrganizationViewSet,
+)
 
 router = DefaultRouter()
 router.register(r'listener-progress', ListenerProgressViewSet, basename='listener-progress')
 router.register(r'organization', OrganizationViewSet, basename='organization')
 router.register(r'contact', ContactViewSet, basename='contact')
+router.register(r'communication', CommunicationInteractionViewSet, basename='communication')
 router.register(r'get_all', GetAllViewSet, basename='get_all')
 router.register(r'get', GetViewSet, basename='get')
 router.register(r'program', EducationProgramViewSet, basename='program')

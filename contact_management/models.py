@@ -1,4 +1,7 @@
+from django.core.exceptions import ValidationError
 from django.db import models
+from simple_history.models import HistoricalRecords
+
 from education_planner.models import ProfActivity, ROIV
 
 class FederalDistrict(models.Model):
@@ -50,12 +53,16 @@ class Organization(models.Model):
     roiv = models.ForeignKey(ROIV,on_delete=models.SET_NULL,related_name="organization",verbose_name="Данные РОИВ",null=True,blank=True)
     region = models.ForeignKey(Region,on_delete=models.SET_NULL,related_name='organization',verbose_name='Регион',blank=True,null=True)
     federal_company = models.BooleanField(default=False,verbose_name="Федеральная")
+    is_our_side = models.BooleanField(default=False, verbose_name="Наша организация")
     prof_activity = models.ManyToManyField(ProfActivity,related_name='organization',verbose_name='Сфера деятельности',blank=True,)
     is_active = models.BooleanField(default=True,verbose_name='Активен')
     parent_company = models.ForeignKey('self',on_delete=models.SET_NULL,blank=True,null=True,related_name="child",)
     created_at = models.DateTimeField(auto_now_add=True,verbose_name='Дата создания')
     updated_at = models.DateTimeField(auto_now=True,verbose_name='Дата обновления')
-    
+
+    # projects — обратная M2M с модели Projects; simple_history ожидает прямое M2M на Organization — только prof_activity
+    history = HistoricalRecords(m2m_fields=("prof_activity",))
+
     class Meta:
         verbose_name = 'Организация'
         verbose_name_plural = 'Организации'
@@ -94,7 +101,9 @@ class Contact(models.Model):
 
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
-    
+
+    history = HistoricalRecords()
+
     class Meta:
         verbose_name = 'Контакт'
         verbose_name_plural = 'Контакты'
@@ -107,6 +116,8 @@ class ContactPhone(models.Model):
     number = models.CharField("Телефон", max_length=30)
     comment = models.CharField(blank=True, verbose_name="Комментарий")
     is_active = models.BooleanField("Актуальный", default=True)
+
+    history = HistoricalRecords()
 
     class Meta:
         verbose_name = "Телефон"
@@ -121,6 +132,8 @@ class ContactEmail(models.Model):
     comment = models.CharField(blank=True, verbose_name="Комментарий")
     is_active = models.BooleanField("Актуальный", default=True)
 
+    history = HistoricalRecords()
+
     class Meta:
         verbose_name = "Email"
         verbose_name_plural = "Email‑адреса"
@@ -130,7 +143,7 @@ class ContactEmail(models.Model):
     
 class HistoryOrganization(models.Model):
     """Модель для хранения истории изменений организации"""
-    organization = models.ForeignKey(Organization,on_delete=models.CASCADE, related_name="history", verbose_name="Организация")
+    organization = models.ForeignKey(Organization,on_delete=models.CASCADE, related_name="legacy_history", verbose_name="Организация")
     name = models.CharField("Название", max_length=255, blank=True, null=True)
     status = models.CharField(choices=[('active','Активный'),('closed','Закрыто'),('integrated','Интегрировано')], verbose_name="Статус")
     integrated_to = models.ForeignKey(Organization, on_delete=models.SET_NULL, related_name="integrated", blank=True, null=True, verbose_name="Интегрировано в")
@@ -160,3 +173,72 @@ class Projects(models.Model):
 
     def __str__(self):
         return str(self.name)
+
+
+class CommunicationInteraction(models.Model):
+    class Channel(models.TextChoices):
+        EMAIL = "email", "Email"
+        POSTAL_MAIL = "postal_mail", "Почта"
+        LETTER = "letter", "Письмо"
+        MESSENGER = "messenger", "Мессенджер"
+        MEETING = "meeting", "Встреча"
+        CALL = "call", "Созвон"
+        PHONE = "phone", "Телефон"
+
+    counterparty_organization = models.ForeignKey(
+        Organization,
+        on_delete=models.CASCADE,
+        related_name="communication_interactions",
+        verbose_name="Контрагент (организация)",
+    )
+    counterparty_contact = models.ForeignKey(
+        Contact,
+        on_delete=models.SET_NULL,
+        related_name="communication_interactions",
+        verbose_name="Контрагент (контакт)",
+        null=True,
+        blank=True,
+    )
+    our_organization = models.ForeignKey(
+        Organization,
+        on_delete=models.PROTECT,
+        related_name="our_communication_interactions",
+        verbose_name="Наша организация",
+    )
+    channel = models.CharField(
+        max_length=20,
+        choices=Channel.choices,
+        verbose_name="Канал коммуникации",
+    )
+    occurred_at = models.DateTimeField(verbose_name="Дата и время коммуникации")
+    result = models.TextField(verbose_name="Результат коммуникации")
+    project = models.ForeignKey(
+        Projects,
+        on_delete=models.SET_NULL,
+        related_name="communication_interactions",
+        verbose_name="Проект",
+        null=True,
+        blank=True,
+    )
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name="Дата создания")
+    updated_at = models.DateTimeField(auto_now=True, verbose_name="Дата изменения")
+
+    class Meta:
+        verbose_name = "коммуникация"
+        verbose_name_plural = "Журнал коммуникаций"
+        ordering = ("-occurred_at", "-id")
+
+    def clean(self):
+        if (
+            self.counterparty_contact_id
+            and self.counterparty_contact.organization_id != self.counterparty_organization_id
+        ):
+            raise ValidationError(
+                {"counterparty_contact": "Контакт должен принадлежать выбранной организации-контрагенту."}
+            )
+        if self.our_organization_id and not self.our_organization.is_our_side:
+            raise ValidationError({"our_organization": "Выберите организацию, отмеченную как 'Наша организация'."})
+
+    def __str__(self):
+        cp = self.counterparty_organization.name or self.counterparty_organization.inn
+        return f"{self.get_channel_display()} -> {cp} ({self.occurred_at:%Y-%m-%d %H:%M})"

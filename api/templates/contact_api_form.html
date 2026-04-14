@@ -41,6 +41,14 @@
                             </div>
                             <input type="hidden" name="api_method" id="apiMethodInput" value="{{ api_method|default:'GET' }}">
 
+                            <div class="mb-2 record-history-row" id="recordHistoryRow" style="display:none;">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" id="recordHistoryInBody" checked>
+                                    <label class="form-check-label" for="recordHistoryInBody">Записывать в историю (record_history)</label>
+                                </div>
+                                <div class="form-text small text-muted">Снимите флажок для исправления без новой записи в истории.</div>
+                            </div>
+
                             <!-- Тип -->
                             <div class="mb-3 d-flex align-items-center">
                                 <div class="col-sm-2">
@@ -159,6 +167,26 @@
     }
     apiAction.addEventListener('change', toggleFormMode);
     toggleFormMode();
+
+    function toggleRecordHistoryRow() {
+        const row = document.getElementById('recordHistoryRow');
+        if (!row) return;
+        row.style.display = apiAction.value === 'update' ? 'block' : 'none';
+    }
+    apiAction.addEventListener('change', toggleRecordHistoryRow);
+    toggleRecordHistoryRow();
+
+    document.querySelector('form').addEventListener('submit', function () {
+        if (apiAction.value !== 'update') return;
+        const cb = document.getElementById('recordHistoryInBody');
+        if (!cb || requestBody.disabled) return;
+        try {
+            const body = JSON.parse(requestBody.value.trim() || '{}');
+            if (typeof body !== 'object' || body === null) return;
+            body.record_history = cb.checked;
+            requestBody.value = JSON.stringify(body, null, 2);
+        } catch (e) { /* невалидный JSON */ }
+    });
 
     
     function updateTextInputNames() {
