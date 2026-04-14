@@ -15,5 +15,6 @@ app_name = 'api'
  
 urlpatterns = [
     path('guide/', views.api_guide, name="guide"),
+    path('guide/download/', views.api_guide_download_md, name="guide_download_md"),
     path('', include(router.urls))
 ]

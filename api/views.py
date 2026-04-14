@@ -18,9 +18,55 @@ from rest_framework import status
 from django_filters.rest_framework import DjangoFilterBackend
 from datetime import datetime
 from django.db.models import Q
-from django.http import JsonResponse
+from django.http import JsonResponse, HttpResponse, Http404
+
+from .guide_markdown import get_guide_doc_path, render_guide_html_for_key
 
 # Create your views here.
+
+def _guide_doc_key(request):
+    """Ключ раздела гида (имя шаблона без _api_form.html). Логика совпадает с api_guide."""
+    if 'listener-progress' in request.GET:
+        return 'listener-progress'
+    if 'program' in request.GET:
+        return 'program'
+    if 'contact' in request.GET:
+        return 'contact'
+    if 'organization' in request.GET:
+        return 'organization'
+    if 'get_all' in request.GET:
+        return 'get_all'
+    if 'get_call' in request.GET:
+        return 'get'
+    return 'organization'
+
+_GUIDE_MD_FILENAMES = {
+    'organization': 'rest-api-organizations.md',
+    'contact': 'rest-api-contacts.md',
+    'program': 'rest-api-programs.md',
+    'get_all': 'rest-api-get-all.md',
+    'get': 'rest-api-get-object.md',
+    'listener-progress': 'rest-api-listener-progress.md',
+}
+
+def api_guide_download_md(request):
+    """Отдаёт документацию текущего раздела гида как скачиваемый .md файл."""
+    if not request.user.is_authenticated:
+        messages.warning(request, 'Для доступа к REST API необходимо войти в систему.')
+        return redirect(f'{settings.LOGIN_URL}?next={request.path}')
+    if not request.user.is_staff and not request.user.is_superuser:
+        return redirect('/')
+
+    key = _guide_doc_key(request)
+    path = get_guide_doc_path(key)
+    if not path.is_file():
+        raise Http404('Документация в формате Markdown для этого раздела не найдена.')
+
+    content = path.read_text(encoding='utf-8')
+    filename = _GUIDE_MD_FILENAMES.get(key, f'{key}.md')
+    response = HttpResponse(content, content_type='text/markdown; charset=utf-8')
+    response['Content-Disposition'] = f'attachment; filename="{filename}"'
+    return response
 
 def api_guide(request):
     from django.contrib.auth.models import User
@@ -71,42 +117,84 @@ def api_guide(request):
     elif 'get_all' in request.GET:
         group= 'get_all'
         if 'model' in request.POST.dict():
-            group = f'get_all/{request.POST.dict().get('model')}'
+            group = f"get_all/{request.POST.dict().get('model')}"
     url = f'http://{request.get_host()}/api/{group}'
     guide_url = group
     if 'get_all' in guide_url:
         guide_url = 'get_all'
 
     headers = { 'Authorization': f'Token {tkn}' }
+    api_method = "GET"
+    api_action = "list"
+    request_body = "{}"
+    body_error = None
 
     params = {}
     for arg in request.POST.dict():
         value = request.POST.dict().get(arg)
-        if arg != 'csrfmiddlewaretoken' and arg != 'apiLink' and value != '' and arg != 'model':
+        if arg not in ('csrfmiddlewaretoken', 'apiLink', 'model', 'api_method', 'api_action', 'request_body') and value != '':
             params.setdefault(arg, value)
     
     if 'get_call' in request.GET:
         url = f'http://{request.get_host()}/api/get/'
         guide_url = 'get'
 
-    if request.method == 'POST':
-        response = requests.get(url,headers=headers, params=params)
-    else:
-        response = requests.get(url,headers=headers)
     import json
-    try:
-        if response.status_code == 200:
-            jsn = json.dumps(response.json(), ensure_ascii=False, indent=2)
+    payload = None
+    if request.method == 'POST' and guide_url in ('organization', 'contact'):
+        api_method = request.POST.get('api_method', 'GET').upper()
+        api_action = request.POST.get('api_action', 'list')
+        request_body = request.POST.get('request_body', '{}').strip() or '{}'
+
+        if api_action == 'list':
+            url = f'http://{request.get_host()}/api/{guide_url}/'
+            api_method = 'GET'
+        elif api_action == 'add':
+            url = f'http://{request.get_host()}/api/{guide_url}/add/'
+            api_method = 'POST'
+        elif api_action == 'update':
+            url = f'http://{request.get_host()}/api/{guide_url}/update/'
+            api_method = 'PATCH'
+
+        if api_method in ('POST', 'PATCH'):
+            try:
+                payload = json.loads(request_body)
+                if not isinstance(payload, dict):
+                    body_error = 'Тело запроса должно быть JSON-объектом.'
+            except json.JSONDecodeError as e:
+                body_error = f'Ошибка JSON: {e}'
+
+    if request.method == 'POST':
+        if body_error:
+            response = None
+            jsn = {"error": body_error}
+        elif api_method in ('POST', 'PATCH'):
+            headers = {**headers, 'Content-Type': 'application/json'}
+            response = requests.request(api_method, url, headers=headers, json=payload or {})
         else:
-            jsn = {f"HTTP {response.status_code}": response.text[:1000]}
-    except Exception as e:
-        jsn = f"Ошибка: {e}"
+            response = requests.get(url, headers=headers, params=params)
+    else:
+        response = requests.get(url, headers=headers)
+
+    if not body_error:
+        try:
+            if response.status_code in (200, 201):
+                jsn = json.dumps(response.json(), ensure_ascii=False, indent=2)
+            else:
+                jsn = {f"HTTP {response.status_code}": response.text[:1000]}
+        except Exception as e:
+            jsn = f"Ошибка: {e}"
+
     context={
         'login': login,
         'token': tkn,
         'JsonReponse': jsn,
-        'URL': str(urllib.parse.unquote(response.url)),
-        'ChoiseFields': ChoiseFields
+        'URL': str(urllib.parse.unquote(response.url)) if response else url,
+        'ChoiseFields': ChoiseFields,
+        'api_method': api_method,
+        'api_action': api_action,
+        'request_body': request_body,
+        'guide_html': render_guide_html_for_key(guide_url),
     }
     return render(request, f"{guide_url}_api_form.html", context=context)
 
@@ -445,7 +533,12 @@ class ContactViewSet(viewsets.ModelViewSet):
         # вытаскиваем INN из валидированных данных            
         try:
             org = Organization.objects.filter(inn=request.data["organization"]).first()
-        except Exception as e:
+            if org is None:
+                return Response(
+                    {"organization": ["Организация с таким ИНН не найдена."]},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+        except Exception:
             return Response(
                 {"error": f"Не удалось найти огранизацию контакта"},
                 status=status.HTTP_400_BAD_REQUEST,
@@ -470,6 +563,57 @@ class ContactViewSet(viewsets.ModelViewSet):
         )
 
         return Response(ContactSerializer(contact).data, status=status.HTTP_201_CREATED)
+
+    @action(detail=False, methods=["patch"], url_path="update")
+    def update_contact(self, request):
+        contact_id = request.data.get("id")
+        if not contact_id:
+            return Response(
+                {"id": ["Обязательное поле."]},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        contact = Contact.objects.filter(id=contact_id).first()
+        if contact is None:
+            return Response(
+                {"detail": "Контакт с таким id не найден."},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        serializer = self.get_serializer(contact, data=request.data, partial=True)
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+        if "organization" in request.data:
+            org = Organization.objects.filter(inn=request.data.get("organization")).first()
+            if org is None:
+                return Response(
+                    {"organization": ["Организация с таким ИНН не найдена."]},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            contact.organization = org
+
+        updatable_fields = [
+            "type",
+            "department_name",
+            "first_name",
+            "last_name",
+            "middle_name",
+            "first_name_dat",
+            "last_name_dat",
+            "middle_name_dat",
+            "position",
+            "position_dat",
+            "manager",
+            "comment",
+            "current",
+        ]
+        for field in updatable_fields:
+            if field in serializer.validated_data:
+                setattr(contact, field, serializer.validated_data[field])
+
+        contact.save()
+        return Response(ContactSerializer(contact).data, status=status.HTTP_200_OK)
 
 class RegionNameSerializer(serializers.ModelSerializer):
     """Сериалайзер для получения списка регионов"""

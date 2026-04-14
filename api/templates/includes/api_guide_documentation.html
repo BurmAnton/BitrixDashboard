@@ -1,0 +1,27 @@
+{# Правая колонка гида: HTML из api/docs/guide/<key>.md через guide_html #}
+<style>
+    .api-guide-markdown { font-size: 0.92rem; line-height: 1.55; }
+    .api-guide-markdown h1 { font-size: 1.35rem; margin-top: 0; margin-bottom: 1rem; font-weight: 600; }
+    .api-guide-markdown h2 { font-size: 1.15rem; margin-top: 1.25rem; margin-bottom: 0.75rem; font-weight: 600; border-bottom: 1px solid #e9ecef; padding-bottom: 0.35rem; }
+    .api-guide-markdown h3 { font-size: 1.02rem; margin-top: 1rem; margin-bottom: 0.5rem; font-weight: 600; }
+    .api-guide-markdown h4 { font-size: 0.95rem; margin-top: 0.75rem; }
+    .api-guide-markdown pre { background-color: #ebf2f3; border-radius: 8px; padding: 0.75rem 1rem; overflow-x: auto; font-size: 0.82rem; max-width: 100%; }
+    .api-guide-markdown pre code { background: transparent; padding: 0; font-size: inherit; }
+    .api-guide-markdown p { margin-bottom: 0.65rem; }
+    .api-guide-markdown table { width: 100%; margin-bottom: 1rem; font-size: 0.875rem; vertical-align: top; }
+    .api-guide-markdown table th, .api-guide-markdown table td { border: 1px solid #dee2e6; padding: 0.45rem 0.55rem; }
+    .api-guide-markdown table thead th { background: #f8f9fa; font-weight: 600; }
+    .api-guide-markdown ul, .api-guide-markdown ol { padding-left: 1.25rem; margin-bottom: 0.75rem; }
+</style>
+        <div class="col-md-6">
+            <div class="container-fluid">
+                <div class="card">
+                    <div class="card-header d-flex justify-content-end align-items-center flex-wrap gap-2">
+                        <a href="{% url 'api:guide_download_md' %}{% if request.GET %}?{{ request.GET.urlencode }}{% endif %}" class="btn btn-outline-secondary btn-sm">Скачать Markdown</a>
+                    </div>
+                    <div class="card-body api-guide-markdown" style="max-height: 780px; overflow-y: auto;">
+                        {{ guide_html|safe }}
+                    </div>
+                </div>
+            </div>
+        </div>

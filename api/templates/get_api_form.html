@@ -4,26 +4,7 @@
 {% block title %}REST API{% endblock %}
 
 {% block extra_css %}
-    <style>
-        .col-sm-2{
-            text-align: right;
-        }
-        .messages{
-            display: none;
-        }
-        .container{
-            width: 95%; 
-            max-width: 95%;
-        }
-        label{
-            font-size: smaller;
-        }
-        .code-block{
-            background-color: #ebf2f3;
-            border-radius: 12px;
-            padding: 2%;
-        }
-    </style>
+    {% include "includes/api_form_styles.html" %}
 {% endblock %}
 
 {% block content %}
@@ -36,7 +17,7 @@
                     <div class="card-header">
                         <h5>Получение конкретного объекта модели</h5>
                     </div>
-                    <div class="card-body" style="height: 780px">
+                    <div class="card-body api-test-card-body">
                         <form method="post">
                             {% csrf_token %}
 
@@ -75,12 +56,13 @@
                             </div>
 
 
-                            <button type="submit" class="btn btn-primary btn-sm">Отправить</button>
+                            <div class="api-form-submit-row api-form-submit-row--solo">
+                                <button type="submit" class="btn btn-primary btn-sm">Отправить</button>
+                            </div>
                         </form>
 
-
-
-                        <div class="card" style="margin-top: 12px; padding: 1%; height: 61%; overflow-y: auto; font-size: small;" >
+                        <div class="api-response-panel">
+                            <div class="api-response-label">Ответ API</div>
                             <pre id="JsonResponse"></pre>
                         </div>
                     </div>
@@ -88,213 +70,7 @@
             </div>
         </div>
 
-        <div class="col-md-6">
-            <div class="container-fluid">
-                <div class="card">
-                    <!-- Заголовок -->
-                    <div class="card-header">
-                        <h5>Документация REST API получение объекта</h5>
-                    </div>
-
-                    <!-- Table of Contents -->
-                    <div class="card-body" style="max-height: 780px; overflow-y: auto;">
-                        <h3>Эндпоинты</h3>
-                        <ul>
-                        <li><code>GET /api/get/organization/?inn=&lt;ИНН&gt;</code> – получение организации</li>
-                        <li><code>GET /api/get/program/?pk=&lt;ID&gt;</code> – получение программы</li>
-                        </ul>
-
-                        <h3>Назначение</h3>
-                        <p>Получение детальной информации об организации по ИНН или об образовательной программе по первичному ключу (ID).</p>
-
-                        <h3>Аутентификация</h3>
-                        <p>Требуется токен в заголовке <code>Authorization</code>.<br>
-                        Формат: <code>Authorization: Token &lt;ваш_токен&gt;</code></p>
-                        <p>Токен можно получить в админ-панели Django (раздел «Токены»). Доступ только у суперпользователей.</p>
-
-                        <h3>Параметры запроса</h3>
-                        <table class="table table-striped table-sm">
-                        <thead>
-                        <tr>
-                            <th>Эндпоинт</th>
-                            <th>Параметр</th>
-                            <th>Тип</th>
-                            <th>Описание</th>
-                        </tr>
-                        </thead>
-                        <tbody>
-                        <tr>
-                            <td><code>/organization/</code></td>
-                            <td><code>inn</code></td>
-                            <td>string</td>
-                            <td>ИНН организации (10 или 12 цифр)</td>
-                        </tr>
-                        <tr>
-                            <td><code>/program/</code></td>
-                            <td><code>pk</code></td>
-                            <td>integer</td>
-                            <td>Первичный ключ (ID) программы</td>
-                        </tr>
-                        </tbody>
-                        </table>
-
-<h3>Примеры запросов</h3>
-
-<h4>cURL</h4>
-<strong>Организация по ИНН:</strong>
-<pre class="bg-light p-3 rounded"><code>curl -X GET "https://bitrix24.tuna-edu.ru/api/get/organization/?inn=7707083893" \
--H "Authorization: Token 4a8389aa7f015d3a68e44e3f4bae94d63c7ac097"</code></pre>
-<strong>Программа по PK:</strong>
-<pre class="bg-light p-3 rounded"><code>curl -X GET "https://bitrix24.tuna-edu.ru/api/get/program/?pk=42" \
--H "Authorization: Token 4a8389aa7f015d3a68e44e3f4bae94d63c7ac097"</code></pre>
-
-<h4>JavaScript (fetch)</h4>
-<strong>Организация:</strong>
-<pre class="bg-light p-3 rounded"><code>fetch('/api/get/organization/?inn=7707083893', {
-headers: { 'Authorization': 'Token 4a8389aa7f015d3a68e44e3f4bae94d63c7ac097' }
-})
-.then(response =&gt; response.json())
-.then(data =&gt; console.log(data));</code></pre>
-<strong>Программа:</strong>
-<pre class="bg-light p-3 rounded"><code>fetch('/api/get/program/?pk=42', {
-headers: { 'Authorization': 'Token 4a8389aa7f015d3a68e44e3f4bae94d63c7ac097' }
-})
-.then(response =&gt; response.json())
-.then(data =&gt; console.log(data));</code></pre>
-
-<h4>Python (requests)</h4>
-<strong>Организация:</strong>
-<pre class="bg-light p-3 rounded"><code>import requests
-headers = {'Authorization': 'Token 4a8389aa7f015d3a68e44e3f4bae94d63c7ac097'}
-params = {'inn': '7707083893'}
-response = requests.get('https://bitrix24.tuna-edu.ru/api/get/organization/', headers=headers, params=params)
-print(response.json())</code></pre>
-<strong>Программа:</strong>
-<pre class="bg-light p-3 rounded"><code>import requests
-headers = {'Authorization': 'Token 4a8389aa7f015d3a68e44e3f4bae94d63c7ac097'}
-params = {'pk': 42}
-response = requests.get('https://bitrix24.tuna-edu.ru/api/get/program/', headers=headers, params=params)
-print(response.json())</code></pre>
-
-<h3>Примеры успешных ответов (HTTP 200)</h3>
-
-<strong>Организация:</strong>
-<pre class="bg-light p-3 rounded"><code>{
-"inn": "7707083893",
-"name": "Сбербанк",
-"full_name": "Публичное акционерное общество 'Сбербанк России'",
-"type": "ПАО",
-"region": "Москва",
-"federal_company": true,
-"fed_district": "Центральный",
-"prof_activity": "Банковская деятельность",
-"projects": [{"id": 1, "name": "Цифровая трансформация"}],
-"is_active": true,
-"created_at": "2024-01-15T10:00:00Z",
-"updated_at": "2024-02-20T14:30:00Z"
-}</code></pre>
-
-<strong>Программа:</strong>
-<pre class="bg-light p-3 rounded"><code>{
-"name": "Программа повышения квалификации",
-"academic_hours": 72,
-"program_type": "PROF",
-"study_form": "FT",
-"DOT": true,
-"description": "Описание программы...",
-"duration": "14",
-"final_attestation": "2",
-"activities": [{"id": 1, "name": "Лекция"}],
-"sections": [
-    {
-    "order": 1,
-    "name": "Раздел 1",
-    "lecture_hours": 10,
-    "practice_hours": 8,
-    "selfstudy_hours": 6,
-    "consultation_hours": 2,
-    "dot_hours": 4,
-    "workload": 30,
-    "attestation_form": "Тест",
-    "description": "Описание раздела",
-    "topics": [
-        {
-        "order": 1,
-        "name": "Тема 1",
-        "lecture_hours": 4,
-        "practice_hours": 4,
-        "selfstudy_hours": 2,
-        "consultation_hours": 1,
-        "dot_hours": 2,
-        "workload": 13,
-        "attestation_form": "Опрос",
-        "description": "Описание темы"
-        }
-    ]
-    }
-]
-}</code></pre>
-
-<h3>Возможные ошибки</h3>
-<table class="table table-striped table-sm">
-<thead>
-<tr>
-    <th>Код</th>
-    <th>Эндпоинт</th>
-    <th>Описание</th>
-    <th>Пример ответа</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-    <td>400</td>
-    <td><code>/organization/</code></td>
-    <td>Не передан ИНН</td>
-    <td><code>{"error": "ИНН обязателен", "usage": "/api/get/organization/?inn=&lt;ИНН&gt;"}</code></td>
-</tr>
-<tr>
-    <td>400</td>
-    <td><code>/program/</code></td>
-    <td>Не передан pk</td>
-    <td><code>{"error": "Ключ обязателен", "usage": "/api/get/program/?pk=&lt;pk&gt;"}</code></td>
-</tr>
-<tr>
-    <td>401</td>
-    <td>оба</td>
-    <td>Отсутствует или неверный токен</td>
-    <td><code>{"detail": "Authentication credentials were not provided."}</code></td>
-</tr>
-<tr>
-    <td>403</td>
-    <td>оба</td>
-    <td>Недостаточно прав</td>
-    <td><code>{"detail": "You do not have permission to perform this action."}</code></td>
-</tr>
-<tr>
-    <td>404</td>
-    <td><code>/organization/</code></td>
-    <td>Организация не найдена</td>
-    <td><code>{"error": "Организация с ИНН 1234567890 не найдена"}</code></td>
-</tr>
-<tr>
-    <td>404</td>
-    <td><code>/program/</code></td>
-    <td>Программа не найдена</td>
-    <td><code>{"error": "Программа по ключу 999 не найдена"}</code></td>
-</tr>
-</tbody>
-</table>
-
-<h3>Примечания</h3>
-<ul>
-<li><strong>Для организации:</strong> ИНН должен быть строкой, содержащей только цифры. Поле <code>projects</code> может быть пустым массивом. <code>fed_district</code> вычисляется автоматически.</li>
-<li><strong>Для программы:</strong> PK – это числовой идентификатор (первичный ключ) записи в таблице <code>EducationProgram</code>. Поле <code>sections</code> содержит вложенные разделы и темы. Если разделов нет, возвращается пустой массив.</li>
-<li>Оба эндпоинта требуют аутентификации через токен (заголовок <code>Authorization: Token &lt;ваш_токен&gt;</code>).</li>
-</ul>
-                    </div>
-                </div>
-            </div>
-        </div>
+        {% include "includes/api_guide_documentation.html" %}
     </div>
 </body>
 
